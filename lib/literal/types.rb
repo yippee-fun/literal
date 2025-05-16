@@ -258,8 +258,12 @@ module Literal::Types
 	end
 
 	# Ensures the value is valid JSON data (i.e. it came from JSON.parse).
-	def _JSONData
-		JSONDataType::Instance
+	def _JSONData(*a, **k)
+		if a.length > 0 || k.length > 0
+			_Constraint(JSONDataType::Instance, *a, **k)
+		else
+			JSONDataType::Instance
+		end
 	end
 
 	# Nilable version of `_JSONData`

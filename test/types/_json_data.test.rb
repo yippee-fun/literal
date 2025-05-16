@@ -25,6 +25,11 @@ test "===" do
 	refute _JSONData === [{ "key" => :value }, [1, 2, 3], "string"]
 end
 
+test "with params" do
+	assert _JSONData(Array) === [1, 2, 3]
+	refute _JSONData(Array) === ["a", 1, 2]
+end
+
 test "hierarchy" do
 	assert_subtype _JSONData, _JSONData
 
