@@ -441,6 +441,18 @@ module Literal::Types
 		)
 	end
 
+	# The unit type is a type that matches only the same object
+	def _Unit(object)
+		UnitType.new(object)
+	end
+
+	# Nilable version of `_Unit`
+	def _Unit?(...)
+		_Nilable(
+			_Unit(...)
+		)
+	end
+
 	def _Void
 		VoidType::Instance
 	end
