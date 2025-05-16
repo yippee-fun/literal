@@ -27,7 +27,7 @@ end
 
 test "with params" do
 	assert _JSONData(Array) === [1, 2, 3]
-	refute _JSONData(Array) === ["a", 1, 2]
+	refute _JSONData(Array) === ["a", 1, 2, Object.new]
 end
 
 test "hierarchy" do
