@@ -318,6 +318,18 @@ module Literal::Types
 		end
 	end
 
+	def _Pattern(regex, &block)
+		raise ArgumentError "Block required for Pattern" unless block
+
+		-> (value) {
+			if (data = regex.match(value))
+				!!block.call(*data.captures, **data.named_captures&.transform_keys(&:to_sym))
+			else
+				false
+			end
+		}
+	end
+
 	def _Predicate(message, &block)
 		PredicateType.new(message:, block:)
 	end
