@@ -22,11 +22,9 @@ class Literal::Types::UnionType
 		end
 
 		types.uniq!
-		@types = types
-		@primitives = primitives
+		@types = types.freeze
+		@primitives = primitives.freeze
 
-		@types.freeze
-		@primitives.freeze
 		freeze
 	end
 
