@@ -309,12 +309,20 @@ module Literal::Types
 	end
 
 	# Matches if the given type is *not* matched.
-	def _Not(type)
-		case type
-		when NotType
-			type.type
+	def _Not(*types)
+		if types.length > 1
+			NotType.new(
+				_Union(*types)
+			)
 		else
-			NotType.new(type)
+			type = types[0]
+
+			case type
+			when NotType
+				type.type
+			else
+				NotType.new(type)
+			end
 		end
 	end
 
