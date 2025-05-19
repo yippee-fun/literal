@@ -4,7 +4,7 @@
 class Literal::Types::ConstraintType
 	include Literal::Type
 
-	def initialize(*object_constraints, **property_constraints)
+	def initialize(object_constraints, property_constraints)
 		@object_constraints = object_constraints
 		@property_constraints = property_constraints
 		freeze

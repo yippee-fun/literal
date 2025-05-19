@@ -4,7 +4,7 @@ class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
 
-	def initialize(*queue)
+	def initialize(queue)
 		raise Literal::ArgumentError.new("_Union type must have at least one type.") if queue.size < 1
 		types = []
 		primitives = Set[]

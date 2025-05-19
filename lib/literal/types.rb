@@ -95,7 +95,7 @@ module Literal::Types
 		if a.length == 1 && k.length == 0
 			a[0]
 		else
-			ConstraintType.new(*a, **k)
+			ConstraintType.new(a, k)
 		end
 	end
 
@@ -234,8 +234,8 @@ module Literal::Types
 	end
 
 	# Matches if the value responds to all the given methods.
-	def _Interface(...)
-		InterfaceType.new(...)
+	def _Interface(*methods)
+		InterfaceType.new(methods)
 	end
 
 	# Nilable version of `_Interface`
@@ -246,8 +246,8 @@ module Literal::Types
 	end
 
 	# Matches if *all* given types are matched.
-	def _Intersection(...)
-		IntersectionType.new(...)
+	def _Intersection(*types)
+		IntersectionType.new(types)
 	end
 
 	# Nilable version of `_Intersection`
@@ -284,8 +284,8 @@ module Literal::Types
 	# ```ruby
 	# _Map(name: String, age: Integer)
 	# ```
-	def _Map(...)
-		MapType.new(...)
+	def _Map(**shape)
+		MapType.new(shape)
 	end
 
 	# Nilable version of `_Map`
@@ -415,8 +415,8 @@ module Literal::Types
 	# ```ruby
 	# _Tuple(String, Integer, Integer)
 	# ```
-	def _Tuple(...)
-		TupleType.new(...)
+	def _Tuple(*types)
+		TupleType.new(types)
 	end
 
 	# Nilable version of `_Typle`
@@ -430,8 +430,8 @@ module Literal::Types
 	end
 
 	# Matches if *any* given type is matched.
-	def _Union(...)
-		UnionType.new(...)
+	def _Union(*types)
+		UnionType.new(types)
 	end
 
 	# Nilable version of `_Union`

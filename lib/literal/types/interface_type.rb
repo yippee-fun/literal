@@ -7,7 +7,7 @@ class Literal::Types::InterfaceType
 	# List of `===` method owners where the comparison will only match for objects with the same class
 	OwnClassTypeMethodOwners = Set[String, Integer, Kernel, Float, NilClass, TrueClass, FalseClass].freeze
 
-	def initialize(*methods)
+	def initialize(methods)
 		raise Literal::ArgumentError.new("_Interface type must have at least one method.") if methods.size < 1
 		@methods = methods.to_set.freeze
 		freeze
