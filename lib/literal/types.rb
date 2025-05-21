@@ -267,8 +267,10 @@ module Literal::Types
 	end
 
 	# Nilable version of `_JSONData`
-	def _JSONData?
-		NilableJSONDataType
+	def _JSONData?(...)
+		_Nilable(
+			_JSONData(...)
+		)
 	end
 
 	# Matches if the value is a `Proc` and `#lambda?` returns truthy.
@@ -327,7 +329,7 @@ module Literal::Types
 	end
 
 	def _Pattern(regex, &block)
-		raise ArgumentError "Block required for Pattern" unless block
+		raise ArgumentError.new("Block required for Pattern") unless block
 
 		-> (value) {
 			if (data = regex.match(value))
