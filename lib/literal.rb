@@ -7,6 +7,7 @@ module Literal
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/rails")
 		loader.ignore("#{__dir__}/literal/railtie.rb")
+		loader.ignore("#{__dir__}/ruby_lsp")
 
 		loader.inflector.inflect(
 			"json_data_type" => "JSONDataType"
