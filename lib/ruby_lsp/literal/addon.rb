@@ -22,32 +22,24 @@ module RubyLsp
 
 		class MyIndexingEnhancement < RubyIndexer::Enhancement
 			def on_call_node_enter(node)
-				return unless @listener.current_owner
-				return unless node.name == :prop
+				name = node.name
+				owner = @listener.current_owner
 				location = node.location
+				arguments = node.arguments&.arguments
 
-				arguments = node.arguments.arguments
+				return unless owner
+				return unless :prop == name
 
-				args = arguments.reject { |it| it.is_a?(Prism::KeywordHashNode) }
-				kwargs = arguments.find { |it| it.is_a?(Prism::KeywordHashNode) }&.elements&.to_h do |element|
-					[
-						(
-							case element.key
-							in Prism::SymbolNode[unescaped: String => key]
-								key
-							end
-						),
-						element.value,
-					]
+				args = arguments&.reject { |it| it.is_a?(Prism::KeywordHashNode) }
+				kwargs = arguments.find { |it| it.is_a?(Prism::KeywordHashNode) }&.elements.to_h do |element|
+					case element
+					in { key: Prism::SymbolNode[unescaped: String => key], value: value }
+						[key, value]
+					end
 				end
 
-				kwargs ||= []
-
-				name, type, kind = args
-
-				case [name, type, kind]
-				in [Prism::SymbolNode[unescaped: String => prop_name], _, _]
-					owner = @listener.current_owner
+				case args
+				in [Prism::SymbolNode[unescaped: String => prop_name], *]
 					@listener.instance_exec do
 						@index.add(RubyIndexer::Entry::InstanceVariable.new(
 							"@#{prop_name}",
