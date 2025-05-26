@@ -25,10 +25,7 @@ end
 
 test "error message" do
 	error = assert_raises Literal::TypeError do
-		Literal.check(
-			expected: _Not(Integer),
-			actual: 18
-		)
+		Literal.check(18, _Not(Integer))
 	end
 
 	assert_equal error.message, <<~MSG

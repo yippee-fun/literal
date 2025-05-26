@@ -4,7 +4,7 @@
 class Literal::Types::ConstraintType
 	include Literal::Type
 
-	def initialize(*object_constraints, **property_constraints)
+	def initialize(object_constraints, property_constraints)
 		@object_constraints = object_constraints
 		@property_constraints = property_constraints
 		freeze
@@ -46,24 +46,24 @@ class Literal::Types::ConstraintType
 		when Literal::Types::ConstraintType
 			other_object_constraints = other.object_constraints
 			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, of: constraint) }
+				other_object_constraints.any? { |c| Literal.subtype?(c, constraint) }
 			end
 
 			other_property_constraints = other.property_constraints
 			return false unless @property_constraints.all? do |k, v|
-				Literal.subtype?(other_property_constraints[k], of: v)
+				Literal.subtype?(other_property_constraints[k], v)
 			end
 
 			true
 		when Literal::Types::IntersectionType
 			other_object_constraints = other.types
 			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, of: constraint) }
+				other_object_constraints.any? { |c| Literal.subtype?(c, constraint) }
 			end
 
 			true
 		when Literal::Types::FrozenType
-			@object_constraints.all? { |constraint| Literal.subtype?(other.type, of: constraint) }
+			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint) }
 		else
 			false
 		end
@@ -85,19 +85,17 @@ class Literal::Types::ConstraintType
 		end
 	end
 
-	private
-
-	def inspect_constraints
+	private def inspect_constraints
 		[inspect_object_constraints, inspect_property_constraints].compact.join(", ")
 	end
 
-	def inspect_object_constraints
+	private def inspect_object_constraints
 		if @object_constraints.length > 0
 			@object_constraints.map(&:inspect).join(", ")
 		end
 	end
 
-	def inspect_property_constraints
+	private def inspect_property_constraints
 		if @property_constraints.length > 0
 			@property_constraints.map { |k, t| "#{k}: #{t.inspect}" }.join(", ")
 		end

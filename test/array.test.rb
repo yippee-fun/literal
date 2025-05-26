@@ -760,6 +760,14 @@ test "#include? returns true if array contains value" do
 	refute array.include?(4)
 end
 
+test "#reverse returns a new reversed array" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	return_value = array.reverse
+
+	assert_equal return_value, Literal::Array(Integer).new(3, 2, 1)
+end
+
 test "#rotate! rotates the array" do
 	array = Literal::Array(Integer).new(1, 2, 3)
 
@@ -776,6 +784,14 @@ test "#rotate rotates the array" do
 
 	refute_same return_value, array
 	assert_equal return_value, Literal::Array(Integer).new(2, 3, 1)
+end
+
+test "#reverse! reverses the array in place" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	return_value = array.reverse!
+
+	assert_same return_value, array
 end
 
 test "#take takes the first n elements" do

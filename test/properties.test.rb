@@ -93,6 +93,13 @@ class WithDefaultBlock
 	prop :block, Proc, :&, reader: :public, default: -> { proc { "Hello" } }
 end
 
+class WithContextualDefault
+	extend Literal::Properties
+	prop :hello, String, reader: :private, default: "Hello"
+	prop :world, String, reader: :private, default: "World"
+	prop :combined, String, reader: :public, default: -> { "#{hello} #{world}" }
+end
+
 class WithNilableType
 	extend Literal::Properties
 	prop :name, Literal::Types::NilableType.new(String), :positional
@@ -140,6 +147,11 @@ test "default block" do
 	assert_equal object.block.call, "World"
 end
 
+test "default value (as a proc) executes in the context of the receiver" do
+	object = WithContextualDefault.new
+	assert_equal object.combined, "Hello World"
+end
+
 test "properties are enumerable" do
 	props = Person.literal_properties
 	assert_equal props.size, 2
@@ -182,7 +194,7 @@ end
 test "after initialize callback" do
 	callback_called = false
 
-	example = Class.new do
+	public_callback = Class.new do
 		extend Literal::Properties
 
 		prop :name, String
@@ -192,7 +204,43 @@ test "after initialize callback" do
 		end
 	end
 
-	example.new(name: "John")
+	public_callback.new(name: "John")
+
+	assert callback_called
+
+	callback_called = false
+
+	protected_callback = Class.new do
+		extend Literal::Properties
+
+		prop :name, String
+
+		define_method :after_initialize do
+			callback_called = true
+		end
+
+		protected :after_initialize
+	end
+
+	protected_callback.new(name: "John")
+
+	assert callback_called
+
+	callback_called = false
+
+	private_callback = Class.new do
+		extend Literal::Properties
+
+		prop :name, String
+
+		define_method :after_initialize do
+			callback_called = true
+		end
+
+		private :after_initialize
+	end
+
+	private_callback.new(name: "John")
 
 	assert callback_called
 

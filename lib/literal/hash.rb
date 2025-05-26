@@ -25,7 +25,7 @@ class Literal::Hash
 	def initialize(value, key_type:, value_type:)
 		collection_type = Literal::Types::HashType.new(key_type, value_type)
 
-		Literal.check(actual: value, expected: collection_type) do |c|
+		Literal.check(value, collection_type) do |c|
 			c.fill_receiver(receiver: self, method: "#initialize")
 		end
 

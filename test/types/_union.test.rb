@@ -87,10 +87,7 @@ end
 
 test "error message" do
 	error = assert_raises Literal::TypeError do
-		Literal.check(
-			expected: _Union(String, Integer),
-			actual: :symbol
-		)
+		Literal.check(:symbol, _Union(String, Integer))
 	end
 
 	assert_equal error.message, <<~ERROR

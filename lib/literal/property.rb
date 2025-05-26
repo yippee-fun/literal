@@ -87,9 +87,9 @@ class Literal::Property
 		RUBY_KEYWORDS[@name] || @name.name
 	end
 
-	def default_value
+	def default_value(receiver)
 		case @default
-			when Proc then @default.call
+			when Proc then receiver.instance_exec(&@default)
 			else @default
 		end
 	end
@@ -97,15 +97,15 @@ class Literal::Property
 	def check(value, &)
 		raise ArgumentError.new("Cannot check type without a block") unless block_given?
 
-		Literal.check(actual: value, expected: @type, &)
+		Literal.check(value, @type, &)
 	end
 
 	def check_writer(receiver, value)
-		Literal.check(actual: value, expected: @type) { |c| c.fill_receiver(receiver:, method: "##{@name.name}=(value)") }
+		Literal.check(value, @type) { |c| c.fill_receiver(receiver:, method: "##{@name.name}=(value)") }
 	end
 
 	def check_initializer(receiver, value)
-		Literal.check(actual: value, expected: @type) { |c| c.fill_receiver(receiver:, method: "#initialize", label: param) }
+		Literal.check(value, @type) { |c| c.fill_receiver(receiver:, method: "#initialize", label: param) }
 	end
 
 	def generate_reader_method(buffer = +"")
@@ -164,9 +164,7 @@ class Literal::Property
 		generate_initializer_assign_value(buffer)
 	end
 
-	private
-
-	def generate_initializer_escape_keyword(buffer = +"")
+	private def generate_initializer_escape_keyword(buffer = +"")
 		buffer <<
 			escaped_name <<
 			" = binding.local_variable_get(:" <<
@@ -174,7 +172,7 @@ class Literal::Property
 			")\n"
 	end
 
-	def generate_initializer_coerce_property(buffer = +"")
+	private def generate_initializer_coerce_property(buffer = +"")
 		buffer <<
 			escaped_name <<
 			"= __property__.coerce(" <<
@@ -182,7 +180,7 @@ class Literal::Property
 			", context: self)\n"
 	end
 
-	def generate_initializer_assign_default(buffer = +"")
+	private def generate_initializer_assign_default(buffer = +"")
 		buffer <<
 			"  if " <<
 			((@kind == :&) ? "nil" : "Literal::Null") <<
@@ -190,15 +188,15 @@ class Literal::Property
 			escaped_name <<
 			"\n    " <<
 			escaped_name <<
-			" = __property__.default_value\n  end\n"
+			" = __property__.default_value(self)\n  end\n"
 	end
 
-	def generate_initializer_check_type(buffer = +"")
+	private def generate_initializer_check_type(buffer = +"")
 		buffer <<
 			"  __property__.check_initializer(self, " << escaped_name << ")\n"
 	end
 
-	def generate_initializer_assign_value(buffer = +"")
+	private def generate_initializer_assign_value(buffer = +"")
 		buffer <<
 			"  @" <<
 			@name.name <<

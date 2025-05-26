@@ -26,11 +26,11 @@ class Literal::Types::NilableType
 	def >=(other)
 		case other
 		when Literal::Types::NilableType
-			Literal.subtype?(other.type, of: @type)
+			Literal.subtype?(other.type, @type)
 		when nil
 			true
 		else
-			Literal.subtype?(other, of: @type)
+			Literal.subtype?(other, @type)
 		end
 	end
 

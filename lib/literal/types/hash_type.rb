@@ -30,9 +30,9 @@ class Literal::Types::HashType
 		case other
 		when Literal::Types::HashType
 			(
-				Literal.subtype?(other.key_type, of: @key_type)
+				Literal.subtype?(other.key_type, @key_type)
 			) && (
-				Literal.subtype?(other.value_type, of: @value_type)
+				Literal.subtype?(other.value_type, @value_type)
 			)
 		else
 			false

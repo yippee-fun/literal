@@ -1,33 +1,59 @@
 # frozen_string_literal: true
 
+require "zeitwerk"
+require_relative "literal/version"
+
 module Literal
-	autoload :Array, "literal/array"
-	autoload :Data, "literal/data"
-	autoload :DataProperty, "literal/data_property"
-	autoload :DataStructure, "literal/data_structure"
-	autoload :Enum, "literal/enum"
-	autoload :Flags, "literal/flags"
-	autoload :Flags16, "literal/flags"
-	autoload :Flags32, "literal/flags"
-	autoload :Flags64, "literal/flags"
-	autoload :Flags8, "literal/flags"
-	autoload :Hash, "literal/hash"
-	autoload :Null, "literal/null"
-	autoload :Object, "literal/object"
-	autoload :Properties, "literal/properties"
-	autoload :Property, "literal/property"
-	autoload :Set, "literal/set"
-	autoload :Struct, "literal/struct"
-	autoload :Type, "literal/type"
-	autoload :Types, "literal/types"
-	autoload :Tuple, "literal/tuple"
+	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
+		loader.ignore("#{__dir__}/literal/rails")
+		loader.ignore("#{__dir__}/literal/railtie.rb")
+		loader.ignore("#{__dir__}/ruby_lsp")
 
-	# Errors
-	autoload :Error, "literal/errors/error"
-	autoload :TypeError, "literal/errors/type_error"
-	autoload :ArgumentError, "literal/errors/argument_error"
+		loader.inflector.inflect(
+			"json_data_type" => "JSONDataType"
+		)
 
-	autoload :TRANSFORMS, "literal/transforms"
+		loader.collapse("#{__dir__}/literal/flags")
+		loader.collapse("#{__dir__}/literal/errors")
+
+		loader.setup
+	end
+
+	def self.Value(*args, **kwargs, &block)
+		value_class = Class.new(Literal::Value)
+
+		type = Literal::Types._Constraint(*args, **kwargs)
+		value_class.define_method(:__type__) { type }
+
+		if subtype?(type, Integer)
+			value_class.alias_method :to_i, :value
+		elsif subtype?(type, String)
+			value_class.alias_method :to_s, :value
+			value_class.alias_method :to_str, :value
+		elsif subtype?(type, Array)
+			value_class.alias_method :to_a, :value
+			value_class.alias_method :to_ary, :value
+		elsif subtype?(type, Hash)
+			value_class.alias_method :to_h, :value
+		elsif subtype?(type, Float)
+			value_class.alias_method :to_f, :value
+		elsif subtype?(type, Set)
+			value_class.alias_method :to_set, :value
+		end
+
+		value_class.class_eval(&block) if block
+		value_class.freeze
+	end
+
+	def self.Delegator(*args, **kwargs, &block)
+		delegator_class = Class.new(Literal::Delegator)
+
+		type = Literal::Types._Constraint(*args, **kwargs)
+		delegator_class.define_method(:__type__) { type }
+
+		delegator_class.class_eval(&block) if block
+		delegator_class.freeze
+	end
 
 	def self.Enum(type)
 		Class.new(Literal::Enum) do
@@ -51,19 +77,22 @@ module Literal
 		Literal::Tuple::Generic.new(*types)
 	end
 
-	def self.check(actual:, expected:)
-		if expected === actual
+	def self.Brand(...)
+		Literal::Brand.new(...)
+	end
+
+	def self.check(value, type)
+		if type === value
 			true
 		else
-			context = Literal::TypeError::Context.new(expected:, actual:)
-			expected.record_literal_type_errors(context) if expected.respond_to?(:record_literal_type_errors)
+			context = Literal::TypeError::Context.new(expected: type, actual: value)
+			type.record_literal_type_errors(context) if type.respond_to?(:record_literal_type_errors)
 			yield context if block_given?
 			raise Literal::TypeError.new(context:)
 		end
 	end
 
-	def self.subtype?(type, of:)
-		supertype = of
+	def self.subtype?(type, supertype)
 		subtype = type
 
 		subtype = subtype.block.call if Types::DeferredType === subtype
@@ -98,4 +127,4 @@ module Literal
 	end
 end
 
-require_relative "literal/rails" if defined?(Rails)
+require_relative "literal/railtie" if defined?(Rails)

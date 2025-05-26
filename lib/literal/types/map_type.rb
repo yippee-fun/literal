@@ -4,7 +4,7 @@
 class Literal::Types::MapType
 	include Literal::Type
 
-	def initialize(**shape)
+	def initialize(shape)
 		@shape = shape
 		freeze
 	end
@@ -45,7 +45,7 @@ class Literal::Types::MapType
 			other_shape = other.shape
 
 			@shape.all? do |k, v|
-				Literal.subtype?(other_shape[k], of: v)
+				Literal.subtype?(other_shape[k], v)
 			end
 		else
 			false

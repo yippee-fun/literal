@@ -21,7 +21,7 @@ class Literal::Types::DescendantType
 	def >=(other)
 		case other
 		when Literal::Types::DescendantType, Literal::Types::ClassType
-			Literal.subtype?(other.type, of: @type)
+			Literal.subtype?(other.type, @type)
 		else
 			false
 		end

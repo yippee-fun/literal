@@ -31,11 +31,11 @@ class Literal::Types::FrozenType
 			@type >= other.type
 		when Literal::Types::ConstraintType
 			type_match = false
-			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], of: true)
+			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], true)
 
 			other.object_constraints.each do |constraint|
 				frozen_match ||= ALWAYS_FROZEN.include?(constraint)
-				type_match ||= Literal.subtype?(constraint, of: @type)
+				type_match ||= Literal.subtype?(constraint, @type)
 				return true if frozen_match && type_match
 			end
 

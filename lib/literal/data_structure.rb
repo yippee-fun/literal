@@ -14,6 +14,8 @@ class Literal::DataStructure
 		{}
 	end
 
+	alias to_hash to_h
+
 	def deconstruct
 		to_h.values
 	end
@@ -38,7 +40,7 @@ class Literal::DataStructure
 	end
 
 	def marshal_dump
-		[1, to_h, frozen?]
+		[1, to_h, frozen?].freeze
 	end
 
 	def hash
@@ -46,9 +48,10 @@ class Literal::DataStructure
 	end
 
 	def ==(other)
-		other.is_a?(self.class) && other.class.literal_properties.empty?
+		self.class === other && other.class.literal_properties.empty?
 	end
-	alias eql? ==
+
+	alias_method :eql?, :==
 
 	def self.__generate_literal_methods__(new_property, buffer = +"")
 		super

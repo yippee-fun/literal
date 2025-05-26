@@ -24,8 +24,8 @@ end
 test "error message" do
 	error = assert_raises(Literal::TypeError) do
 		Literal.check(
-			actual: "string",
-			expected: _Intersection(
+			"string",
+			_Intersection(
 				_Interface(:size),
 				_Interface(:each),
 			)

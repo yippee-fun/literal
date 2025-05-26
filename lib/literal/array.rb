@@ -17,13 +17,13 @@ class Literal::Array
 		alias_method :[], :new
 
 		def ===(value)
-			Literal::Array === value && Literal.subtype?(value.__type__, of: @type)
+			Literal::Array === value && Literal.subtype?(value.__type__, @type)
 		end
 
 		def >=(other)
 			case other
 			when Literal::Array::Generic
-				Literal.subtype?(other.type, of: @type)
+				Literal.subtype?(other.type, @type)
 			else
 				false
 			end
@@ -51,7 +51,7 @@ class Literal::Array
 	include Literal::Types
 
 	def initialize(value, type:)
-		Literal.check(actual: value, expected: _Array(type)) do |c|
+		Literal.check(value, _Array(type)) do |c|
 			c.fill_receiver(receiver: self, method: "#initialize")
 		end
 
@@ -98,7 +98,7 @@ class Literal::Array
 	def +(other)
 		case other
 		when ::Array
-			Literal.check(actual: other, expected: _Array(@__type__)) do |c|
+			Literal.check(other, _Array(@__type__)) do |c|
 				c.fill_receiver(receiver: self, method: "#+")
 			end
 
@@ -129,7 +129,7 @@ class Literal::Array
 	end
 
 	def <<(value)
-		Literal.check(actual: value, expected: @__type__) do |c|
+		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#<<")
 		end
 
@@ -157,7 +157,7 @@ class Literal::Array
 	end
 
 	def []=(index, value)
-		Literal.check(actual: value, expected: @__type__) do |c|
+		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#[]=")
 		end
 
@@ -284,7 +284,7 @@ class Literal::Array
 	alias_method :index, :find_index
 
 	def insert(index, *value)
-		Literal.check(actual: value, expected: _Array(@__type__)) do |c|
+		Literal.check(value, _Array(@__type__)) do |c|
 			c.fill_receiver(receiver: self, method: "#insert")
 		end
 
@@ -344,9 +344,9 @@ class Literal::Array
 
 	def map(type, &block)
 		my_type = @__type__
-		transform_type = Literal::TRANSFORMS.dig(my_type, block)
+		transform_type = Literal::Transforms.dig(my_type, block)
 
-		if transform_type && Literal.subtype?(transform_type, of: my_type)
+		if transform_type && Literal.subtype?(transform_type, my_type)
 			Literal::Array.allocate.__initialize_without_check__(
 				@__value__.map(&block),
 				type:,
@@ -392,13 +392,13 @@ class Literal::Array
 	end
 
 	def narrow(type)
-		unless Literal.subtype?(type, of: @__type__)
+		unless Literal.subtype?(type, @__type__)
 			raise ArgumentError.new("Cannot narrow #{@__type__} to #{type}")
 		end
 
 		if __type__ != type
 			@__value__.each do |item|
-				Literal.check(actual: item, expected: type) do |c|
+				Literal.check(item, type) do |c|
 					c.fill_receiver(receiver: self, method: "#narrow")
 				end
 			end
@@ -453,7 +453,7 @@ class Literal::Array
 	end
 
 	def push(*value)
-		Literal.check(actual: value, expected: _Array(@__type__)) do |c|
+		Literal.check(value, _Array(@__type__)) do |c|
 			c.fill_receiver(receiver: self, method: "#push")
 		end
 
@@ -475,7 +475,7 @@ class Literal::Array
 	def replace(value)
 		case value
 		when Array
-			Literal.check(actual: value, expected: _Array(@__type__)) do |c|
+			Literal.check(value, _Array(@__type__)) do |c|
 				c.fill_receiver(receiver: self, method: "#replace")
 			end
 
@@ -493,11 +493,20 @@ class Literal::Array
 		self
 	end
 
+	def reverse(...)
+		__with__(@__value__.reverse(...))
+	end
+
 	alias_method :initialize_copy, :replace
 
 	def reverse_each(...)
 		return_value = @__value__.reverse_each(...)
 		(return_value.class == Enumerator) ? return_value : self
+  end
+
+	def reverse!
+		@__value__.reverse!
+		self
 	end
 
 	def rotate(...)
@@ -602,7 +611,7 @@ class Literal::Array
 	end
 
 	def unshift(value)
-		Literal.check(actual: value, expected: @__type__) do |c|
+		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#unshift")
 		end
 
@@ -641,7 +650,7 @@ class Literal::Array
 	def |(other)
 		case other
 		when ::Array
-			Literal.check(actual: other, expected: _Array(@__type__)) do |c|
+			Literal.check(other, _Array(@__type__)) do |c|
 				c.fill_receiver(receiver: self, method: "#|")
 			end
 

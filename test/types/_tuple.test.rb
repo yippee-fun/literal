@@ -21,8 +21,8 @@ end
 test "error message" do
 	error = assert_raises(Literal::TypeError) do
 		Literal.check(
-			expected: _Tuple(String, Integer),
-			actual: [1, "a"]
+			[1, "a"],
+			_Tuple(String, Integer),
 		)
 	end
 

@@ -26,7 +26,7 @@ class Literal::Set
 	def initialize(value, type:)
 		collection_type = Literal::Types::SetType.new(type)
 
-		Literal.check(actual: value, expected: collection_type) do |c|
+		Literal.check(value, collection_type) do |c|
 			c.fill_receiver(receiver: self, method: "#initialize")
 		end
 

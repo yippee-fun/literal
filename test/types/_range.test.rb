@@ -21,7 +21,7 @@ end
 
 test "type error" do
 	message = assert_raises(Literal::TypeError) do
-		Literal.check(actual: (1.0..10.0), expected: _Range(Integer))
+		Literal.check((1.0..10.0), _Range(Integer))
 	end
 
 	assert_equal message.message, <<~MSG

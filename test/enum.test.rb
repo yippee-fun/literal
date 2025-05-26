@@ -14,6 +14,7 @@ class Color < Literal::Enum(Integer)
 	Red = new(1, hex: "#FF0000")
 	Green = new(2, hex: "#00FF00")
 	Blue = new(3, hex: "#0000FF")
+	SPRING_GREEN = new(4, hex: "#00FF7F")
 
 	__after_defined__ if RUBY_ENGINE == "truffleruby"
 end
@@ -107,7 +108,8 @@ test ".to_set" do
 	assert_equal Color.to_set, Set[
 		Color::Red,
 		Color::Green,
-		Color::Blue
+		Color::Blue,
+		Color::SPRING_GREEN
 	]
 end
 
@@ -116,6 +118,7 @@ test ".to_h without block" do
 		Color::Red => 1,
 		Color::Green => 2,
 		Color::Blue => 3,
+		Color::SPRING_GREEN => 4,
 	}
 end
 
@@ -130,7 +133,8 @@ end
 test "#succ" do
 	assert_equal Color::Red.succ, Color::Green
 	assert_equal Color::Green.succ, Color::Blue
-	assert_equal Color::Blue.succ, nil
+	assert_equal Color::Blue.succ, Color::SPRING_GREEN
+	assert_equal Color::SPRING_GREEN.succ, nil
 end
 
 test "#pred" do
@@ -182,6 +186,8 @@ test "generated predicates" do
 	assert_equal Color::Red.red?, true
 	assert_equal Color::Red.green?, false
 	assert_equal Color::Red.blue?, false
+	assert_equal Color::Red.spring_green?, false
+	assert_equal Color::SPRING_GREEN.spring_green?, true
 end
 
 test "members are frozen" do

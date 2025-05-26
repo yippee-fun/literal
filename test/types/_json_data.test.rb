@@ -25,6 +25,11 @@ test "===" do
 	refute _JSONData === [{ "key" => :value }, [1, 2, 3], "string"]
 end
 
+test "with params" do
+	assert _JSONData(Array) === [1, 2, 3]
+	refute _JSONData(Array) === ["a", 1, 2, Object.new]
+end
+
 test "hierarchy" do
 	assert_subtype _JSONData, _JSONData
 
@@ -75,8 +80,8 @@ end
 test "error message" do
 	error = assert_raises(Literal::TypeError) do
 		Literal.check(
-			actual: { :key => "value", "string" => "string", "symbol" => :symbol, "array" => [1, 2, 3, :symbol], "hash" => { "key" => "value", "symbol" => :symbol } },
-			expected: _JSONData
+			{ :key => "value", "string" => "string", "symbol" => :symbol, "array" => [1, 2, 3, :symbol], "hash" => { "key" => "value", "symbol" => :symbol } },
+			_JSONData
 		)
 	end
 

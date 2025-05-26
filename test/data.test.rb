@@ -53,6 +53,12 @@ test "can be deconstructed with keys" do
 	assert_equal(person.deconstruct_keys([:name]), { name: "John" })
 end
 
+test "can be implicitly coerced to Hash" do
+	person = Person.new(name: "John")
+
+	assert_equal({ last_name: "Doe" }.merge(person), { last_name: "Doe", name: "John" })
+end
+
 test "can be used as a hash key" do
 	person = Person.new(name: "John")
 	person2 = Person.new(name: "Bob")

@@ -213,33 +213,7 @@ class Literal::Flags
 		end
 	end
 
-	private
-
-	def bitmap(key)
+	private def bitmap(key)
 		2 ** self.class::FLAGS.fetch(key)
 	end
-end
-
-class Literal::Flags8 < Literal::Flags
-	BYTES = 1
-	BITS = BYTES * 8
-	PACKER = "C"
-end
-
-class Literal::Flags16 < Literal::Flags
-	BYTES = 2
-	BITS = BYTES * 8
-	PACKER = "S"
-end
-
-class Literal::Flags32 < Literal::Flags
-	BYTES = 4
-	BITS = BYTES * 8
-	PACKER = "L"
-end
-
-class Literal::Flags64 < Literal::Flags
-	BYTES = 8
-	BITS = BYTES * 8
-	PACKER = "Q"
 end

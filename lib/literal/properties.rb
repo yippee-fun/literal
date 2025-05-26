@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 module Literal::Properties
-	autoload :Schema, "literal/properties/schema"
-	autoload :DataSchema, "literal/properties/data_schema"
-
 	include Literal::Types
 
 	module DocString
@@ -64,43 +61,43 @@ module Literal::Properties
 	def literal_properties
 		return @literal_properties if defined?(@literal_properties)
 
-		if superclass.is_a?(Literal::Properties)
+		if Literal::Properties === superclass
 			@literal_properties = superclass.literal_properties.dup
 		else
 			@literal_properties = Literal::Properties::Schema.new
 		end
 	end
 
-	private
-
-	def __literal_property_class__
+	private def __literal_property_class__
 		Literal::Property
 	end
 
-	def __define_literal_methods__(new_property)
+	private def __define_literal_methods__(new_property)
 		code =	__generate_literal_methods__(new_property)
 		__literal_extension__.module_eval(code)
 	end
 
-	def __literal_extension__
+	private def __literal_extension__
 		if defined?(@__literal_extension__)
 			@__literal_extension__
 		else
 			@__literal_extension__ = Module.new do
 				def initialize
-					after_initialize if respond_to?(:after_initialize)
+					after_initialize if respond_to?(:after_initialize, true)
 				end
 
 				def to_h
 					{}
 				end
 
+				alias to_hash to_h
+
 				set_temporary_name "Literal::Properties(Extension)" if respond_to?(:set_temporary_name)
 			end
 		end
 	end
 
-	def __generate_literal_methods__(new_property, buffer = +"")
+	private def __generate_literal_methods__(new_property, buffer = +"")
 		buffer << "# frozen_string_literal: true\n"
 		literal_properties.generate_initializer(buffer)
 		literal_properties.generate_to_h(buffer)

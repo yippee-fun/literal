@@ -18,6 +18,6 @@ class Literal::Types::DeferredType
 	end
 
 	def >=(other)
-		Literal.subtype?(other, of: @block.call)
+		Literal.subtype?(other, @block.call)
 	end
 end

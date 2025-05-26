@@ -25,10 +25,7 @@ end
 
 test "error message with object constraints" do
 	error = assert_raises Literal::TypeError do
-		Literal.check(
-			expected: _Constraint(Integer, 18..),
-			actual: 17
-		)
+		Literal.check(17, _Constraint(Integer, 18..))
 	end
 
 	assert_equal error.message, <<~MSG

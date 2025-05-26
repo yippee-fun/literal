@@ -4,7 +4,7 @@
 class Literal::Types::TupleType
 	include Literal::Type
 
-	def initialize(*types)
+	def initialize(types)
 		raise Literal::ArgumentError.new("_Tuple type must have at least one type.") if types.size < 1
 
 		@types = types

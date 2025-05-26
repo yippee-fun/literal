@@ -25,10 +25,7 @@ end
 
 test "error message" do
 	error = assert_raises Literal::TypeError do
-		Literal.check(
-			expected: _Nilable(_Hash(Symbol, Integer)),
-			actual: { 1 => 2, :a => :b, :d => 2 }
-		)
+		Literal.check({ 1 => 2, :a => :b, :d => 2 }, _Nilable(_Hash(Symbol, Integer)))
 	end
 
 	assert_equal error.message, <<~MSG

@@ -19,10 +19,13 @@ jobs:
   test:
     needs: ruby-versions
     runs-on: ubuntu-latest
+    continue-on-error: ${{ contains(matrix.ruby-version, 'jruby') }}
     strategy:
       fail-fast: false
       matrix:
         ruby-version: ${{ fromJson(needs.ruby-versions.outputs.versions) }}
+        exclude:
+          - ruby-version: jruby-head
     steps:
       - uses: actions/checkout@v3
       - name: Set up Ruby

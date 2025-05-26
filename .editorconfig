@@ -1,0 +1,7 @@
+[*]
+indent_style = tab
+indent_size = 2
+
+[*.{yml,erb}]
+indent_style = space
+indent_size = 2

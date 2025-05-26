@@ -3,32 +3,6 @@
 module Literal::Types
 	extend self
 
-	autoload :AnyType, "literal/types/any_type"
-	autoload :ArrayType, "literal/types/array_type"
-	autoload :BooleanType, "literal/types/boolean_type"
-	autoload :ClassType, "literal/types/class_type"
-	autoload :ConstraintType, "literal/types/constraint_type"
-	autoload :DeferredType, "literal/deferred_type"
-	autoload :DescendantType, "literal/types/descendant_type"
-	autoload :EnumerableType, "literal/types/enumerable_type"
-	autoload :FalsyType, "literal/types/falsy_type"
-	autoload :FrozenType, "literal/types/frozen_type"
-	autoload :HashType, "literal/types/hash_type"
-	autoload :InterfaceType, "literal/types/interface_type"
-	autoload :IntersectionType, "literal/types/intersection_type"
-	autoload :JSONDataType, "literal/types/json_data_type"
-	autoload :MapType, "literal/types/map_type"
-	autoload :NeverType, "literal/types/never_type"
-	autoload :NilableType, "literal/types/nilable_type"
-	autoload :NotType, "literal/types/not_type"
-	autoload :PredicateType, "literal/types/predicate_type"
-	autoload :RangeType, "literal/types/range_type"
-	autoload :SetType, "literal/types/set_type"
-	autoload :TruthyType, "literal/types/truthy_type"
-	autoload :TupleType, "literal/types/tuple_type"
-	autoload :UnionType, "literal/types/union_type"
-	autoload :VoidType, "literal/types/void_type"
-
 	# Matches any value except `nil`. Use `_Any?` or `_Void` to match any value including `nil`.
 	# ```ruby
 	# _Any
@@ -121,7 +95,7 @@ module Literal::Types
 		if a.length == 1 && k.length == 0
 			a[0]
 		else
-			ConstraintType.new(*a, **k)
+			ConstraintType.new(a, k)
 		end
 	end
 
@@ -260,8 +234,8 @@ module Literal::Types
 	end
 
 	# Matches if the value responds to all the given methods.
-	def _Interface(...)
-		InterfaceType.new(...)
+	def _Interface(*methods)
+		InterfaceType.new(methods)
 	end
 
 	# Nilable version of `_Interface`
@@ -272,8 +246,8 @@ module Literal::Types
 	end
 
 	# Matches if *all* given types are matched.
-	def _Intersection(...)
-		IntersectionType.new(...)
+	def _Intersection(*types)
+		IntersectionType.new(types)
 	end
 
 	# Nilable version of `_Intersection`
@@ -284,13 +258,19 @@ module Literal::Types
 	end
 
 	# Ensures the value is valid JSON data (i.e. it came from JSON.parse).
-	def _JSONData
-		JSONDataType::Instance
+	def _JSONData(*a, **k)
+		if a.length > 0 || k.length > 0
+			_Constraint(JSONDataType::Instance, *a, **k)
+		else
+			JSONDataType::Instance
+		end
 	end
 
 	# Nilable version of `_JSONData`
-	def _JSONData?
-		NilableJSONDataType
+	def _JSONData?(...)
+		_Nilable(
+			_JSONData(...)
+		)
 	end
 
 	# Matches if the value is a `Proc` and `#lambda?` returns truthy.
@@ -306,8 +286,8 @@ module Literal::Types
 	# ```ruby
 	# _Map(name: String, age: Integer)
 	# ```
-	def _Map(...)
-		MapType.new(...)
+	def _Map(**shape)
+		MapType.new(shape)
 	end
 
 	# Nilable version of `_Map`
@@ -331,13 +311,33 @@ module Literal::Types
 	end
 
 	# Matches if the given type is *not* matched.
-	def _Not(type)
-		case type
-		when NotType
-			type.type
+	def _Not(*types)
+		if types.length > 1
+			NotType.new(
+				_Union(*types)
+			)
 		else
-			NotType.new(type)
+			type = types[0]
+
+			case type
+			when NotType
+				type.type
+			else
+				NotType.new(type)
+			end
 		end
+	end
+
+	def _Pattern(regex, &block)
+		raise ArgumentError.new("Block required for Pattern") unless block
+
+		-> (value) {
+			if (data = regex.match(value))
+				!!block.call(*data.captures, **data.named_captures&.transform_keys(&:to_sym))
+			else
+				false
+			end
+		}
 	end
 
 	def _Predicate(message, &block)
@@ -425,8 +425,8 @@ module Literal::Types
 	# ```ruby
 	# _Tuple(String, Integer, Integer)
 	# ```
-	def _Tuple(...)
-		TupleType.new(...)
+	def _Tuple(*types)
+		TupleType.new(types)
 	end
 
 	# Nilable version of `_Typle`
@@ -440,14 +440,26 @@ module Literal::Types
 	end
 
 	# Matches if *any* given type is matched.
-	def _Union(...)
-		UnionType.new(...)
+	def _Union(*types)
+		UnionType.new(types)
 	end
 
 	# Nilable version of `_Union`
 	def _Union?(...)
 		_Nilable(
 			_Union(...)
+		)
+	end
+
+	# The unit type is a type that matches only the same object
+	def _Unit(object)
+		UnitType.new(object)
+	end
+
+	# Nilable version of `_Unit`
+	def _Unit?(...)
+		_Nilable(
+			_Unit(...)
 		)
 	end
 

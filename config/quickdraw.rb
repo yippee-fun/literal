@@ -25,6 +25,8 @@ module Fixtures
 	].freeze
 end
 
+Literal::Loader.eager_load
+
 if ENV["COVERAGE"] == "true"
 	require "simplecov"
 
@@ -42,13 +44,13 @@ end
 
 class Quickdraw::Test
 	def assert_subtype(subtype, supertype)
-		assert Literal.subtype?(subtype, of: supertype) do
+		assert Literal.subtype?(subtype, supertype) do
 			"Expected #{subtype.inspect} to be a subtype of #{supertype.inspect}."
 		end
 	end
 
 	def refute_subtype(subtype, supertype)
-		refute Literal.subtype?(subtype, of: supertype) do
+		refute Literal.subtype?(subtype, supertype) do
 			"Expected #{subtype.inspect} not to be a subtype of #{supertype.inspect}."
 		end
 	end

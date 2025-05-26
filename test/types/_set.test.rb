@@ -21,7 +21,7 @@ end
 
 test "error message" do
 	error = assert_raises(Literal::TypeError) do
-		Literal.check(expected: _Set(String), actual: Set["1", 2, "3", nil])
+		Literal.check(Set["1", 2, "3", nil], _Set(String))
 	end
 
 	assert_equal error.message, <<~MSG

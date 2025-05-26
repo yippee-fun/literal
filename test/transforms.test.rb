@@ -45,7 +45,7 @@ EXAMPLES = {
 	],
 }
 
-Literal::TRANSFORMS.each do |type, transforms|
+Literal::Transforms.each do |type, transforms|
 	transforms.each do |method, new_type|
 		test "#{type}.#{method} transforms to #{new_type}" do
 			examples = EXAMPLES.fetch(type)

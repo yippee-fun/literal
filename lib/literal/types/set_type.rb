@@ -38,7 +38,7 @@ class Literal::Types::SetType
 	def >=(other)
 		case other
 		when Literal::Types::SetType
-			Literal.subtype?(other.type, of: @type)
+			Literal.subtype?(other.type, @type)
 		else
 			false
 		end

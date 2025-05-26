@@ -21,9 +21,7 @@ end
 
 test "key error" do
 	error = assert_raises Literal::TypeError do
-		Literal.check(
-			expected: _Hash(Symbol, Integer), actual: { 1 => 2, :a => :b, :d => 2 }
-		)
+		Literal.check({ 1 => 2, :a => :b, :d => 2 }, _Hash(Symbol, Integer))
 	end
 
 	assert_equal error.message, <<~MSG
@@ -40,9 +38,7 @@ end
 
 test "top level error" do
 	error = assert_raises Literal::TypeError do
-		Literal.check(
-			expected: _Hash(Symbol, Integer), actual: nil
-		)
+		Literal.check(nil, _Hash(Symbol, Integer))
 	end
 
 	assert_equal error.message, <<~MSG

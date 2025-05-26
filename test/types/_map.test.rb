@@ -24,8 +24,8 @@ end
 test "error message" do
 	error = assert_raises Literal::TypeError do
 		Literal.check(
-			expected: _Map(name: String, age: Integer),
-			actual: { name: "Alice", age: "42" }
+			{ name: "Alice", age: "42" },
+			_Map(name: String, age: Integer),
 		)
 	end
 
