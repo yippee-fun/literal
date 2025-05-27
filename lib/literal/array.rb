@@ -499,6 +499,11 @@ class Literal::Array
 
 	alias_method :initialize_copy, :replace
 
+	def reverse_each(...)
+		return_value = @__value__.reverse_each(...)
+		(return_value.class == Enumerator) ? return_value : self
+  end
+
 	def reverse!
 		@__value__.reverse!
 		self
