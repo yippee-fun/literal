@@ -20,7 +20,7 @@ module RubyLsp
 			end
 		end
 
-		class MyIndexingEnhancement < RubyIndexer::Enhancement
+		class IndexingEnhancement < RubyIndexer::Enhancement
 			def on_call_node_enter(node)
 				name = node.name
 				owner = @listener.current_owner
