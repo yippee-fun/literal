@@ -1,0 +1,96 @@
+# frozen_string_literal: true
+
+class Literal::Month < Literal::Data
+	MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].freeze
+	SHORT_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].freeze
+	NON_LEAP_YEAR_DAY_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+	prop :year, Integer
+	prop :month, _Integer(1..12)
+
+	# (year: Integer, month: Integer) -> Integer
+	def self.number_of_days_in(year:, month:)
+		if month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+			29
+		else
+			NON_LEAP_YEAR_DAY_IN_MONTH[month - 1]
+		end
+	end
+
+	#: () -> Literal::Month
+	def succ
+		if @month < 12
+			self.class.new(year: @year, month: @month + 1)
+		else
+			self.class.new(year: @year + 1, month: 1)
+		end
+	end
+
+	#: () -> Literal::Month
+	def prev
+		if @month > 1
+			self.class.new(year: @year, month: @month - 1)
+		else
+			self.class.new(year: @year - 1, month: 12)
+		end
+	end
+
+	#: () -> -1 | 0 | 1
+	def <=>(other)
+		case other
+		when Literal::Month
+			if @year == other.year
+				@month <=> other.month
+			else
+				@year <=> other.year
+			end
+		else
+			raise ArgumentError
+		end
+	end
+
+	#: () -> Literal::Year
+	def year
+		Literal::Year.new(year: @year)
+	end
+
+	#: () -> String
+	def name
+		MONTH_NAMES[@month - 1]
+	end
+
+	#: () -> String
+	def short_name
+		SHORT_MONTH_NAMES[@month - 1]
+	end
+
+	#: () -> Integer
+	def number_of_days
+		self.class.number_of_days_in(year: @year, month: @month)
+	end
+
+	#: () -> Range[Literal::Day]
+	def days
+		(first_day..last_day)
+	end
+
+	#: () { (Literal::Day) -> void } -> void
+	def each_day
+		total = number_of_days
+
+		i = 1
+		while i <= total
+			yield Literal::Day.new(year: @year, month: @month, day: i)
+		end
+	end
+
+	#: () -> Literal::Day
+	def first_day
+		Literal::Day.new(year: @year, month: @month, day: 1)
+	end
+
+	#: () -> Literal::Day
+	def last_day
+		Literal::Day.new(year: @year, month: @month, day: number_of_days)
+	end
+end
