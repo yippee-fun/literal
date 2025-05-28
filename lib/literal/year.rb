@@ -127,4 +127,14 @@ class Literal::Year < Literal::Object
 	def leap_year?
 		self.class.leap_year?(year: @year)
 	end
+
+	#: () -> bool
+	def ce?
+		@year > 0
+	end
+
+	#: () -> bool
+	def bce?
+		@year < 0
+	end
 end
