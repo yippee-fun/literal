@@ -15,6 +15,7 @@ class Color < Literal::Enum(Integer)
 	Green = new(2, hex: "#00FF00")
 	Blue = new(3, hex: "#0000FF")
 	SPRING_GREEN = new(4, hex: "#00FF7F")
+	SlateGray = new(5, hex: "#333333")
 
 	__after_defined__ if RUBY_ENGINE == "truffleruby"
 end
@@ -109,7 +110,8 @@ test ".to_set" do
 		Color::Red,
 		Color::Green,
 		Color::Blue,
-		Color::SPRING_GREEN
+		Color::SPRING_GREEN,
+		Color::SlateGray
 	]
 end
 
@@ -119,6 +121,7 @@ test ".to_h without block" do
 		Color::Green => 2,
 		Color::Blue => 3,
 		Color::SPRING_GREEN => 4,
+		Color::SlateGray => 5,
 	}
 end
 
@@ -130,11 +133,20 @@ test ".to_proc coerces" do
 	]
 end
 
+test ".to_s" do
+	assert_equal Color::Red.to_s, "Red"
+	assert_equal Color::SPRING_GREEN.to_s, "Spring green"
+	assert_equal Color::SlateGray.to_s, "Slate gray"
+	assert_equal Switch::On.to_s, "On"
+	assert_equal SymbolTypedEnum::A.to_s, "A"
+end
+
 test "#succ" do
 	assert_equal Color::Red.succ, Color::Green
 	assert_equal Color::Green.succ, Color::Blue
 	assert_equal Color::Blue.succ, Color::SPRING_GREEN
-	assert_equal Color::SPRING_GREEN.succ, nil
+	assert_equal Color::SPRING_GREEN.succ, Color::SlateGray
+	assert_equal Color::SlateGray.succ, nil
 end
 
 test "#pred" do

@@ -199,7 +199,10 @@ class Literal::Enum
 	end
 
 	alias_method :inspect, :name
-	alias_method :to_s, :name
+
+	def to_s
+		name.split("::").last.underscore.humanize
+	end
 
 	def deconstruct
 		[@value]
