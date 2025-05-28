@@ -109,4 +109,64 @@ class Literal::Month < Literal::Object
 	def last_day
 		Literal::Day.new(year: @year, month: @month, day: number_of_days)
 	end
+
+	#: () -> bool
+	def january?
+		1 == @month
+	end
+
+	#: () -> bool
+	def february?
+		2 == @month
+	end
+
+	#: () -> bool
+	def march?
+		3 == @month
+	end
+
+	#: () -> bool
+	def april?
+		4 == @month
+	end
+
+	#: () -> bool
+	def may?
+		5 == @month
+	end
+
+	#: () -> bool
+	def june?
+		6 == @month
+	end
+
+	#: () -> bool
+	def july?
+		7 == @month
+	end
+
+	#: () -> bool
+	def august?
+		8 == @month
+	end
+
+	#: () -> bool
+	def september?
+		9 == @month
+	end
+
+	#: () -> bool
+	def october?
+		10 == @month
+	end
+
+	#: () -> bool
+	def november?
+		11 == @month
+	end
+
+	#: () -> bool
+	def december?
+		12 == @month
+	end
 end
