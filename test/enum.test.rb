@@ -141,6 +141,14 @@ test ".to_s" do
 	assert_equal SymbolTypedEnum::A.to_s, "A"
 end
 
+test ".to_sym" do
+	assert_equal Color::Red.to_sym, :Red
+	assert_equal Color::SPRING_GREEN.to_sym, :SPRING_GREEN
+	assert_equal Color::SlateGray.to_sym, :SlateGray
+	assert_equal Switch::On.to_sym, :On
+	assert_equal SymbolTypedEnum::A.to_sym, :A
+end
+
 test "#succ" do
 	assert_equal Color::Red.succ, Color::Green
 	assert_equal Color::Green.succ, Color::Blue
