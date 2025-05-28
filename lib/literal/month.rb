@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
-class Literal::Month < Literal::Data
+class Literal::Month < Literal::Object
 	MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].freeze
 	SHORT_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].freeze
-	NON_LEAP_YEAR_DAY_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+	NON_LEAP_YEAR_DAY_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].freeze
 
 	prop :year, Integer
 	prop :month, _Integer(1..12)
+
+	private def after_initialize
+		freeze
+	end
 
 	# (year: Integer, month: Integer) -> Integer
 	def self.number_of_days_in(year:, month:)
@@ -17,8 +21,18 @@ class Literal::Month < Literal::Data
 		end
 	end
 
+	#: () -> Integer
+	def __year__
+		@year
+	end
+
+	#: () -> Integer
+	def __month__
+		@month
+	end
+
 	#: () -> Literal::Month
-	def succ
+	def next_month
 		if @month < 12
 			self.class.new(year: @year, month: @month + 1)
 		else
@@ -26,8 +40,10 @@ class Literal::Month < Literal::Data
 		end
 	end
 
+	alias_method :succ, :next_month
+
 	#: () -> Literal::Month
-	def prev
+	def prev_month
 		if @month > 1
 			self.class.new(year: @year, month: @month - 1)
 		else
@@ -39,10 +55,10 @@ class Literal::Month < Literal::Data
 	def <=>(other)
 		case other
 		when Literal::Month
-			if @year == other.year
-				@month <=> other.month
+			if @year == other.__year__
+				@month <=> other.__month__
 			else
-				@year <=> other.year
+				@year <=> other.__year__
 			end
 		else
 			raise ArgumentError

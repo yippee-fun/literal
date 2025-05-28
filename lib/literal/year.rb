@@ -1,15 +1,26 @@
 # frozen_string_literal: true
 
-class Literal::Year < Literal::Data
+class Literal::Year < Literal::Object
 	prop :year, Integer
 
-	#: () -> Literal::Year
-	def succ
-		self.class.new(year: @year + 1)
+	private def after_initialize
+		freeze
+	end
+
+	#: () -> Integer
+	def __year__
+		@year
 	end
 
 	#: () -> Literal::Year
-	def prev
+	def next_year
+		self.class.new(year: @year + 1)
+	end
+
+	alias_method :succ, :next_year
+
+	#: () -> Literal::Year
+	def prev_year
 		self.class.new(year: @year - 1)
 	end
 
@@ -17,7 +28,7 @@ class Literal::Year < Literal::Data
 	def <=>(other)
 		case other
 		when self.class
-			@year <=> other.year
+			@year <=> other.__year__
 		else
 			raise ArgumentError
 		end

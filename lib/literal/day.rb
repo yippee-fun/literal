@@ -10,7 +10,7 @@ class Literal::Day < Literal::Data
 
 	#: (year: Integer, month: Integer, day: Integer) -> Integer
 	def self.zellers_congruence(year:, month:, day:)
-		year, month, day = self.class.adjusted_date_for_zeller(year:, month:, day:)
+		year, month, day = adjusted_date_for_zeller(year:, month:, day:)
 
 		q = day
 		m = month
@@ -30,10 +30,13 @@ class Literal::Day < Literal::Data
 		[year, month, day].freeze
 	end
 
+	#: () -> void
 	private def after_initialize
 		unless @day <= Literal::Month.number_of_days_in(year: @year, month: @month)
 			raise ArgumentError
 		end
+
+		freeze
 	end
 
 	#: () -> String
@@ -47,7 +50,7 @@ class Literal::Day < Literal::Data
 	end
 
 	#: () -> Literal::Day
-	def succ
+	def next_day
 		days_in_month = Literal::Month.number_of_days_in(year: @year, month: @month)
 
 		if @day < days_in_month
@@ -59,8 +62,10 @@ class Literal::Day < Literal::Data
 		end
 	end
 
+	alias_method :succ, :next_day
+
 	#: () -> Literal::Day
-	def prev
+	def prev_day
 		if @day > 1
 			Literal::Day.new(year: @year, month: @month, day: @day - 1)
 		elsif @month > 1
@@ -125,34 +130,128 @@ class Literal::Day < Literal::Data
 		day_of_week_index < 5
 	end
 
-	# TODO: Waiting on duration and addition
-	def this_monday; end
-	def this_tuesday; end
-	def this_wednesday; end
-	def this_thursday; end
-	def this_friday; end
-	def this_saturday; end
-	def this_sunday; end
+	def +(other)
+		case other
+		when Literal::Duration
+			year, month, day = @year, @month, @day
 
-	def next_monday; end
-	def next_tuesday; end
-	def next_wednesday; end
-	def next_thursday; end
-	def next_friday; end
-	def next_saturday; end
-	def next_sunday; end
+			year += other.years
+			month += other.months
+			day += other.days
 
-	def last_monday; end
-	def last_tuesday; end
-	def last_wednesday; end
-	def last_thursday; end
-	def last_friday; end
-	def last_saturday; end
-	def last_sunday; end
+			if month > 12
+				year += (month - 1) / 12
+				month = ((month - 1) % 12) + 1
+			elsif month < 1
+				year -= (month.abs / 12) + 1
+				month = 12 - ((month.abs - 1) % 12)
+			end
+
+			if days > 0
+				while days > (days_in_month = Literal::Month.number_of_days_in(year:, month:))
+					month += 1
+					days -= days_in_month
+				end
+			elsif days < 0
+				while days < 0
+					month -= 1
+					days += Literal::Month.number_of_days_in(year:, month:)
+				end
+			end
+
+			Literal::Day.new(year:, month:, day:)
+		else
+			raise ArgumentError
+		end
+	end
+
+	#: () -> Literal::Day
+	def next_monday
+		next_day_of_week(0)
+	end
+
+	#: () -> Literal::Day
+	def next_tuesday
+		next_day_of_week(1)
+	end
+
+	#: () -> Literal::Day
+	def next_wednesday
+		next_day_of_week(2)
+	end
+
+	#: () -> Literal::Day
+	def next_thursday
+		next_day_of_week(3)
+	end
+
+	#: () -> Literal::Day
+	def next_friday
+		next_day_of_week(4)
+	end
+
+	#: () -> Literal::Day
+	def next_saturday
+		next_day_of_week(5)
+	end
+
+	#: () -> Literal::Day
+	def next_sunday
+		next_day_of_week(6)
+	end
+
+	#: () -> Literal::Day
+	def prev_monday
+		prev_day_of_week(0)
+	end
+
+	#: () -> Literal::Day
+	def prev_tuesday
+		prev_day_of_week(1)
+	end
+
+	#: () -> Literal::Day
+	def prev_wednesday
+		prev_day_of_week(2)
+	end
+
+	#: () -> Literal::Day
+	def prev_thursday
+		prev_day_of_week(3)
+	end
+
+	#: () -> Literal::Day
+	def prev_friday
+		prev_day_of_week(4)
+	end
+
+	#: () -> Literal::Day
+	def prev_saturday
+		prev_day_of_week(5)
+	end
+
+	#: () -> Literal::Day
+	def prev_sunday
+		prev_day_of_week(6)
+	end
 
 	# Return the day of the week as an integer from 0 to 6 but where the 0th is Monday.
 	#: () -> Integer
 	private def day_of_week_index
-		(self.class.zellers_congruence(@year, @month, @day) + 5) % 7
+		(self.class.zellers_congruence(year: @year, month: @month, day: @day) + 5) % 7
+	end
+
+	#: (Integer) -> Literal::Day
+	private def next_day_of_week(target_day_index)
+		days_until_target = (target_day_index + 7 - day_of_week_index) % 7
+		days_until_target = 7 if days_until_target == 0
+		self + Literal::Duration.new(days: days_until_target)
+	end
+
+	#: (Integer) -> Literal::Day
+	private def prev_day_of_week(target_day_index)
+		days_until_target = (day_of_week_index - target_day_index) % 7
+		days_until_target = 7 if days_until_target == 0
+		self - Literal::Duration.new(days: days_until_target)
 	end
 end
