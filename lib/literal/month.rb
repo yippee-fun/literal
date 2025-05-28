@@ -94,9 +94,10 @@ class Literal::Month < Literal::Object
 	def each_day
 		total = number_of_days
 
-		i = 1
+		day = 1
 		while i <= total
-			yield Literal::Day.new(year: @year, month: @month, day: i)
+			yield Literal::Day.new(year: @year, month: @month, day:)
+			day += 1
 		end
 	end
 

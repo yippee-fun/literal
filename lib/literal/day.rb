@@ -21,7 +21,7 @@ class Literal::Day < Literal::Data
 	end
 
 	#: (year: Integer, month: Integer, day: Integer) -> [Integer, Integer, Integer]
-	def self.adjusted_date_for_zeller(year:, month:, day:)
+	private_class_method def self.adjusted_date_for_zeller(year:, month:, day:)
 		if month < 3
 			month += 12
 			year -= 1
@@ -148,26 +148,33 @@ class Literal::Day < Literal::Data
 			end
 
 			# Optimisation for when adding more than 400 years worth of days.
-			if days > 146_097
+			if day > 146_097
 				years += (400 * (days / 146_097))
 				days %= 146_097
 			end
 
-			if days > 0
-				while days > (days_in_month = Literal::Month.number_of_days_in(year:, month:))
+			if day > 0
+				while day > (days_in_month = Literal::Month.number_of_days_in(year:, month:))
 					month += 1
-					days -= days_in_month
+					day -= days_in_month
 				end
-			elsif days < 0
-				while days < 0
+			elsif day < 0
+				while day < 0
 					month -= 1
-					days += Literal::Month.number_of_days_in(year:, month:)
+					day += Literal::Month.number_of_days_in(year:, month:)
 				end
 			end
 
 			Literal::Day.new(year:, month:, day:)
 		else
 			raise ArgumentError
+		end
+	end
+
+	def -(other)
+		case other
+		when Literal::Duration
+			self + (-other)
 		end
 	end
 
@@ -239,6 +246,45 @@ class Literal::Day < Literal::Data
 	#: () -> Literal::Day
 	def prev_sunday
 		prev_day_of_week(6)
+	end
+
+	#: () { (Literal::Time) -> void } -> void
+	def each_hour
+		hour = 0
+		while hour < 24
+			yield Literal::Time.new(year: @year, month: @month, day: @day, hour: i)
+			hour += 1
+		end
+	end
+
+	#: () { (Literal::Time) -> void } -> void
+	def each_minute
+		hour = 0
+		while hour < 24
+			minute = 0
+			while minute < 60
+				yield Literal::Time.new(year: @year, month: @month, day: @day, hour:, minute:)
+				minute += 1
+			end
+			hour += 1
+		end
+	end
+
+	#: () { (Literal::Time) -> void } -> void
+	def each_second
+		hour = 0
+		while hour < 24
+			minute = 0
+			while minute < 60
+				second = 0
+				while second < 60
+					yield Literal::Time.new(year: @year, month: @month, day: @day, hour:, minute:, second:)
+					second += 1
+				end
+				minute += 1
+			end
+			hour += 1
+		end
 	end
 
 	# Return the day of the week as an integer from 0 to 6 but where the 0th is Monday.
