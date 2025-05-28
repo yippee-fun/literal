@@ -14,7 +14,7 @@ class Literal::Month < Literal::Object
 
 	# (year: Integer, month: Integer) -> Integer
 	def self.number_of_days_in(year:, month:)
-		if month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+		if month == 2 && Literal::Year.leap_year?(year:)
 			29
 		else
 			NON_LEAP_YEAR_DAY_IN_MONTH[month - 1]

@@ -7,6 +7,11 @@ class Literal::Year < Literal::Object
 		freeze
 	end
 
+	#: (year: Integer) -> bool
+	def self.leap_year?(year:)
+		year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+	end
+
 	#: () -> Integer
 	def __year__
 		@year
@@ -116,5 +121,10 @@ class Literal::Year < Literal::Object
 	#: () -> Literal::Month
 	def december
 		Literal::Month.new(year: @year, month: 12)
+	end
+
+	#: () -> bool
+	def leap_year?
+		self.class.leap_year?(year: @year)
 	end
 end
