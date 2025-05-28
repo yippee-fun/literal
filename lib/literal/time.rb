@@ -4,12 +4,12 @@ class Literal::Time < Literal::Object
 	prop :year, Integer
 	prop :month, _Integer(1..12)
 	prop :day, _Integer(1..31)
-	prop :hour, _Integer(0, 24), default: 0
-	prop :minute, _Integer(0, 59), default: 0
-	prop :second, _Integer(0, 59), default: 0
-	prop :millisecond, _Integer(0, 999), default: 0
-	prop :microsecond, _Integer(0, 999), default: 0
-	prop :nanosecond, _Integer(0, 999), default: 0
+	prop :hour, _Integer(0, 24), default: 0, reader: true
+	prop :minute, _Integer(0, 59), default: 0, reader: true
+	prop :second, _Integer(0, 59), default: 0, reader: true
+	prop :millisecond, _Integer(0, 999), default: 0, reader: true
+	prop :microsecond, _Integer(0, 999), default: 0, reader: true
+	prop :nanosecond, _Integer(0, 999), default: 0, reader: true
 
 	#: () -> Literal::Year
 	def year
