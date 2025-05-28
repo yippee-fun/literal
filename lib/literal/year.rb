@@ -57,4 +57,64 @@ class Literal::Year < Literal::Object
 			i += 1
 		end
 	end
+
+	#: () -> Literal::Month
+	def january
+		Literal::Month.new(year: @year, month: 1)
+	end
+
+	#: () -> Literal::Month
+	def february
+		Literal::Month.new(year: @year, month: 2)
+	end
+
+	#: () -> Literal::Month
+	def march
+		Literal::Month.new(year: @year, month: 3)
+	end
+
+	#: () -> Literal::Month
+	def april
+		Literal::Month.new(year: @year, month: 4)
+	end
+
+	#: () -> Literal::Month
+	def may
+		Literal::Month.new(year: @year, month: 5)
+	end
+
+	#: () -> Literal::Month
+	def june
+		Literal::Month.new(year: @year, month: 6)
+	end
+
+	#: () -> Literal::Month
+	def july
+		Literal::Month.new(year: @year, month: 7)
+	end
+
+	#: () -> Literal::Month
+	def august
+		Literal::Month.new(year: @year, month: 8)
+	end
+
+	#: () -> Literal::Month
+	def september
+		Literal::Month.new(year: @year, month: 9)
+	end
+
+	#: () -> Literal::Month
+	def october
+		Literal::Month.new(year: @year, month: 10)
+	end
+
+	#: () -> Literal::Month
+	def november
+		Literal::Month.new(year: @year, month: 11)
+	end
+
+	#: () -> Literal::Month
+	def december
+		Literal::Month.new(year: @year, month: 12)
+	end
 end
