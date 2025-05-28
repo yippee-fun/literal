@@ -201,11 +201,11 @@ class Literal::Enum
 	alias_method :inspect, :name
 
 	def to_s
-		name.demodulize.underscore.humanize
+		self.class.names[self].name.underscore.humanize
 	end
 
 	def to_sym
-		name.demodulize.to_sym
+		self.class.names[self]
 	end
 
 	def deconstruct
