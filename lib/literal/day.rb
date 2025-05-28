@@ -147,6 +147,12 @@ class Literal::Day < Literal::Data
 				month = 12 - ((month.abs - 1) % 12)
 			end
 
+			# Optimisation for when adding more than 400 years worth of days.
+			if days > 146_097
+				years += (400 * (days / 146_097))
+				days %= 146_097
+			end
+
 			if days > 0
 				while days > (days_in_month = Literal::Month.number_of_days_in(year:, month:))
 					month += 1
