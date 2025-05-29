@@ -49,9 +49,24 @@ class Literal::Year < Literal::Object
 		Literal::Month.new(year: @year, month: 12)
 	end
 
+	#: () -> Literal::Day
+	def first_day
+		Literal::Day.new(year: @year, month: 1, day: 1)
+	end
+
+	#: () -> Literal::Day
+	def last_day
+		Literal::Day.new(year: @year, month: 12, day: 31)
+	end
+
 	#: () -> Range[Literal::Month]
 	def months
 		(first_month..last_month)
+	end
+
+	#: (Integer) -> Literal::Month
+	def month(month)
+		Literal::Month.new(year: @year, month:)
 	end
 
 	#: () { (Literal::Month) -> void } -> void

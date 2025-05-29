@@ -49,6 +49,30 @@ class Literal::Day < Literal::Data
 		SHORT_DAY_NAMES[day_of_week_index]
 	end
 
+	#: () -> Integer
+	def day_of_year
+		day_of_year = @day
+
+		month = 1
+		while month < @month
+			day_of_year += Literal::Month.number_of_days_in(year: @year, month:)
+			month += 1
+		end
+
+		day_of_year
+	end
+
+	#: () -> Integer
+	def day_of_month
+		@day
+	end
+
+	# Return the day of week from 1 to 7, starting on Monday.
+	#: () -> Integer
+	def day_of_week
+		day_of_week_index + 1
+	end
+
 	#: () -> Literal::Day
 	def next_day
 		days_in_month = Literal::Month.number_of_days_in(year: @year, month: @month)

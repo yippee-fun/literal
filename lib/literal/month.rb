@@ -70,6 +70,11 @@ class Literal::Month < Literal::Object
 		Literal::Year.new(year: @year)
 	end
 
+	#: (Integer) -> Literal::Day
+	def day(day)
+		Literal::Day.new(year: @year, month: @month, day:)
+	end
+
 	#: () -> String
 	def name
 		MONTH_NAMES[@month - 1]
