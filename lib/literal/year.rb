@@ -3,6 +3,7 @@
 class Literal::Year < Literal::Object
 	prop :year, Integer
 
+	#: () -> void
 	private def after_initialize
 		freeze
 	end

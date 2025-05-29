@@ -4,12 +4,17 @@ class Literal::Time < Literal::Object
 	prop :year, Integer
 	prop :month, _Integer(1..12)
 	prop :day, _Integer(1..31)
-	prop :hour, _Integer(0, 24), default: 0, reader: true
-	prop :minute, _Integer(0, 59), default: 0, reader: true
-	prop :second, _Integer(0, 59), default: 0, reader: true
-	prop :millisecond, _Integer(0, 999), default: 0, reader: true
-	prop :microsecond, _Integer(0, 999), default: 0, reader: true
-	prop :nanosecond, _Integer(0, 999), default: 0, reader: true
+	prop :hour, _Integer(0, 24), default: 0, reader: :public
+	prop :minute, _Integer(0, 59), default: 0, reader: :public
+	prop :second, _Integer(0, 59), default: 0, reader: :public
+	prop :millisecond, _Integer(0, 999), default: 0, reader: :public
+	prop :microsecond, _Integer(0, 999), default: 0, reader: :public
+	prop :nanosecond, _Integer(0, 999), default: 0, reader: :public
+
+	#: () -> void
+	private def after_initialize
+		freeze
+	end
 
 	#: () -> Literal::Year
 	def year
@@ -24,6 +29,18 @@ class Literal::Time < Literal::Object
 	#: () -> Literal::Day
 	def day
 		Literal::Day.new(year: @year, month: @month, day: @day)
+	end
+
+	#: () -> Date
+	def to_std_date
+		Date.new(@year, @month, @day)
+	end
+
+	#: () -> Time
+	def to_std_time
+		total_subsec = (@millisecond * 1_000_000) + (@microsecond * 1_000) + @nanosecond
+		subsec_seconds = Rational(total_subsec, 1_000_000_000)
+		Time.new(@year, @month, @day, @hour, @minute, @second + subsec_seconds)
 	end
 
 	#: (Literal::Duration) -> Literal::Time
