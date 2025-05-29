@@ -81,6 +81,8 @@ class Literal::Time < Literal::Object
 				end
 			end
 
+			hours += other.hours
+
 			other_nanoseconds = other.nanoseconds
 
 			hour += (other_nanoseconds / 3_600_000_000_000)
