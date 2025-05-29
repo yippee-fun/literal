@@ -33,6 +33,10 @@ class Literal::Duration < Literal::Object
 		days += 14 * fortnights
 		days += 7 * weeks
 
+		# Every 146_097 days is exactly 400 years
+		years += (400 * (days / 146_097))
+		days %= 146_097
+
 		microseconds += (nanoseconds / 1000)
 		nanoseconds %= 1000
 
