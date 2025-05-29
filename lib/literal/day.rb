@@ -154,47 +154,6 @@ class Literal::Day < Literal::Data
 		day_of_week_index < 5
 	end
 
-	def +(other)
-		case other
-		when Literal::Duration
-			year, month, day = @year, @month, @day
-
-			year += other.years
-			month += other.months
-			day += other.days
-
-			if month > 12
-				year += (month - 1) / 12
-				month = ((month - 1) % 12) + 1
-			elsif month < 1
-				year -= (month.abs / 12) + 1
-				month = 12 - ((month.abs - 1) % 12)
-			end
-
-			# Optimisation for when adding more than 400 years worth of days.
-			if day > 146_097
-				years += (400 * (days / 146_097))
-				days %= 146_097
-			end
-
-			if day > 0
-				while day > (days_in_month = Literal::Month.number_of_days_in(year:, month:))
-					month += 1
-					day -= days_in_month
-				end
-			elsif day < 0
-				while day < 0
-					month -= 1
-					day += Literal::Month.number_of_days_in(year:, month:)
-				end
-			end
-
-			Literal::Day.new(year:, month:, day:)
-		else
-			raise ArgumentError
-		end
-	end
-
 	def -(other)
 		case other
 		when Literal::Duration
