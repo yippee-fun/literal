@@ -6,6 +6,7 @@ class Literal::Duration < Literal::Object
 	prop :years, Integer, reader: :public
 	prop :months, Integer, reader: :public
 	prop :days, Integer, reader: :public
+	prop :hours, Integer, reader: :public
 	prop :nanoseconds, Integer, reader: :public
 
 	def initialize(
@@ -26,6 +27,9 @@ class Literal::Duration < Literal::Object
 		years += 100 * centuries
 		years += 10 * decades
 
+		years += (months / 12)
+		months %= 12
+
 		days += 14 * fortnights
 		days += 7 * weeks
 
@@ -44,12 +48,7 @@ class Literal::Duration < Literal::Object
 		hours += (minutes / 60)
 		minutes %= 60
 
-		days += (hours / 24)
-		hours %= 24
-
-		minutes += (hours * 60)
 		seconds += (minutes * 60)
-
 		nanoseconds += 1_000_000_000 * seconds
 		nanoseconds += 1_000_000 * milliseconds
 		nanoseconds += 1_000 * microseconds
@@ -58,6 +57,7 @@ class Literal::Duration < Literal::Object
 			years:,
 			months:,
 			days:,
+			hours:,
 			nanoseconds:
 		)
 	end
@@ -70,6 +70,7 @@ class Literal::Duration < Literal::Object
 				years: @years + other.years,
 				months: @months + other.months,
 				days: @days + other.days,
+				hours: @hours + other.hours,
 				nanoseconds: @nanoseconds + other.nanoseconds
 			)
 		else
@@ -85,6 +86,7 @@ class Literal::Duration < Literal::Object
 				years: @years - other.years,
 				months: @months - other.months,
 				days: @days - other.days,
+				hours: @hours - other.hours,
 				nanoseconds: @nanoseconds - other.nanoseconds
 			)
 		else
