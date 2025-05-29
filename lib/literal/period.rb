@@ -29,12 +29,14 @@ class Literal::Period < Literal::Object
 		)
 	end
 
-	def every(step, unit, &block)
+	#: (Integer n, Symbol unit) -> Literal::TimeEnumerator
+	#: (Integer n, Symbol unit) { (Literal::Time) -> void } -> void
+	def every(n, unit, &block)
 		enumerator = Literal::TimeEnumerator.new(
 			from: @from,
 			to: @to,
 			unit:,
-			step:
+			step: n
 		)
 
 		block ? enumerator.each(&block) : enumerator
