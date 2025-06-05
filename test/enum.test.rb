@@ -109,7 +109,7 @@ test ".to_set" do
 		Color::Red,
 		Color::Green,
 		Color::Blue,
-		Color::SPRING_GREEN,
+		Color::SPRING_GREEN
 	]
 end
 
