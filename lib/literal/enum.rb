@@ -201,7 +201,7 @@ class Literal::Enum
 	alias_method :inspect, :name
 
 	def to_s
-		self.class.names[self].name.underscore.humanize
+		self.class.names[self].name
 	end
 
 	def to_sym
