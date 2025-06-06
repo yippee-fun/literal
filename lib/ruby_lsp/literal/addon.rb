@@ -39,13 +39,18 @@ module RubyLsp
 				end
 
 				case args
-				in [Prism::SymbolNode[unescaped: String => prop_name], *]
+				in [Prism::SymbolNode[unescaped: String => prop_name], Prism::Node => prop_type, *]
+					prop_type_location = prop_type.location
+					prop_type_indentation = prop_type_location.source_lines[prop_type_location.start_line - 1][/\A\s*/]
+
+					prop_signature = prop_type_location.slice.lines.map { |line| line.delete_prefix(prop_type_indentation) }.join
+
 					@listener.instance_exec do
 						@index.add(RubyIndexer::Entry::InstanceVariable.new(
 							"@#{prop_name}",
 							@uri,
 							RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
-							collect_comments(node),
+							[collect_comments(node), "**Type:**\n```ruby\n#{prop_signature}\n```"].join("\n\n"),
 							owner,
 						))
 					end
