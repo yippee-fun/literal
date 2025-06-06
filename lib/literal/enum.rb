@@ -199,7 +199,14 @@ class Literal::Enum
 	end
 
 	alias_method :inspect, :name
-	alias_method :to_s, :name
+
+	def to_s
+		self.class.names[self].name
+	end
+
+	def to_sym
+		self.class.names[self]
+	end
 
 	def deconstruct
 		[@value]
