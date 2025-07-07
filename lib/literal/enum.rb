@@ -200,12 +200,12 @@ class Literal::Enum
 
 	alias_method :inspect, :name
 
-	def to_s
-		self.class.names[self].name
-	end
-
 	def to_sym
 		self.class.names[self]
+	end
+
+	def to_s
+		to_sym.to_s
 	end
 
 	def deconstruct
