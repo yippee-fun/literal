@@ -46,7 +46,7 @@ test "positional splats are optional" do
 	refute_raises { example.new }
 	refute_raises { example.new("Hello") }
 	refute_raises { example.new("Hello", "World") }
-  refute example.literal_properties[:example].required? { "Expected example to not be required" }
+	refute example.literal_properties[:example].required? { "Expected example to not be required" }
 end
 
 test "keyword splats are optional" do
@@ -57,7 +57,7 @@ test "keyword splats are optional" do
 	refute_raises { example.new }
 	refute_raises { example.new(example: "Hello") }
 	refute_raises { example.new(example: "Hello", world: "World") }
-  refute example.literal_properties[:example].required? { "Expected example to not be required" }
+	refute example.literal_properties[:example].required? { "Expected example to not be required" }
 end
 
 test "block params are required by default" do

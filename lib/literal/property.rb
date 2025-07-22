@@ -51,7 +51,7 @@ class Literal::Property
 	end
 
 	def default?
-    return true if splat? || double_splat?
+		return true if splat? || double_splat?
 		nil != @default
 	end
 

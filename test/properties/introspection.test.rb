@@ -55,7 +55,6 @@ end
 
 test "required_properties returns all required properties" do
 	props = BasicIntrospection.required_properties
-  puts props.inspect
 	assert_equal props.map(&:name), [:id, :name, :age]
 	assert props.all?(&:required?)
 end
