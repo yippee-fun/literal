@@ -10,10 +10,10 @@ module Literal::Rails
 
 		def ===(value)
 			case value
-				when ActiveRecord::Relation, ActiveRecord::Associations::CollectionProxy, ActiveRecord::AssociationRelation
-					@model_class == value.model || value.model < @model_class
-				else
-					false
+			when ActiveRecord::Relation, ActiveRecord::Associations::CollectionProxy, ActiveRecord::AssociationRelation
+				@model_class == value.model || value.model < @model_class
+			else
+				false
 			end
 		end
 	end
