@@ -2,6 +2,8 @@
 
 class Literal::Data < Literal::DataStructure
 	class << self
+		def [](...) = new(...)
+
 		def prop(name, type, kind = :keyword, reader: :public, predicate: false, default: nil)
 			super(name, type, kind, reader:, writer: false, predicate:, default:)
 		end
