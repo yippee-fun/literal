@@ -82,3 +82,10 @@ test "empty" do
 	assert_equal(empty.eql?(other_empty), false)
 	assert_equal(empty.hash != other_empty.hash, true)
 end
+
+test "define" do
+	person_with_define = Literal::Data.define(name: String).new(name: "John")
+	person = Person.new(name: "John")
+
+	assert_equal(person_with_define.to_h, person.to_h)
+end
