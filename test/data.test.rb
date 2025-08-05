@@ -89,3 +89,10 @@ test "define" do
 
 	assert_equal(person_with_define.to_h, person.to_h)
 end
+
+test "initialize with [] method" do
+	person_a = Person.new(name: "John")
+	person_b = Person[name: "John"]
+
+	assert_equal(person_a, person_b)
+end
