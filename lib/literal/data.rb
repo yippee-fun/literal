@@ -2,7 +2,7 @@
 
 class Literal::Data < Literal::DataStructure
 	class << self
-    def [](...) = new(...)
+		def [](...) = new(...)
 
 		def define(**properties)
 			Class.new(self) do
