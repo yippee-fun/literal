@@ -41,6 +41,19 @@ class Literal::TypeError < TypeError
 			expected.record_literal_type_errors(child) if expected.respond_to?(:record_literal_type_errors)
 			@children << child
 		end
+
+		def to_h
+			{
+						receiver: @receiver,
+						method: @method,
+						label: @label,
+						expected: @expected,
+						actual: @actual,
+						children: @children,
+				}
+		end
+
+		alias to_hash to_h
 	end
 
 	def initialize(context:)
@@ -71,6 +84,10 @@ class Literal::TypeError < TypeError
 			end
 		end
 		message
+	end
+
+	def deconstruct
+		to_h.values
 	end
 
 	def deconstruct_keys(keys)
