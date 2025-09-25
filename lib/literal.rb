@@ -55,6 +55,12 @@ module Literal
 		delegator_class.freeze
 	end
 
+	# JSON Schema support
+	module JsonSchema
+		autoload :TypeMapper, "literal/json_schema/type_mapper"
+		autoload :Generator, "literal/json_schema/generator"
+	end
+
 	def self.Enum(type)
 		Class.new(Literal::Enum) do
 			prop :value, type, :positional, reader: :public
