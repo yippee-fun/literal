@@ -19,6 +19,50 @@ module Literal
 		loader.setup
 	end
 
+	CLASS_METHOD = Kernel.instance_method(:class)
+	CLASS_VARIABLE_GET_METHOD = Module.instance_method(:class_variable_get)
+	INSTANCE_VARIABLE_GET_METHOD = Kernel.instance_method(:instance_variable_get)
+
+	module BindingAssert
+		def assert(...) = Literal.assert(self, ...)
+	end
+
+	::Binding.include(Literal::BindingAssert)
+
+
+	def self.assert(bind, **kwargs)
+		kwargs.each do |name, type|
+			string_name = (Symbol === name) ? name.name : name
+			first_byte = string_name.getbyte(0)
+
+			if first_byte == 64 # @foo
+				if string_name.getbyte(1) == 64 # @@foo
+					value = CLASS_VARIABLE_GET_METHOD.bind_call(
+						CLASS_METHOD.bind_call(bind.receiver), name
+					)
+				else # @foo
+					value = INSTANCE_VARIABLE_GET_METHOD.bind_call(bind.receiver, name)
+				end
+			elsif first_byte == 36 # $foo
+				raise if string_name.match?(/[\s\.]/)
+				value = eval(string_name)
+			else # foo
+				value = bind.local_variable_get(name)
+			end
+
+			unless type === value
+				raise ::TypeError.new(<<~MESSAGE)
+					Assertion failed!
+
+					  #{name}
+					    Expected: #{type.inspect}
+					    Actual (#{value.class}): #{value.inspect}
+				MESSAGE
+			end
+		end
+	end
+
+
 	def self.Value(*args, **kwargs, &block)
 		value_class = Class.new(Literal::Value)
 
