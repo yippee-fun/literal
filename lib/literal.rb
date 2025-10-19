@@ -24,9 +24,7 @@ module Literal
 	INSTANCE_VARIABLE_GET_METHOD = Kernel.instance_method(:instance_variable_get)
 
 	module BindingAssert
-		def assert(...)
-			Literal.assert(self, ...)
-		end
+		def assert(...) = Literal.assert(self, ...)
 	end
 
 	::Binding.include(Literal::BindingAssert)
