@@ -47,34 +47,23 @@ class Literal::Enum
 		end
 
 		def where(**kwargs)
-			unless kwargs.length == 1
-				raise ArgumentError.new("You can only specify one index when using `where`.")
+			results = []
+
+			kwargs.each do |key, lookup|
+				matches = []
+
+				@indexes.fetch(key).each do |value, enums|
+					matches.concat(enums) if lookup === value
+				end
+
+				results << matches
 			end
 
-			key, value = kwargs.first
-
-			types = @indexes_definitions.fetch(key)
-			type = types.first
-			Literal.check(value, type) { |c| raise NotImplementedError }
-
-			@indexes.fetch(key)[value]
+			results.inject(:&)
 		end
 
 		def find_by(**kwargs)
-			unless kwargs.length == 1
-				raise ArgumentError.new("You can only specify one index when using `where`.")
-			end
-
-			key, value = kwargs.first
-
-			unless @indexes_definitions.fetch(key)[1]
-				raise ArgumentError.new("You can only use `find_by` on unique indexes.")
-			end
-
-			type = @indexes_definitions.fetch(key)[0]
-			Literal.check(value, type)
-
-			@indexes.fetch(key)[value]&.first
+			where(**kwargs).first
 		end
 
 		def _load(data)
