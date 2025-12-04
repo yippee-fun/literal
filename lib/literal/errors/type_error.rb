@@ -87,7 +87,8 @@ class Literal::TypeError < TypeError
 	end
 
 	def deconstruct_keys(keys)
-		to_h.slice(*keys)
+		h = to_h
+		keys ? h.slice(*keys) : h
 	end
 
 	def to_h
