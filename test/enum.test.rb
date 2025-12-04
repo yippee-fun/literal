@@ -227,3 +227,17 @@ test "pattern matching" do
 	match { Color::Red => Color[1] }
 	match { Color::Red => Color[hex: "#FF0000"] }
 end
+
+test "index with wrong type raises Literal::TypeError" do
+	assert_raises(Literal::TypeError) do
+		Class.new(Literal::Enum(Integer)) do
+			index :bad_index, String do |member|
+				member.value # returns Integer, not String
+			end
+
+			A = new(1)
+
+			__after_defined__
+		end
+	end
+end
