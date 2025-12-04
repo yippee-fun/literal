@@ -41,6 +41,17 @@ class Literal::TypeError < TypeError
 			expected.record_literal_type_errors(child) if expected.respond_to?(:record_literal_type_errors)
 			@children << child
 		end
+
+		def to_h
+			{
+				receiver: @receiver,
+				method: @method,
+				label: @label,
+				expected: @expected,
+				actual: @actual,
+				children: @children.map(&:to_h),
+			}
+		end
 	end
 
 	def initialize(context:)
