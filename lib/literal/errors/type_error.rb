@@ -52,8 +52,6 @@ class Literal::TypeError < TypeError
 				children: @children.map(&:to_h),
 			}
 		end
-
-		alias to_hash to_h
 	end
 
 	def initialize(context:)
