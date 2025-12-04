@@ -44,13 +44,13 @@ class Literal::TypeError < TypeError
 
 		def to_h
 			{
-						receiver: @receiver,
-						method: @method,
-						label: @label,
-						expected: @expected,
-						actual: @actual,
-						children: @children,
-				}
+				receiver: @receiver,
+				method: @method,
+				label: @label,
+				expected: @expected,
+				actual: @actual,
+				children: @children.map(&:to_h),
+			}
 		end
 
 		alias to_hash to_h
@@ -84,10 +84,6 @@ class Literal::TypeError < TypeError
 			end
 		end
 		message
-	end
-
-	def deconstruct
-		to_h.values
 	end
 
 	def deconstruct_keys(keys)

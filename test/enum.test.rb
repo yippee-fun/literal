@@ -130,6 +130,20 @@ test ".to_proc coerces" do
 	]
 end
 
+test ".to_s" do
+	assert_equal Color::Red.to_s, "Red"
+	assert_equal Color::SPRING_GREEN.to_s, "SPRING_GREEN"
+	assert_equal Switch::On.to_s, "On"
+	assert_equal SymbolTypedEnum::A.to_s, "A"
+end
+
+test ".to_sym" do
+	assert_equal Color::Red.to_sym, :Red
+	assert_equal Color::SPRING_GREEN.to_sym, :SPRING_GREEN
+	assert_equal Switch::On.to_sym, :On
+	assert_equal SymbolTypedEnum::A.to_sym, :A
+end
+
 test "#succ" do
 	assert_equal Color::Red.succ, Color::Green
 	assert_equal Color::Green.succ, Color::Blue
