@@ -231,11 +231,9 @@ end
 test "index with wrong type raises Literal::TypeError" do
 	assert_raises(Literal::TypeError) do
 		Class.new(Literal::Enum(Integer)) do
-			index :bad_index, String do |member|
-				member.value # returns Integer, not String
-			end
+			index :bad_index, String, &:value
 
-			A = new(1)
+			const_set(:A, new(1))
 
 			__after_defined__
 		end
