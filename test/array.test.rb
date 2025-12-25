@@ -511,6 +511,24 @@ test "#replace raises with non-array argument" do
 	end
 end
 
+test "#reverse_each iterates through the array in reverse" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+	results = []
+
+	return_value = array.reverse_each { |i| results << i }
+
+	assert_same return_value, array
+	assert_equal results, [3, 2, 1]
+end
+
+test "#reverse_each returns an enumerator if no block is given" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	return_value = array.reverse_each
+
+	assert_equal return_value.class, Enumerator
+end
+
 test "#values_at returns the values at the given indexes" do
 	array = Literal::Array(Integer).new(1, 2, 3)
 
