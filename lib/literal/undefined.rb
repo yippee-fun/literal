@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-module Literal::Null
+module Literal::Undefined
 	def self.inspect
-		"Literal::Null"
+		"Literal::Undefined"
 	end
 
 	def self.===(value)

@@ -184,7 +184,7 @@ class Literal::Property
 	private def generate_initializer_assign_default(buffer = +"")
 		buffer <<
 			"  if " <<
-			((@kind == :&) ? "nil" : "Literal::Null") <<
+			((@kind == :&) ? "nil" : "Literal::Undefined") <<
 			" == " <<
 			escaped_name <<
 			"\n    " <<
