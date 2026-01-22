@@ -81,6 +81,8 @@ end
 class Person
 	extend Literal::Properties
 
+	description "A person with a name and age"
+
 	prop :name, String, :positional, reader: :public, description: "The person's name"
 	prop :age, Integer, reader: :public
 end
@@ -453,4 +455,37 @@ test "description validation rejects non-String values" do
 	end
 
 	assert_equal error.message, "The description must be a String or nil."
+end
+
+test "class-level literal_description returns the description" do
+	assert_equal Person.literal_description, "A person with a name and age"
+end
+
+test "class-level literal_description returns nil when not set" do
+	assert_equal Empty.literal_description, nil
+end
+
+test "class-level literal_description? returns true when description is set" do
+	assert Person.literal_description?
+end
+
+test "class-level literal_description? returns false when description is not set" do
+	refute Empty.literal_description?
+end
+
+test "class-level description validation rejects non-String values" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new do
+			extend Literal::Properties
+			description 123
+		end
+	end
+
+	assert_equal error.message, "The description must be a String."
+end
+
+test "subclasses have independent descriptions" do
+	refute_equal Friend.literal_description, Person.literal_description
+	assert_equal Friend.literal_description, nil
+	refute Friend.literal_description?
 end

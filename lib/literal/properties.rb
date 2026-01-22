@@ -13,6 +13,22 @@ module Literal::Properties
 		base.include(base.__send__(:__literal_extension__))
 	end
 
+	def description(value)
+		unless String === value
+			raise Literal::ArgumentError.new("The description must be a String.")
+		end
+
+		@__literal_description__ = value
+	end
+
+	def literal_description
+		@__literal_description__
+	end
+
+	def literal_description?
+		!@__literal_description__.nil?
+	end
+
 	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, &coercion)
 		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, description: nil, &coercion)
 	end
