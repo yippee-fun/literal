@@ -81,7 +81,7 @@ end
 class Person
 	extend Literal::Properties
 
-	prop :name, String, :positional, reader: :public
+	prop :name, String, :positional, reader: :public, description: "The person's name"
 	prop :age, Integer, reader: :public
 end
 
@@ -422,4 +422,35 @@ test "#to_h" do
 
 	empty = Empty.new
 	assert_equal empty.to_h, {}
+end
+
+test "description is stored on property" do
+	prop = Person.literal_properties[:name]
+	assert_equal prop.description, "The person's name"
+end
+
+test "description defaults to nil" do
+	prop = Person.literal_properties[:age]
+	assert_equal prop.description, nil
+end
+
+test "description? predicate returns true when description is present" do
+	prop = Person.literal_properties[:name]
+	assert prop.description?
+end
+
+test "description? predicate returns false when description is nil" do
+	prop = Person.literal_properties[:age]
+	refute prop.description?
+end
+
+test "description validation rejects non-String values" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new do
+			extend Literal::Properties
+			prop :id, Integer, description: 123
+		end
+	end
+
+	assert_equal error.message, "The description must be a String or nil."
 end

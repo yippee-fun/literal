@@ -4,9 +4,9 @@ class BasicIntrospection
 	extend Literal::Properties
 	extend Literal::Properties::Introspection
 
-	prop :id, Integer, :positional
+	prop :id, Integer, :positional, description: "Unique identifier"
 	prop :name, String, :positional
-	prop :age, Integer
+	prop :age, Integer, description: "Age in years"
 	prop :email, _Nilable(String)
 	prop :friends, _Array(String), :*
 	prop :options, _Hash(Symbol, String), :**
@@ -154,4 +154,35 @@ test "mixed property types with defaults and nilables" do
 	assert_equal WithOptionals.required_keyword_property_names, [:required_kw]
 	assert_equal WithOptionals.optional_positional_property_names, [:optional_pos, :optional_name]
 	assert_equal WithOptionals.optional_keyword_property_names, [:optional_kw, :tags, :created_at]
+end
+
+test "property_descriptions returns hash of all property names to descriptions" do
+	descriptions = BasicIntrospection.property_descriptions
+
+	assert_equal descriptions, {
+		id: "Unique identifier",
+		name: nil,
+		age: "Age in years",
+		email: nil,
+		friends: nil,
+		options: nil,
+		block: nil,
+	}
+end
+
+test "described_properties returns only properties with descriptions" do
+	props = BasicIntrospection.described_properties
+	assert_equal props.map(&:name), [:id, :age]
+	assert props.all?(&:description?)
+end
+
+test "described_property_names returns names of properties with descriptions" do
+	names = BasicIntrospection.described_property_names
+	assert_equal names, [:id, :age]
+end
+
+test "empty class returns empty results for description methods" do
+	assert_equal EmptyWithIntrospection.property_descriptions, {}
+	assert_equal EmptyWithIntrospection.described_properties, []
+	assert_equal EmptyWithIntrospection.described_property_names, []
 end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Person < Literal::Data
-	prop :name, String
+	prop :name, String, description: "The person's name"
 end
 
 class Empty < Literal::Data
@@ -95,4 +95,14 @@ test "initialize with [] method" do
 	person_b = Person[name: "John"]
 
 	assert_equal(person_a, person_b)
+end
+
+test "data accepts and stores description" do
+	prop = Person.literal_properties[:name]
+	assert_equal prop.description, "The person's name"
+	assert prop.description?
+
+	prop = ReaderlessExample.literal_properties[:name]
+	assert_equal prop.description, nil
+	refute prop.description?
 end
