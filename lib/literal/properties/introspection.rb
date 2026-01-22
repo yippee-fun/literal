@@ -56,4 +56,18 @@ module Literal::Properties::Introspection
 	def optional_keyword_property_names
 		optional_keyword_properties.map(&:name)
 	end
+
+	def property_descriptions
+		literal_properties.each_with_object({}) do |prop, hash|
+			hash[prop.name] = prop.description
+		end
+	end
+
+	def described_properties
+		literal_properties.filter(&:description?)
+	end
+
+	def described_property_names
+		described_properties.map(&:name)
+	end
 end
