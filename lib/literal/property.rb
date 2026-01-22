@@ -9,7 +9,7 @@ class Literal::Property
 
 	include Comparable
 
-	def initialize(name:, type:, kind:, reader:, writer:, predicate:, default:, coercion:)
+	def initialize(name:, type:, kind:, reader:, writer:, predicate:, default:, description:, coercion:)
 		@name = name
 		@type = type
 		@kind = kind
@@ -17,10 +17,11 @@ class Literal::Property
 		@writer = writer
 		@predicate = predicate
 		@default = default
+		@description = description
 		@coercion = coercion
 	end
 
-	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :coercion
+	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion
 
 	def optional?
 		default? || @type === nil
@@ -53,6 +54,10 @@ class Literal::Property
 	def default?
 		return true if splat? || double_splat?
 		nil != @default
+	end
+
+	def description?
+		!@description.nil?
 	end
 
 	def param
