@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Person < Literal::Struct
-	prop :name, String
+	prop :name, String, description: "The person's name"
 end
 
 class Student < Person
@@ -127,4 +127,14 @@ test do
 	with_keyword_property_names[:begin] = "start2"
 	with_keyword_property_names.end = "finish2"
 	assert_equal(with_keyword_property_names.to_h, { :begin => "start2", :end => "finish2", :module => nil })
+end
+
+test "struct accepts and stores description" do
+	prop = Person.literal_properties[:name]
+	assert_equal prop.description, "The person's name"
+	assert prop.description?
+
+	prop = Student.literal_properties[:final_grade]
+	assert_equal prop.description, nil
+	refute prop.description?
 end

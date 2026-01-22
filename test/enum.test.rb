@@ -3,7 +3,7 @@
 extend Literal::Types
 
 class Color < Literal::Enum(Integer)
-	prop :hex, String
+	prop :hex, String, description: "Hex color code"
 
 	index :hex, String
 
@@ -226,4 +226,10 @@ test "pattern matching" do
 	match { Color::Red => Color }
 	match { Color::Red => Color[1] }
 	match { Color::Red => Color[hex: "#FF0000"] }
+end
+
+test "enum accepts and stores description" do
+	prop = Color.literal_properties[:hex]
+	assert_equal prop.description, "Hex color code"
+	assert prop.description?
 end
