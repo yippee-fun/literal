@@ -13,6 +13,22 @@ module Literal::Properties
 		base.include(base.__send__(:__literal_extension__))
 	end
 
+	def description(value)
+		unless String === value
+			raise Literal::ArgumentError.new("The description must be a String.")
+		end
+
+		@__literal_description__ = value
+	end
+
+	def literal_description
+		@__literal_description__
+	end
+
+	def literal_description?
+		!@__literal_description__.nil?
+	end
+
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		if default && !(Proc === default || default.frozen?)
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
