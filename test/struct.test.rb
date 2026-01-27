@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Person < Literal::Struct
-	description "A person with a name"
-
 	prop :name, String, description: "The person's name"
 end
 
@@ -139,9 +137,4 @@ test "struct accepts and stores description" do
 	prop = Student.literal_properties[:final_grade]
 	assert_equal prop.description, nil
 	refute prop.description?
-end
-
-test "struct supports class-level description" do
-	assert_equal Person.literal_description, "A person with a name"
-	assert Person.literal_description?
 end
