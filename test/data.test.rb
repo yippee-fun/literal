@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Person < Literal::Data
-	description "A person with a name"
-
 	prop :name, String, description: "The person's name"
 end
 
@@ -107,9 +105,4 @@ test "data accepts and stores description" do
 	prop = ReaderlessExample.literal_properties[:name]
 	assert_equal prop.description, nil
 	refute prop.description?
-end
-
-test "data supports class-level description" do
-	assert_equal Person.literal_description, "A person with a name"
-	assert Person.literal_description?
 end
