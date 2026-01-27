@@ -11,8 +11,8 @@ class Literal::Enum
 		def values = @values.keys
 		def names = @names
 
-		def prop(name, type, kind = :keyword, reader: :public, predicate: false, default: nil)
-			super(name, type, kind, reader:, writer: false, predicate:, default:)
+		def prop(name, type, kind = :keyword, reader: :public, predicate: false, default: nil, description: nil)
+			super(name, type, kind, reader:, writer: false, predicate:, default:, description:)
 		end
 
 		def inherited(subclass)
