@@ -29,6 +29,7 @@ class Literal::DataStructure
 		marshal_dump
 	end
 
+	# required method for Marshal compatibility
 	def marshal_load(payload)
 		_version, attributes, was_frozen = payload
 
@@ -39,6 +40,7 @@ class Literal::DataStructure
 		freeze if was_frozen
 	end
 
+	# required method for Marshal compatibility
 	def marshal_dump
 		[1, to_h, frozen?].freeze
 	end
