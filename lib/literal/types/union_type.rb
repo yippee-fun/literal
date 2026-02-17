@@ -49,8 +49,15 @@ class Literal::Types::UnionType
 	end
 
 	def each(&)
-		@primitives.each(&)
-		@types.each(&)
+		if block_given?
+			@primitives.each(&)
+			@types.each(&)
+		else
+			Enumerator.new do |yielder|
+				@primitives.each { |primitive| yielder.yield(primitive) }
+				@types.each { |type| yielder.yield(type) }
+			end
+		end
 	end
 
 	def deconstruct
