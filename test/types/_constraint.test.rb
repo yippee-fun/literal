@@ -21,6 +21,9 @@ test "hierarchy" do
 
 	refute_subtype _Constraint(Array, size: 1..3), _Constraint(Array, size: 1..2)
 	refute_subtype _Constraint(String, size: 1), _Constraint(String, size: 4)
+
+	assert_subtype _Constraint(Integer, 1..), Integer
+	refute_subtype _Constraint(Integer, 1..), Float
 end
 
 test "error message with object constraints" do

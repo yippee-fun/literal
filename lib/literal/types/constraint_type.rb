@@ -69,6 +69,13 @@ class Literal::Types::ConstraintType
 		end
 	end
 
+	def <=(other)
+		case other
+		when Module
+			@object_constraints.any? { |constraint| Literal.subtype?(other, constraint) }
+		end
+	end
+
 	def record_literal_type_errors(context)
 		@object_constraints.each do |constraint|
 			next if constraint === context.actual

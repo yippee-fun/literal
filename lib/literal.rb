@@ -117,6 +117,8 @@ module Literal
 				::Array >= supertype
 			when ::Hash
 				::Hash >= supertype
+			when Literal::Type
+				subtype <= supertype
 			else
 				false
 			end
