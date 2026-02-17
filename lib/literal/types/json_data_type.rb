@@ -55,9 +55,9 @@ class Literal::Types::JSONDataType
 
 		case other
 		when Literal::Types::ArrayType
-			self >= other.type
+			Literal.subtype?(other.type, self)
 		when Literal::Types::HashType
-			(self >= other.key_type) && (self >= other.value_type)
+			(Literal.subtype?(other.key_type, self) && Literal.subtype?(other.value_type, self))
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |type| self >= type }
 		else

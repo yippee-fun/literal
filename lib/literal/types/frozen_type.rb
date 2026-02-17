@@ -28,7 +28,7 @@ class Literal::Types::FrozenType
 	def >=(other)
 		case other
 		when Literal::Types::FrozenType
-			@type >= other.type
+			Literal.subtype?(other.type, @type)
 		when Literal::Types::ConstraintType
 			type_match = false
 			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], true)

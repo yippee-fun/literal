@@ -22,7 +22,7 @@ class Literal::Types::ArrayType
 	def >=(other)
 		case other
 		when Literal::Types::ArrayType
-			@type >= other.type
+			Literal.subtype?(other.type, @type)
 		else
 			false
 		end
