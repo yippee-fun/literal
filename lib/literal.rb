@@ -96,6 +96,7 @@ module Literal
 		subtype = type
 
 		subtype = subtype.block.call if Types::DeferredType === subtype
+		supertype = supertype.block.call if Types::DeferredType === supertype
 
 		return true if supertype == subtype
 
