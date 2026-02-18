@@ -24,6 +24,22 @@ test "#tag_for" do
 	assert_equal type.tag_for(:other), nil
 end
 
+test "#type_of" do
+	type = _TaggedUnion(name: String, age: Integer)
+
+	assert_equal type.type_of("Alice"), String
+	assert_equal type.type_of(42), Integer
+	assert_equal type.type_of(:other), nil
+end
+
+test "#resolve" do
+	type = _TaggedUnion(name: String, age: Integer)
+
+	assert_equal type.resolve("Alice"), [:name, String]
+	assert_equal type.resolve(42), [:age, Integer]
+	assert_equal type.resolve(:other), nil
+end
+
 test "#inspect" do
 	type = _TaggedUnion(name: String, age: Integer)
 

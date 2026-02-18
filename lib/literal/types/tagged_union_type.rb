@@ -31,7 +31,7 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def ===(value)
-		@members.any? { |_, type| type === value }
+		@members.each_value.any? { |type| type === value }
 	end
 
 	def [](tag)
@@ -40,6 +40,16 @@ class Literal::Types::TaggedUnionType
 
 	def tag_for(value)
 		@members.each { |tag, type| return tag if type === value }
+		nil
+	end
+
+	def type_of(value)
+		@members.each_value { |type| return type if type === value }
+		nil
+	end
+
+	def resolve(value)
+		@members.each { |tag, type| return tag, type if type === value }
 		nil
 	end
 
