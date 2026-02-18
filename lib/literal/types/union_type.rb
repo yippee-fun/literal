@@ -80,15 +80,10 @@ class Literal::Types::UnionType
 
 		case other
 		when Literal::Types::UnionType
-			types_have_at_least_one_subtype = other.types.all? do |other_type|
-				primitives.any? { |p| Literal.subtype?(other_type, p) } || types.any? { |t| Literal.subtype?(other_type, t) }
-			end
-
-			primitives_have_at_least_one_subtype = other.primitives.all? do |other_primitive|
-				primitives.any? { |p| Literal.subtype?(other_primitive, p) } || types.any? { |t| Literal.subtype?(other_primitive, t) }
-			end
-
-			types_have_at_least_one_subtype && primitives_have_at_least_one_subtype
+			other.types.all? { |t| primitives.any? { |p| Literal.subtype?(t, p) } || types.any? { |t2| Literal.subtype?(t, t2) } } &&
+				other.primitives.all? { |p| primitives.any? { |p2| Literal.subtype?(p, p2) } || types.any? { |t| Literal.subtype?(p, t) } }
+		when Literal::Types::TaggedUnionType
+			other.members.values.all? { |t| primitives.any? { |p| Literal.subtype?(t, p) } || types.any? { |t2| Literal.subtype?(t, t2) } }
 		else
 			types.any? { |t| Literal.subtype?(other, t) } || primitives.any? { |p| Literal.subtype?(other, p) }
 		end

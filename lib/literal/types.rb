@@ -439,6 +439,18 @@ module Literal::Types
 		)
 	end
 
+	# Matches if the value matches any of the given tagged types. Tags are used to identify which type was matched.
+	def _TaggedUnion(**members)
+		TaggedUnionType.new(**members)
+	end
+
+	# Nilable version of `_TaggedUnion`
+	def _TaggedUnion?(...)
+		_Nilable(
+			_TaggedUnion(...)
+		)
+	end
+
 	# Matches if *any* given type is matched.
 	def _Union(*types)
 		UnionType.new(types)
