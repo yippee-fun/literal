@@ -21,7 +21,7 @@ test "#tag_for" do
 
 	assert_equal type.tag_for("Alice"), :name
 	assert_equal type.tag_for(42), :age
-	assert_equal type.tag_for(:other), nil
+	assert_raises(Literal::ArgumentError) { type.tag_for(:other) }
 end
 
 test "#type_of" do
@@ -29,7 +29,7 @@ test "#type_of" do
 
 	assert_equal type.type_of("Alice"), String
 	assert_equal type.type_of(42), Integer
-	assert_equal type.type_of(:other), nil
+	assert_raises(Literal::ArgumentError) { type.type_of(:other) }
 end
 
 test "#resolve" do
@@ -37,7 +37,7 @@ test "#resolve" do
 
 	assert_equal type.resolve("Alice"), [:name, String]
 	assert_equal type.resolve(42), [:age, Integer]
-	assert_equal type.resolve(:other), nil
+	assert_raises(Literal::ArgumentError) { type.resolve(:other) }
 end
 
 test "#inspect" do

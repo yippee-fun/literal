@@ -40,17 +40,17 @@ class Literal::Types::TaggedUnionType
 
 	def tag_for(value)
 		@members.each { |tag, type| return tag if type === value }
-		nil
+		raise Literal::ArgumentError.new("No tag found for #{value.inspect} in #{inspect}.")
 	end
 
 	def type_of(value)
 		@members.each_value { |type| return type if type === value }
-		nil
+		raise Literal::ArgumentError.new("No type found for #{value.inspect} in #{inspect}.")
 	end
 
 	def resolve(value)
 		@members.each { |tag, type| return tag, type if type === value }
-		nil
+		raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.")
 	end
 
 	def >=(other)
