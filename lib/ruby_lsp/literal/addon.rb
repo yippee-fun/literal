@@ -46,13 +46,24 @@ module RubyLsp
 					prop_signature = prop_type_location.slice.lines.map { |line| line.delete_prefix(prop_type_indentation) }.join
 
 					@listener.instance_exec do
-						@index.add(RubyIndexer::Entry::InstanceVariable.new(
-							"@#{prop_name}",
-							@uri,
-							RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
-							[collect_comments(node), "**Type:**\n```ruby\n#{prop_signature}\n```"].join("\n\n"),
-							owner,
-						))
+						if RubyLsp::VERSION >= "0.26.5"
+							@index.add(RubyIndexer::Entry::InstanceVariable.new(
+								@index.configuration,
+								"@#{prop_name}",
+								@uri,
+								RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
+								[collect_comments(node), "**Type:**\n```ruby\n#{prop_signature}\n```"].join("\n\n"),
+								owner,
+							))
+						else
+							@index.add(RubyIndexer::Entry::InstanceVariable.new(
+								"@#{prop_name}",
+								@uri,
+								RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
+								[collect_comments(node), "**Type:**\n```ruby\n#{prop_signature}\n```"].join("\n\n"),
+								owner,
+							))
+						end
 					end
 
 					if kwargs["reader"] in Prism::SymbolNode[unescaped: "private" | "protected" | "public" => visibility]
