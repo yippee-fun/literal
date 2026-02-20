@@ -273,6 +273,10 @@ module Literal::Types
 		)
 	end
 
+	def _Kind(type)
+		KindType.new(type)
+	end
+
 	# Matches if the value is a `Proc` and `#lambda?` returns truthy.
 	def _Lambda
 		LambdaType

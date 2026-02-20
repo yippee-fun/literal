@@ -16,11 +16,15 @@ class Literal::Types::NeverType
 
 	def >=(other)
 		case other
-		when Literal::Types::NeverTypeClass
+		when Literal::Types::NeverType
 			true
 		else
 			false
 		end
+	end
+
+	def <=(_other)
+		true
 	end
 
 	freeze
