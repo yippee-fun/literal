@@ -11,6 +11,28 @@ test "result block returns a checked result" do
 	assert_equal 42, result.value!
 end
 
+test "result block wraps returned success values" do
+	result = Literal::Result(Integer, Symbol) do
+		42
+	end
+
+	assert result.success?
+	assert_equal 42, result.value!
+	assert_equal Integer, result.success_type
+	assert_equal Symbol, result.failure_type
+end
+
+test "result block checks returned values against success type" do
+	error = assert_raises(Literal::TypeError) do
+		Literal::Result(Integer, Symbol) do
+			"42"
+		end
+	end
+
+	assert_equal Integer, error.to_h[:expected]
+	assert_equal "42", error.to_h[:actual]
+end
+
 test "result block must return a matching result" do
 	assert_raises(Literal::TypeError) do
 		Literal::Result(Integer, Symbol) do
