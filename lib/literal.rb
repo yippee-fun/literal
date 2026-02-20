@@ -81,6 +81,26 @@ module Literal
 		Literal::Brand.new(...)
 	end
 
+	def self.Result(success_type, failure_type)
+		result_type = Result::Generic.new(success_type, failure_type)
+
+		if block_given?
+			result = yield(result_type)
+			Literal.check(result, result_type)
+			result
+		else
+			result_type
+		end
+	end
+
+	def self.Success(type)
+		Success::Generic.new(type)
+	end
+
+	def self.Failure(type)
+		Failure::Generic.new(type)
+	end
+
 	def self.check(value, type)
 		if type === value
 			true
