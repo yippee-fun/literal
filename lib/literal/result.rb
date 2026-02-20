@@ -1,6 +1,31 @@
 # frozen_string_literal: true
 
 class Literal::Result
+	class Thrown
+		def initialize(result)
+			@result = result
+			freeze
+		end
+
+		attr_reader :result
+	end
+
+	class Emitter
+		def initialize(type:, ball:)
+			@type = type
+			@ball = ball
+			freeze
+		end
+
+		def success(value)
+			throw(@ball, Thrown.new(@type.success(value)))
+		end
+
+		def failure(error)
+			throw(@ball, Thrown.new(@type.failure(error)))
+		end
+	end
+
 	class Generic
 		include Literal::Type
 

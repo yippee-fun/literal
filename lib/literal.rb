@@ -85,9 +85,19 @@ module Literal
 		result_type = Result::Generic.new(success_type, failure_type)
 
 		if block_given?
-			result = yield(result_type)
-			Literal.check(result, result_type)
-			result
+			caught = catch do |ball|
+				emitter = Result::Emitter.new(type: result_type, ball:)
+				yield(emitter)
+			end
+
+			case caught
+			when Result::Thrown
+				Literal.check(caught.result, result_type)
+				caught.result
+			else
+				Literal.check(caught, success_type)
+				result_type.success(caught)
+			end
 		else
 			result_type
 		end
