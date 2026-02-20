@@ -48,6 +48,23 @@ class Literal::Types::UnionType
 		false
 	end
 
+	def resolve(value)
+		if @primitives.include?(value)
+			value
+		else
+			types = @types
+
+			i, len = 0, types.size
+			while i < len
+				type = types[i]
+				return type if type === value
+				i += 1
+			end
+
+			raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.")
+		end
+	end
+
 	def each(&)
 		if block_given?
 			@primitives.each(&)
