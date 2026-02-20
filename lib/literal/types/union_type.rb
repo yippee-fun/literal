@@ -102,7 +102,15 @@ class Literal::Types::UnionType
 		when Literal::Types::TaggedUnionType
 			other.members.values.all? { |t| primitives.any? { |p| Literal.subtype?(t, p) } || types.any? { |t2| Literal.subtype?(t, t2) } }
 		else
-			types.any? { |t| Literal.subtype?(other, t) } || primitives.any? { |p| Literal.subtype?(other, p) }
+			primitives.any? { |p| Literal.subtype?(other, p) } || types.any? { |t| Literal.subtype?(other, t) }
+		end
+	end
+
+	def <=(other)
+		case other
+		when Module
+			@primitives.all? { |primitive| Literal.subtype?(primitive, other) } &&
+				@types.all? { |type| Literal.subtype?(type, other) }
 		end
 	end
 

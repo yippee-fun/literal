@@ -52,5 +52,12 @@ class Literal::Types::IntersectionType
 		end
 	end
 
+	def <=(other)
+		case other
+		when Module
+			@types.any? { |type| Literal.subtype?(type, other) }
+		end
+	end
+
 	freeze
 end
