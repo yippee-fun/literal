@@ -2,7 +2,7 @@
 
 class Literal::Struct < Literal::DataStructure
 	class << self
-		def prop(name, type, kind = :keyword, reader: :public, writer: :public, default: nil)
+		def prop(name, type, kind = :keyword, reader: :public, writer: :public, default: nil, description: nil)
 			super
 		end
 	end
