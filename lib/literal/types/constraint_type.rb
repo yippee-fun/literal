@@ -41,38 +41,38 @@ class Literal::Types::ConstraintType
 		result
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::ConstraintType
 			other_object_constraints = other.object_constraints
 			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, constraint) }
+				other_object_constraints.any? { |c| Literal.subtype?(c, constraint, context:) }
 			end
 
 			other_property_constraints = other.property_constraints
 			return false unless @property_constraints.all? do |k, v|
-				Literal.subtype?(other_property_constraints[k], v)
+				Literal.subtype?(other_property_constraints[k], v, context:)
 			end
 
 			true
 		when Literal::Types::IntersectionType
 			other_object_constraints = other.types
 			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, constraint) }
+				other_object_constraints.any? { |c| Literal.subtype?(c, constraint, context:) }
 			end
 
 			true
 		when Literal::Types::FrozenType
-			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint) }
+			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
 		else
 			false
 		end
 	end
 
-	def <=(other)
+	def <=(other, context: nil)
 		case other
 		when Module
-			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other) }
+			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
 		end
 	end
 

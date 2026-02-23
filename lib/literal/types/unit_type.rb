@@ -17,7 +17,7 @@ class Literal::Types::UnitType
 		EQUAL_METHOD.bind_call(@object, value)
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::UnitType
 			EQUAL_METHOD.bind_call(@object, other.object)

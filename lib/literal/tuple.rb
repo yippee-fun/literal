@@ -26,7 +26,7 @@ class Literal::Tuple
 			true
 		end
 
-		def >=(other)
+		def >=(other, context: nil)
 			case other
 			when Literal::Tuple::Generic
 				types = @types
@@ -36,7 +36,7 @@ class Literal::Tuple
 
 				i, len = 0, types.size
 				while i < len
-					return false unless Literal.subtype?(other_types[i], types[i])
+					return false unless Literal.subtype?(other_types[i], types[i], context:)
 					i += 1
 				end
 

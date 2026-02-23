@@ -39,13 +39,13 @@ class Literal::Types::MapType
 		end
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::MapType
 			other_shape = other.shape
 
 			@shape.all? do |k, v|
-				Literal.subtype?(other_shape[k], v)
+				Literal.subtype?(other_shape[k], v, context:)
 			end
 		else
 			false

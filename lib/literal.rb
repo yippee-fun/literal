@@ -122,42 +122,77 @@ module Literal
 		end
 	end
 
-	def self.subtype?(type, supertype)
+	def self.subtype?(type, supertype, context: nil)
+		context ||= SubtypeContext.new
+		raw_key = [type.object_id, supertype.object_id]
+		raw_acquired = false
+		resolved_key = nil
+		resolved_acquired = false
+
+		return context.fetch(raw_key) if context.memoized?(raw_key)
+		return false unless context.acquire(raw_key)
+
+		raw_acquired = true
+
 		subtype = type
 
 		subtype = subtype.block.call if Types::DeferredType === subtype
 		supertype = supertype.block.call if Types::DeferredType === supertype
+		resolved_key = [subtype.object_id, supertype.object_id]
 
-		return true if subtype == Types::NeverType::Instance
+		if resolved_key != raw_key
+			if context.memoized?(resolved_key)
+				result = context.fetch(resolved_key)
+				context.store(raw_key, result)
+				return result
+			end
 
-		return true if supertype == subtype
+			return false unless context.acquire(resolved_key)
 
-		case supertype
-		when Literal::Type
-			supertype >= subtype
-		when Module
-			case subtype
-			when Module
-				supertype >= subtype
-			when Numeric
-				Numeric >= supertype
-			when String
-				String >= supertype
-			when Symbol
-				Symbol >= supertype
-			when ::Array
-				::Array >= supertype
-			when ::Hash
-				::Hash >= supertype
+			resolved_acquired = true
+		end
+
+		result = if subtype == Types::NeverType::Instance
+			true
+		elsif supertype == subtype
+			true
+		else
+			case supertype
 			when Literal::Type
-				subtype <= supertype
+				supertype.>=(subtype, context:)
+			when Module
+				case subtype
+				when Module
+					supertype >= subtype
+				when Numeric
+					Numeric >= supertype
+				when String
+					String >= supertype
+				when Symbol
+					Symbol >= supertype
+				when ::Array
+					::Array >= supertype
+				when ::Hash
+					::Hash >= supertype
+				when Literal::Type
+					subtype.<=(supertype, context:)
+				else
+					false
+				end
+			when Range
+				supertype.cover?(subtype)
 			else
 				false
 			end
-		when Range
-			supertype.cover?(subtype)
-		else
-			false
+		end
+
+		context.store(resolved_key, result)
+		context.store(raw_key, result)
+		result
+	ensure
+		if context
+			context.release(resolved_key) if resolved_acquired
+			context.release(raw_key) if raw_acquired
 		end
 	end
 end

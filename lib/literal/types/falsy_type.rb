@@ -18,7 +18,7 @@ class Literal::Types::FalsyType
 		!value
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::FalsyType, nil, false
 			true

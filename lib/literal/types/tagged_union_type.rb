@@ -53,17 +53,17 @@ class Literal::Types::TaggedUnionType
 		raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.")
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		types = @members.values
 
 		case other
 		when Literal::Types::TaggedUnionType
-			other.members.values.all? { |t| types.any? { |t2| Literal.subtype?(t, t2) } }
+			other.members.values.all? { |t| types.any? { |t2| Literal.subtype?(t, t2, context:) } }
 		when Literal::Types::UnionType
-			other.types.all? { |t| types.any? { |t2| Literal.subtype?(t, t2) } } &&
-				other.primitives.all? { |p| types.any? { |t| Literal.subtype?(p, t) } }
+			other.types.all? { |t| types.any? { |t2| Literal.subtype?(t, t2, context:) } } &&
+				other.primitives.all? { |p| types.any? { |t| Literal.subtype?(p, t, context:) } }
 		else
-			types.any? { |t| Literal.subtype?(other, t) }
+			types.any? { |t| Literal.subtype?(other, t, context:) }
 		end
 	end
 

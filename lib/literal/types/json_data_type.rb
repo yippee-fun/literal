@@ -50,16 +50,16 @@ class Literal::Types::JSONDataType
 		end
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		return true if COMPATIBLE_TYPES.include?(other)
 
 		case other
 		when Literal::Types::ArrayType
-			Literal.subtype?(other.type, self)
+			Literal.subtype?(other.type, self, context:)
 		when Literal::Types::HashType
-			(Literal.subtype?(other.key_type, self) && Literal.subtype?(other.value_type, self))
+			(Literal.subtype?(other.key_type, self, context:) && Literal.subtype?(other.value_type, self, context:))
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |type| self >= type }
+			other.object_constraints.any? { |type| self.>=(type, context:) }
 		else
 			false
 		end

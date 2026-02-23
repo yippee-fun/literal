@@ -25,17 +25,17 @@ class Literal::Types::FrozenType
 		value.frozen? && @type === value
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::FrozenType
-			Literal.subtype?(other.type, @type)
+			Literal.subtype?(other.type, @type, context:)
 		when Literal::Types::ConstraintType
 			type_match = false
-			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], true)
+			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], true, context:)
 
 			other.object_constraints.each do |constraint|
 				frozen_match ||= ALWAYS_FROZEN.include?(constraint)
-				type_match ||= Literal.subtype?(constraint, @type)
+				type_match ||= Literal.subtype?(constraint, @type, context:)
 				return true if frozen_match && type_match
 			end
 

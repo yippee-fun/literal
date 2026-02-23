@@ -18,10 +18,10 @@ class Literal::Types::DescendantType
 		Module === value && value < @type
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::DescendantType, Literal::Types::ClassType
-			Literal.subtype?(other.type, @type)
+			Literal.subtype?(other.type, @type, context:)
 		else
 			false
 		end

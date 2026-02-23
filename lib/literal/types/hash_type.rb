@@ -31,13 +31,13 @@ class Literal::Types::HashType
 		true
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::HashType
 			(
-				Literal.subtype?(other.key_type, @key_type)
+				Literal.subtype?(other.key_type, @key_type, context:)
 			) && (
-				Literal.subtype?(other.value_type, @value_type)
+				Literal.subtype?(other.value_type, @value_type, context:)
 			)
 		else
 			false

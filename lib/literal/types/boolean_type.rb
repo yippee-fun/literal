@@ -14,7 +14,7 @@ class Literal::Types::BooleanType
 		true == value || false == value
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when true, false, Literal::Types::BooleanType
 			true

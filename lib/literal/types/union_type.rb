@@ -95,26 +95,26 @@ class Literal::Types::UnionType
 		Literal::Types::UnionType.new([*@primitives.map(&), *@types.map(&)])
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		types = @types
 		primitives = @primitives
 
 		case other
 		when Literal::Types::UnionType
-			other.types.all? { |t| primitives.any? { |p| Literal.subtype?(t, p) } || types.any? { |t2| Literal.subtype?(t, t2) } } &&
-				other.primitives.all? { |p| primitives.any? { |p2| Literal.subtype?(p, p2) } || types.any? { |t| Literal.subtype?(p, t) } }
+			other.types.all? { |t| primitives.any? { |p| Literal.subtype?(t, p, context:) } || types.any? { |t2| Literal.subtype?(t, t2, context:) } } &&
+				other.primitives.all? { |p| primitives.any? { |p2| Literal.subtype?(p, p2, context:) } || types.any? { |t| Literal.subtype?(p, t, context:) } }
 		when Literal::Types::TaggedUnionType
-			other.members.values.all? { |t| primitives.any? { |p| Literal.subtype?(t, p) } || types.any? { |t2| Literal.subtype?(t, t2) } }
+			other.members.values.all? { |t| primitives.any? { |p| Literal.subtype?(t, p, context:) } || types.any? { |t2| Literal.subtype?(t, t2, context:) } }
 		else
-			primitives.any? { |p| Literal.subtype?(other, p) } || types.any? { |t| Literal.subtype?(other, t) }
+			primitives.any? { |p| Literal.subtype?(other, p, context:) } || types.any? { |t| Literal.subtype?(other, t, context:) }
 		end
 	end
 
-	def <=(other)
+	def <=(other, context: nil)
 		case other
 		when Module
-			@primitives.all? { |primitive| Literal.subtype?(primitive, other) } &&
-				@types.all? { |type| Literal.subtype?(type, other) }
+			@primitives.all? { |primitive| Literal.subtype?(primitive, other, context:) } &&
+				@types.all? { |type| Literal.subtype?(type, other, context:) }
 		end
 	end
 

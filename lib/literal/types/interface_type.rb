@@ -27,7 +27,7 @@ class Literal::Types::InterfaceType
 		true
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::InterfaceType
 			@methods.subset?(other.methods)
@@ -35,9 +35,9 @@ class Literal::Types::InterfaceType
 			public_methods = other.public_instance_methods.to_set
 			@methods.subset?(public_methods)
 		when Literal::Types::IntersectionType
-			other.types.any? { |type| Literal.subtype?(type, self) }
+			other.types.any? { |type| Literal.subtype?(type, self, context:) }
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |type| Literal.subtype?(type, self) }
+			other.object_constraints.any? { |type| Literal.subtype?(type, self, context:) }
 		else
 			if OwnClassTypeMethodOwners.include?(other.method(:===).owner)
 				self === other

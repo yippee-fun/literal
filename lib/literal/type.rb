@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 module Literal::Type
-	def >=(other)
+	def >=(other, context: nil)
 		self == other
 	end
 
-	def <=(other)
+	def <=(other, context: nil)
 		case other
 		when Literal::Type
-			other >= self
+			other.>=(self, context:)
 		else
 			false
 		end

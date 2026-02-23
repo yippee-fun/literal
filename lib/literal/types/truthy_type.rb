@@ -13,7 +13,7 @@ class Literal::Types::TruthyType
 		!!value
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::TruthyType, true
 			true

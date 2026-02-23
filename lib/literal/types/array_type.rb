@@ -24,10 +24,10 @@ class Literal::Types::ArrayType
 		Array === value && value.all?(@type)
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::ArrayType
-			Literal.subtype?(other.type, @type)
+			Literal.subtype?(other.type, @type, context:)
 		else
 			false
 		end

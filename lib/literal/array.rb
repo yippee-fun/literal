@@ -20,10 +20,10 @@ class Literal::Array
 			Literal::Array === value && Literal.subtype?(value.__type__, @type)
 		end
 
-		def >=(other)
+		def >=(other, context: nil)
 			case other
 			when Literal::Array::Generic
-				Literal.subtype?(other.type, @type)
+				Literal.subtype?(other.type, @type, context:)
 			else
 				false
 			end

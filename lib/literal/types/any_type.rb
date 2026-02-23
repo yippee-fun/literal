@@ -14,7 +14,7 @@ class Literal::Types::AnyType
 		!(nil === value)
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		!(other === nil)
 	end
 

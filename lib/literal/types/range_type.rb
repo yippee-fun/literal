@@ -25,10 +25,10 @@ class Literal::Types::RangeType
 		)
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::RangeType
-			Literal.subtype?(other.type, @type)
+			Literal.subtype?(other.type, @type, context:)
 		else
 			false
 		end

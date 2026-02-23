@@ -47,7 +47,7 @@ class Literal::Types::TupleType
 		end
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::TupleType
 			@types == other.types

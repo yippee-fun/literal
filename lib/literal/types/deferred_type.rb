@@ -17,7 +17,7 @@ class Literal::Types::DeferredType
 		@block.call === other
 	end
 
-	def >=(other)
-		Literal.subtype?(other, @block.call)
+	def >=(other, context: nil)
+		Literal.subtype?(other, @block.call, context:)
 	end
 end

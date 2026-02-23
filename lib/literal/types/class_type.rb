@@ -19,12 +19,12 @@ class Literal::Types::ClassType
 		Class === value && (value == @type || value < @type)
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::ClassType
-			Literal.subtype?(other.type, @type)
+			Literal.subtype?(other.type, @type, context:)
 		when Literal::Types::DescendantType
-			(Class === other.type) && Literal.subtype?(other.type, @type)
+			(Class === other.type) && Literal.subtype?(other.type, @type, context:)
 		else
 			false
 		end

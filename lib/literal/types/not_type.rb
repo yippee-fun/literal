@@ -19,14 +19,14 @@ class Literal::Types::NotType
 		!(@type === value)
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::NotType
-			Literal.subtype?(other.type, @type)
+			Literal.subtype?(other.type, @type, context:)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self) }
+			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		when Literal::Types::IntersectionType
-			other.types.any? { |type| Literal.subtype?(type, self) }
+			other.types.any? { |type| Literal.subtype?(type, self, context:) }
 		else
 			false
 		end

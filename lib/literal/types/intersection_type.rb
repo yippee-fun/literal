@@ -31,31 +31,31 @@ class Literal::Types::IntersectionType
 		end
 	end
 
-	def >=(other)
+	def >=(other, context: nil)
 		case other
 		when Literal::Types::IntersectionType
 			@types.all? do |type|
 				other.types.any? do |other_type|
-					Literal.subtype?(other_type, type)
+					Literal.subtype?(other_type, type, context:)
 				end
 			end
 		when Literal::Types::ConstraintType
 			@types.all? do |type|
 				other.object_constraints.any? do |object_constraint|
-					Literal.subtype?(object_constraint, type)
+					Literal.subtype?(object_constraint, type, context:)
 				end
 			end
 		when Literal::Types::FrozenType
-			@types.all? { |type| Literal.subtype?(other.type, type) }
+			@types.all? { |type| Literal.subtype?(other.type, type, context:) }
 		else
 			false
 		end
 	end
 
-	def <=(other)
+	def <=(other, context: nil)
 		case other
 		when Module
-			@types.any? { |type| Literal.subtype?(type, other) }
+			@types.any? { |type| Literal.subtype?(type, other, context:) }
 		end
 	end
 

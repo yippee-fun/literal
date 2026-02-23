@@ -14,7 +14,7 @@ class Literal::Types::VoidType
 		true
 	end
 
-	def >=(_)
+	def >=(_, context: nil)
 		true
 	end
 
