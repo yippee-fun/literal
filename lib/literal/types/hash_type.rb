@@ -16,6 +16,11 @@ class Literal::Types::HashType
 		"_Hash(#{@key_type.inspect}, #{@value_type.inspect})"
 	end
 
+	def map(&)
+		new_key_type, new_hash_type = yield(@key_type, @value_type)
+		Literal::Types::HashType.new(new_key_type, new_hash_type)
+	end
+
 	def ===(value)
 		return false unless Hash === value
 

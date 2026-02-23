@@ -31,7 +31,7 @@ test "===" do
 	assert _Kind(_Array(numeric_kind.type)) === _Array(1)
 
 	union_type = _Union(String, Integer)
-	union_kind = union_type.map(Literal::Types::KindType) { |it| _Kind(it) }
+	union_kind = union_type.map { |it| _Kind(it) }
 
 	assert union_kind === Integer
 end

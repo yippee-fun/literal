@@ -91,7 +91,7 @@ class Literal::Types::UnionType
 		self[key] or raise KeyError.new("Key not found: #{key.inspect}")
 	end
 
-	def map(type, &)
+	def map(&)
 		Literal::Types::UnionType.new([*@primitives.map(&), *@types.map(&)])
 	end
 

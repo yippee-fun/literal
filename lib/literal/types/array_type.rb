@@ -15,6 +15,11 @@ class Literal::Types::ArrayType
 		"_Array(#{@type.inspect})"
 	end
 
+	def map(&)
+		new_type = yield(@type)
+		Literal::Types::ArrayType.new(new_type)
+	end
+
 	def ===(value)
 		Array === value && value.all?(@type)
 	end
