@@ -1,0 +1,2 @@
+- Never use `is_a?` because it asks the wrong object. Prefer `===` or `in` or `case`/`when`.
+- Check `mise.toml` for project tasks.
