@@ -1,2 +1,11 @@
 [tools]
 ruby = "latest"
+
+[tasks.test]
+run = "bundle exec qt"
+
+[tasks.lint]
+run = "bundle exec rubocop"
+
+[tasks.format]
+run = "bundle exec rubocop -A"

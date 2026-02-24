@@ -55,7 +55,7 @@ class Literal::Enum
 
 			types = @indexes_definitions.fetch(key)
 			type = types.first
-			Literal.check(value, type) { |c| raise NotImplementedError }
+			Literal.check(value, type)
 
 			@indexes.fetch(key)[value]
 		end
@@ -125,7 +125,12 @@ class Literal::Enum
 
 				index.each do |key, values|
 					unless type === key
-						raise Literal::TypeError.expected(key, to_be_a: type)
+						raise Literal::TypeError.new(
+							context: Literal::TypeError::Context.new(
+								expected: type,
+								actual: key,
+							)
+						)
 					end
 
 					if unique && values.size > 1

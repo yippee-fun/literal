@@ -179,8 +179,28 @@ test "#where" do
 	assert_equal [Color::Red], Color.where(hex: "#FF0000")
 end
 
+test "#where raises Literal::TypeError when index value has the wrong type" do
+	assert_raises(Literal::TypeError) do
+		Color.where(hex: 123)
+	end
+end
+
 test "#find_by" do
 	assert_equal Color::Red, Color.find_by(hex: "#FF0000")
+end
+
+test "index definitions raise Literal::TypeError when index key type is wrong" do
+	klass = Class.new(Literal::Enum(Integer)) do
+		index :bad, String do |it|
+			it.value
+		end
+
+		A = new(1)
+	end
+
+	assert_raises(Literal::TypeError) do
+		klass.__after_defined__
+	end
 end
 
 test "#find_by raises when used with a non-unique index" do
