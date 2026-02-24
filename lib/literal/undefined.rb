@@ -9,5 +9,13 @@ module Literal::Undefined
 		self == value
 	end
 
+	def self.present?
+		false
+	end
+
+	def self.blank?
+		true
+	end
+
 	freeze
 end
