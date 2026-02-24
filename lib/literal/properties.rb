@@ -16,6 +16,7 @@ module Literal::Properties
 	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, &coercion)
 		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, description: nil, &coercion)
 	end
+
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		if default && !(Proc === default || default.frozen?)
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")

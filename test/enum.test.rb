@@ -191,9 +191,7 @@ end
 
 test "index definitions raise Literal::TypeError when index key type is wrong" do
 	klass = Class.new(Literal::Enum(Integer)) do
-		index :bad, String do |it|
-			it.value
-		end
+		index :bad, String, &:value
 
 		A = new(1)
 	end
