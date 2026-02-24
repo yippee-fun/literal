@@ -6,3 +6,6 @@ inherit_from:
 
 AllCops:
   TargetRubyVersion: 3.1
+
+Lint/ConstantDefinitionInBlock:
+  Enabled: false
