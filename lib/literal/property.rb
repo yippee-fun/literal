@@ -57,7 +57,7 @@ class Literal::Property
 	end
 
 	def description?
-		!@description.nil?
+		!!@description
 	end
 
 	def param
