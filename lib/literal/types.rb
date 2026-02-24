@@ -467,15 +467,15 @@ module Literal::Types
 		)
 	end
 
-	# The unit type is a type that matches only the same object
-	def _Unit(object)
-		UnitType.new(object)
+	# Matches only the same object identity.
+	def _SameObject(object)
+		SameObjectType.new(object)
 	end
 
-	# Nilable version of `_Unit`
-	def _Unit?(...)
+	# Nilable version of `_SameObject`
+	def _SameObject?(...)
 		_Nilable(
-			_Unit(...)
+			_SameObject(...)
 		)
 	end
 
