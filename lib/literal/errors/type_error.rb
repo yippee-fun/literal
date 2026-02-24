@@ -52,8 +52,6 @@ class Literal::TypeError < TypeError
 				children: @children.map(&:to_h),
 			}
 		end
-
-		alias to_hash to_h
 	end
 
 	def initialize(context:)
@@ -87,7 +85,8 @@ class Literal::TypeError < TypeError
 	end
 
 	def deconstruct_keys(keys)
-		to_h.slice(*keys)
+		h = to_h
+		keys ? h.slice(*keys) : h
 	end
 
 	def to_h
