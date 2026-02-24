@@ -14,10 +14,10 @@ module Literal::Properties
 	end
 
 	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, &coercion)
-		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, &coercion)
+		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, description: nil, &coercion)
 	end
 
-	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, &coercion)
+	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		if default && !(Proc === default || default.frozen?)
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
@@ -44,6 +44,10 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The kind must be one of #{Literal::Property::KIND_OPTIONS.map(&:inspect).join(', ')}.")
 		end
 
+		unless description.nil? || String === description
+			raise Literal::ArgumentError.new("The description must be a String or nil.")
+		end
+
 		property = __literal_property_class__.new(
 			name:,
 			type:,
@@ -52,6 +56,7 @@ module Literal::Properties
 			writer:,
 			predicate:,
 			default:,
+			description:,
 			coercion:,
 		)
 
