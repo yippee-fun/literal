@@ -15,6 +15,7 @@ module Literal
 
 		loader.collapse("#{__dir__}/literal/flags")
 		loader.collapse("#{__dir__}/literal/errors")
+		loader.collapse("#{__dir__}/literal/serializers")
 
 		loader.setup
 	end
