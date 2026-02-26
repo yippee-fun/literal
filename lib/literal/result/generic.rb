@@ -21,6 +21,24 @@ class Literal::Result::Generic
 		end
 	end
 
+	def try
+		raise ArgumentError unless block_given?
+
+		caught = catch do |ball|
+			emitter = Literal::Result::Emitter.new(type: self, ball:)
+			yield(emitter)
+		end
+
+		case caught
+		when Literal::Result::Thrown
+			Literal.check(caught.result, self)
+			caught.result
+		else
+			Literal.check(caught, @success_type)
+			success(caught)
+		end
+	end
+
 	def success(value)
 		Literal::Success.new(
 			value,

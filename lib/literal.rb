@@ -82,23 +82,11 @@ module Literal
 		Literal::Brand.new(...)
 	end
 
-	def self.Result(success_type, failure_type)
+	def self.Result(success_type, failure_type, &)
 		result_type = Result::Generic.new(success_type, failure_type)
 
 		if block_given?
-			caught = catch do |ball|
-				emitter = Result::Emitter.new(type: result_type, ball:)
-				yield(emitter)
-			end
-
-			case caught
-			when Result::Thrown
-				Literal.check(caught.result, result_type)
-				caught.result
-			else
-				Literal.check(caught, success_type)
-				result_type.success(caught)
-			end
+			result_type.try(&)
 		else
 			result_type
 		end
