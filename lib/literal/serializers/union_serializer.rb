@@ -5,7 +5,7 @@ class Literal::UnionSerializer < Literal::Serializer
 
 	def initialize(context)
 		@context = context
-		@type = _Deferred { @context.type }
+		@type = @context.type
 		@kind = _Predicate("SerializableUnionKind") do |union|
 			next false unless Literal::Types::UnionType === union
 
