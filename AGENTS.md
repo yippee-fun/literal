@@ -1,2 +1,2 @@
 - Never use `is_a?` because it asks the wrong object. Prefer `===` or `in` or `case`/`when`.
-- Check `mise.toml` for project tasks.
+- Run tests with `mise run test`, you can always run all the tests becuase they’re very fast.
