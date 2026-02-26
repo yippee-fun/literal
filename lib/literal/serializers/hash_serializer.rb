@@ -22,8 +22,8 @@ class Literal::HashSerializer < Literal::Serializer
 
 		value.to_h do |key, item|
 			[
-				@context.serialize(key, type: key_type),
-				@context.serialize(item, type: value_type),
+				serialize_contents(key, type: key_type),
+				serialize_contents(item, type: value_type),
 			]
 		end
 	end
@@ -34,8 +34,8 @@ class Literal::HashSerializer < Literal::Serializer
 
 		raw.to_h do |key, item|
 			[
-				@context.deserialize(key, type: key_type),
-				@context.deserialize(item, type: value_type),
+				deserialize_contents(key, type: key_type),
+				deserialize_contents(item, type: value_type),
 			]
 		end
 	end

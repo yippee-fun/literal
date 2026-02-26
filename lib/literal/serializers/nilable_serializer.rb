@@ -21,7 +21,7 @@ class Literal::NilableSerializer < Literal::Serializer
 		when nil
 			nil
 		else
-			@context.serialize(value, type: type.type)
+			serialize_contents(value, type: type.type)
 		end
 	end
 
@@ -30,7 +30,7 @@ class Literal::NilableSerializer < Literal::Serializer
 		when nil
 			nil
 		else
-			@context.deserialize(raw, type: type.type)
+			deserialize_contents(raw, type: type.type)
 		end
 	end
 end

@@ -21,13 +21,13 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	def serialize(value, type:)
 		tag, member_type = type.resolve(value)
 
-		[tag.name, @context.serialize(value, type: member_type)]
+		[tag.name, serialize_contents(value, type: member_type)]
 	end
 
 	def deserialize(raw, type:)
 		tag, value = raw
 		member_type = type[tag.to_sym]
 
-		@context.deserialize(value, type: member_type)
+		deserialize_contents(value, type: member_type)
 	end
 end

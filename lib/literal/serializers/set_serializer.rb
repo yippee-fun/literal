@@ -20,7 +20,7 @@ class Literal::SetSerializer < Literal::Serializer
 		member_type = type.type
 
 		value.map do |item|
-			@context.serialize(item, type: member_type)
+			serialize_contents(item, type: member_type)
 		end
 	end
 
@@ -28,7 +28,7 @@ class Literal::SetSerializer < Literal::Serializer
 		member_type = type.type
 
 		raw.to_set do |item|
-			@context.deserialize(item, type: member_type)
+			deserialize_contents(item, type: member_type)
 		end
 	end
 end

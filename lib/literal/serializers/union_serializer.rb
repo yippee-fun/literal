@@ -36,7 +36,7 @@ class Literal::UnionSerializer < Literal::Serializer
 		member_type = type.resolve(value)
 		tag = @context.tag_for_type(member_type)
 
-		[tag.name, @context.serialize(value, type: member_type)]
+		[tag.name, serialize_contents(value, type: member_type)]
 	end
 
 	def deserialize(raw_value, type:)
@@ -48,6 +48,6 @@ class Literal::UnionSerializer < Literal::Serializer
 			raise Literal::ArgumentError, "No union member type for tag #{tag_name.inspect} in #{type.inspect}"
 		end
 
-		@context.deserialize(raw_member_value, type: member_type)
+		deserialize_contents(raw_member_value, type: member_type)
 	end
 end

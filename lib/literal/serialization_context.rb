@@ -21,24 +21,36 @@ class Literal::SerializationContext
 	attr_reader :type
 	attr_reader :kind
 
-	def serialize(value, type:)
+	def serialize(value, type:, strict: true)
 		serializer = serializer_for_type(type)
 
-		unless type === value
+		if strict && !(type === value)
 			raise Literal::ArgumentError, "Value #{value.inspect} cannot be serialized as #{type.inspect}"
 		end
 
-		serializer.serialize(value, type:)
+		serialized = serializer.serialize(value, type:)
+
+		if strict && !(_JSONData? === serialized)
+			raise Literal::ArgumentError, "Value #{value.inspect} was not serialized correctly"
+		end
+
+		serialized
 	end
 
-	def deserialize(value, type:)
+	def deserialize(value, type:, strict: true)
 		serializer = serializer_for_type(type)
 
-		unless _JSONData === value
+		if strict && !(_JSONData === value)
 			raise Literal::ArgumentError, "Value #{value.inspect} is not valid JSON data and cannot be deserialized as #{type.inspect}"
 		end
 
-		serializer.deserialize(value, type:)
+		deserialized = serializer.deserialize(value, type:)
+
+		if strict && !(type === deserialized)
+			raise Literal::ArgumentError, "Value #{value.inspect} cannot be deserialized as #{type.inspect}"
+		end
+
+		deserialized
 	end
 
 	def serializer_for_type(type)
