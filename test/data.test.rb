@@ -96,3 +96,23 @@ test "initialize with [] method" do
 
 	assert_equal(person_a, person_b)
 end
+
+test "can be indexed" do
+	person = Person.new(name: "John")
+	assert_equal(person[:name], "John")
+end
+
+test "indexed access supports string keys" do
+	person = Person.new(name: "John")
+	assert_equal(person["name"], "John")
+end
+
+test "indexed access raises for unknown keys" do
+	person = Person.new(name: "John")
+	assert_raises(NameError) { person[:age] }
+end
+
+test "indexed access raises for invalid key types" do
+	person = Person.new(name: "John")
+	assert_raises(TypeError) { person[0] }
+end

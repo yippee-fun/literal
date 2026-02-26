@@ -14,6 +14,19 @@ class Literal::DataStructure
 		{}
 	end
 
+	def [](key)
+		case key
+		when Symbol
+		when String
+			key = key.intern
+		else
+			raise TypeError.new("expected a string or symbol, got #{key.inspect.class}")
+		end
+
+		prop = self.class.literal_properties[key] || raise(NameError.new("unknown attribute: #{key.inspect} for #{self.class}"))
+		__send__(prop.name)
+	end
+
 	alias to_hash to_h
 
 	def deconstruct
