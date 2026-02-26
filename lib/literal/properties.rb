@@ -13,8 +13,8 @@ module Literal::Properties
 		base.include(base.__send__(:__literal_extension__))
 	end
 
-	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, &coercion)
-		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, description: nil, &coercion)
+	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, description: nil, &coercion)
+		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, description:, &coercion)
 	end
 
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)

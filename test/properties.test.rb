@@ -38,6 +38,14 @@ test "nilable keyword params are optional" do
 	refute_raises { example.new(example: "Hello") }
 end
 
+test "prop? accepts a description" do
+	example = Class.new(Example) do
+		prop? :example, String, description: "An optional example"
+	end
+
+	assert_equal example.literal_properties[:example].description, "An optional example"
+end
+
 test "positional splats are optional" do
 	example = Class.new(Example) do
 		prop :example, _Array(String), :*
