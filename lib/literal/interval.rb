@@ -14,12 +14,8 @@ class Literal::Interval < Literal::Data
 
 	#: () -> Literal::Duration
 	def duration
-		seconds = @to.unix_timestamp_in_seconds - @from.unix_timestamp_in_seconds
-		subseconds = @to.subsec - @from.subsec
-
 		Literal::Duration.new(
-			seconds:,
-			subseconds:
+			nanoseconds: @to.unix_timestamp_in_nanoseconds - @from.unix_timestamp_in_nanoseconds
 		)
 	end
 end

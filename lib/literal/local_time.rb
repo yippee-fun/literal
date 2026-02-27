@@ -136,8 +136,7 @@ class Literal::LocalTime < Literal::Data
 		other = Literal::LocalTime.coerce(other)
 
 		Literal::Duration.new(
-			seconds: 0,
-			subseconds: Rational(to_total_nanoseconds - other.to_total_nanoseconds, NANOSECONDS_PER_SECOND)
+			nanoseconds: to_total_nanoseconds - other.to_total_nanoseconds
 		)
 	end
 

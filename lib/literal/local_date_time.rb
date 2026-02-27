@@ -160,11 +160,9 @@ class Literal::LocalDateTime < Literal::Data
 	def since(other)
 		other = Literal::LocalDateTime.coerce(other)
 
-		total = to_ruby_time.to_r - other.to_ruby_time.to_r
-		seconds = total.to_i
-		subseconds = total - seconds
+		total = (to_ruby_time.to_r * 1_000_000_000).to_i - (other.to_ruby_time.to_r * 1_000_000_000).to_i
 
-		Literal::Duration.new(seconds:, subseconds:)
+		Literal::Duration.new(nanoseconds: total)
 	end
 
 	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> Literal::Duration

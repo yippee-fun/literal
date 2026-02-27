@@ -4,10 +4,19 @@
 class Literal::Duration < Literal::Data
 	include Comparable
 
-	prop :seconds, Integer, reader: :public, default: 0
-	prop :subseconds, Rational, reader: :public, default: Rational(0, 1_000)
+	prop :nanoseconds, Integer, reader: :public, default: 0
 
-	alias_method :to_i, :seconds
+	#: () -> Integer
+	def to_i
+		@nanoseconds / 1_000_000_000
+	end
+
+	alias_method :seconds, :to_i
+
+	#: () -> Rational
+	def subseconds
+		Rational(@nanoseconds % 1_000_000_000, 1_000_000_000)
+	end
 
 	#: (Literal::Duration, Literal::Duration) -> -1 | 0 | 1
 	def self.compare(one, two)
@@ -16,16 +25,14 @@ class Literal::Duration < Literal::Data
 
 	#: () -> Float
 	def to_f
-		(seconds + subseconds).to_f
+		@nanoseconds / 1_000_000_000.0
 	end
 
 	#: (Literal::Duration) -> -1 | 0 | 1
 	def <=>(other)
 		case other
 		in Literal::Duration
-			result = @seconds <=> other.seconds
-			return result unless result == 0
-			@subseconds <=> other.subseconds
+			@nanoseconds <=> other.nanoseconds
 		end
 	end
 
@@ -34,13 +41,11 @@ class Literal::Duration < Literal::Data
 		case other
 		in Integer
 			Literal::Duration.new(
-				seconds: @seconds + other,
-				subseconds: @subseconds
+				nanoseconds: @nanoseconds + (other * 1_000_000_000)
 			)
 		in Literal::Duration
 			Literal::Duration.new(
-				seconds: @seconds + other.seconds,
-				subseconds: @subseconds + other.subseconds
+				nanoseconds: @nanoseconds + other.nanoseconds
 			)
 		end
 	end
@@ -50,13 +55,11 @@ class Literal::Duration < Literal::Data
 		case other
 		in Integer
 			Literal::Duration.new(
-				seconds: @seconds - other,
-				subseconds: @subseconds
+				nanoseconds: @nanoseconds - (other * 1_000_000_000)
 			)
 		in Literal::Duration
 			Literal::Duration.new(
-				seconds: @seconds - other.seconds,
-				subseconds: @subseconds - other.subseconds
+				nanoseconds: @nanoseconds - other.nanoseconds
 			)
 		end
 	end
@@ -64,14 +67,13 @@ class Literal::Duration < Literal::Data
 	#: () -> Literal::Duration
 	def -@
 		Literal::Duration.new(
-			seconds: -@seconds,
-			subseconds: -@subseconds
+			nanoseconds: -@nanoseconds
 		)
 	end
 
-	#: (seconds: Integer, subseconds: Rational) -> Literal::Duration
-	def with(seconds: @seconds, subseconds: @subseconds)
-		Literal::Duration.new(seconds:, subseconds:)
+	#: (nanoseconds: Integer) -> Literal::Duration
+	def with(nanoseconds: @nanoseconds)
+		Literal::Duration.new(nanoseconds:)
 	end
 
 	#: (Literal::Duration) -> bool

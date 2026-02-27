@@ -25,6 +25,6 @@ test "local date time range overlap and interval conversion" do
 			to: Literal::LocalDateTime.new(year: 2025, month: 1, day: 13, hour: 14)
 		)
 	)
-	assert_equal Literal::Duration.new(seconds: 7_200, subseconds: Rational(0, 1_000)), range.in_zone("UTC").duration
+	assert_equal Literal::Duration.new(nanoseconds: 7_200_000_000_000), range.in_zone("UTC").duration
 	assert_raises(ArgumentError) { Literal::LocalDateTimeRange.new(from: to, to: from) }
 end

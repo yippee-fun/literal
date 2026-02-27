@@ -8,17 +8,26 @@ class Literal::Instant < Literal::Data
 
 	ROUNDING_MODES = _Union(:half_expand, :floor, :ceil, :trunc)
 
-	# The number of seconds since the Unix Epoch (January 1, 1970, 00:00:00 UTC).
-	prop :unix_timestamp_in_seconds, Integer, reader: :public
-	prop :subsec, Rational, reader: :public
+	# The number of nanoseconds since the Unix Epoch (January 1, 1970, 00:00:00 UTC).
+	prop :unix_timestamp_in_nanoseconds, Integer
 
-	alias_method :to_i, :unix_timestamp_in_seconds
+	#: () -> Integer
+	def to_i
+		@unix_timestamp_in_nanoseconds / 1_000_000_000
+	end
 
-	#: () -> void
+	alias_method :unix_timestamp_in_seconds, :to_i
+
+	#: () -> Rational
+	def subsec
+		Rational(@unix_timestamp_in_nanoseconds % 1_000_000_000, 1_000_000_000)
+	end
+
+	#: (Time) -> Literal::Instant
 	def self.from_ruby_time(time)
 		time => Time
 
-		new(unix_timestamp_in_seconds: time.to_i, subsec: Rational(time.subsec))
+		new(unix_timestamp_in_nanoseconds: (time.to_i * 1_000_000_000) + time.tv_nsec)
 	end
 
 	#: (Literal::Instant | Literal::ZonedDateTime | Time | String) -> Literal::Instant
@@ -33,7 +42,7 @@ class Literal::Instant < Literal::Data
 		when String
 			parse(value)
 		else
-			raise ArgumentError
+			raise Literal::ArgumentError, "Can’t coerce #{value.inspect} to a Literal::Instant"
 		end
 	end
 
@@ -44,7 +53,7 @@ class Literal::Instant < Literal::Data
 
 	#: () -> Literal::Instant
 	def self.now
-		from_ruby_time(::Time.now)
+		new(unix_timestamp_in_nanoseconds: Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond))
 	end
 
 	#: (String) -> Literal::Instant
@@ -74,7 +83,11 @@ class Literal::Instant < Literal::Data
 
 	#: () -> Time
 	def to_ruby_time
-		Time.at(unix_timestamp_in_seconds + subsec).utc
+		Time.at(
+			@unix_timestamp_in_nanoseconds / 1_000_000_000,
+			@unix_timestamp_in_nanoseconds % 1_000_000_000,
+			:nanosecond
+		).utc
 	end
 
 	#: () -> String
@@ -84,9 +97,9 @@ class Literal::Instant < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (unix_timestamp_in_seconds: Integer, subsec: Rational) -> Literal::Instant
-	def with(unix_timestamp_in_seconds: @unix_timestamp_in_seconds, subsec: @subsec)
-		Literal::Instant.new(unix_timestamp_in_seconds:, subsec:)
+	#: (unix_timestamp_in_nanoseconds: Integer) -> Literal::Instant
+	def with(unix_timestamp_in_nanoseconds: @unix_timestamp_in_nanoseconds)
+		Literal::Instant.new(unix_timestamp_in_nanoseconds:)
 	end
 
 	#: (Literal::Duration) -> Literal::Instant
@@ -94,8 +107,7 @@ class Literal::Instant < Literal::Data
 		case other
 		in Literal::Duration
 			Literal::Instant.new(
-				unix_timestamp_in_seconds: unix_timestamp_in_seconds + other.seconds,
-				subsec: subsec + other.subseconds
+				unix_timestamp_in_nanoseconds: @unix_timestamp_in_nanoseconds + other.nanoseconds
 			)
 		else
 			raise ArgumentError
@@ -111,10 +123,9 @@ class Literal::Instant < Literal::Data
 	def since(other)
 		other = Literal::Instant.coerce(other)
 
-		delta_seconds = unix_timestamp_in_seconds - other.unix_timestamp_in_seconds
-		delta_subseconds = subsec - other.subsec
-
-		Literal::Duration.new(seconds: delta_seconds, subseconds: delta_subseconds)
+		Literal::Duration.new(
+			nanoseconds: @unix_timestamp_in_nanoseconds - other.unix_timestamp_in_nanoseconds
+		)
 	end
 
 	#: (Literal::Instant | Literal::ZonedDateTime | Time | String) -> Literal::Duration
@@ -145,11 +156,9 @@ class Literal::Instant < Literal::Data
 		end
 
 		step = nanos_per_unit * increment
-		total_nanos = (unix_timestamp_in_seconds * 1_000_000_000) + (subsec * 1_000_000_000).to_i
-		rounded = round_integer(total_nanos, step, mode)
+		rounded = round_integer(@unix_timestamp_in_nanoseconds, step, mode)
 
-		seconds, nanos = rounded.divmod(1_000_000_000)
-		Literal::Instant.new(unix_timestamp_in_seconds: seconds, subsec: Rational(nanos, 1_000_000_000))
+		Literal::Instant.new(unix_timestamp_in_nanoseconds: rounded)
 	end
 
 	#: (Literal::Duration) -> Literal::Instant
@@ -164,16 +173,14 @@ class Literal::Instant < Literal::Data
 
 	#: () -> Float
 	def to_f
-		(unix_timestamp_in_seconds + subsec).to_f
+		@unix_timestamp_in_nanoseconds / 1_000_000_000.0
 	end
 
 	#: (Literal::Instant | Literal::ZonedDateTime | Time | String) -> -1 | 0 | 1
 	def <=>(other)
 		other = Literal::Instant.coerce(other)
 
-		result = unix_timestamp_in_seconds <=> other.unix_timestamp_in_seconds
-		return result unless result == 0
-		subsec <=> other.subsec
+		@unix_timestamp_in_nanoseconds <=> other.unix_timestamp_in_nanoseconds
 	end
 
 	#: (Integer, Integer, Symbol) -> Integer

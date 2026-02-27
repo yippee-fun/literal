@@ -7,6 +7,6 @@ test "interval validates and computes duration" do
 
 	assert_equal from, interval.from
 	assert_equal to, interval.to
-	assert_equal Literal::Duration.new(seconds: 1, subseconds: Rational(1, 2)), interval.duration
+	assert_equal Literal::Duration.new(nanoseconds: 1_500_000_000), interval.duration
 	assert_raises(ArgumentError) { Literal::Interval.new(from: to, to: from) }
 end
