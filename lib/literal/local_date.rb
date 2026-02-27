@@ -225,7 +225,7 @@ class Literal::LocalDate < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (**Integer) -> Literal::LocalDate
+	#: (?year: Integer, ?month: Integer, ?day: Integer) -> Literal::LocalDate
 	def with(year: @year, month: @month, day: @day)
 		Literal::LocalDate.new(year:, month:, day:)
 	end
@@ -293,6 +293,7 @@ class Literal::LocalDate < Literal::Data
 		end
 	end
 
+	#: (Literal::DatePeriod) -> Literal::LocalDate
 	def -(other)
 		case other
 		when Literal::DatePeriod

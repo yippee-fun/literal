@@ -10,7 +10,7 @@ class Literal::LocalMonth < Literal::Data
 	prop :year, Integer
 	prop :month, _Integer(1..12)
 
-	# (year: Integer, month: Integer) -> Integer
+	#: (year: Integer, month: Integer) -> Integer
 	def self.days_in_month(year:, month:)
 		if month == 2 && Literal::LocalYear.leap_year?(year)
 			29
@@ -46,7 +46,7 @@ class Literal::LocalMonth < Literal::Data
 
 	alias_method :pred, :prev_month
 
-	#: () -> -1 | 0 | 1
+	#: (Literal::LocalMonth) -> -1 | 0 | 1 | nil
 	def <=>(other)
 		case other
 		when Literal::LocalMonth
@@ -77,7 +77,7 @@ class Literal::LocalMonth < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (year: Integer, month: Integer) -> Literal::LocalMonth
+	#: (?year: Integer, ?month: Integer) -> Literal::LocalMonth
 	def with(year: @year, month: @month)
 		Literal::LocalMonth.new(year:, month:)
 	end

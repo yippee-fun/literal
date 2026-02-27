@@ -136,7 +136,7 @@ class Literal::LocalDateTime < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (**Integer) -> Literal::LocalDateTime
+	#: (?year: Integer, ?month: Integer, ?day: Integer, ?hour: Integer, ?minute: Integer, ?second: Integer, ?millisecond: Integer, ?microsecond: Integer, ?nanosecond: Integer) -> Literal::LocalDateTime
 	def with(
 		year: @year,
 		month: @month,

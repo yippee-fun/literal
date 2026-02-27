@@ -34,7 +34,7 @@ class Literal::LocalYear < Literal::Data
 
 	alias_method :pred, :prev_year
 
-	#: () -> -1 | 0 | 1
+	#: (Literal::LocalYear) -> -1 | 0 | 1 | nil
 	def <=>(other)
 		case other
 		when self.class
@@ -185,7 +185,7 @@ class Literal::LocalYear < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (year: Integer) -> Literal::LocalYear
+	#: (?year: Integer) -> Literal::LocalYear
 	def with(year: @year)
 		Literal::LocalYear.new(year:)
 	end

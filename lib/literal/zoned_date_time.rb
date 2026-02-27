@@ -122,7 +122,7 @@ class Literal::ZonedDateTime < Literal::Data
 		@instant.in_zone(time_zone)
 	end
 
-	#: (**Integer) -> Literal::ZonedDateTime
+	#: (?year: Integer, ?month: Integer, ?day: Integer, ?hour: Integer, ?minute: Integer, ?second: Integer, ?millisecond: Integer, ?microsecond: Integer, ?nanosecond: Integer) -> Literal::ZonedDateTime
 	def with(**parts)
 		to_local_date_time.with(**parts).in_zone(@time_zone)
 	end

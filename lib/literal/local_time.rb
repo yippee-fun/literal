@@ -121,7 +121,7 @@ class Literal::LocalTime < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (**Integer) -> Literal::LocalTime
+	#: (?hour: Integer, ?minute: Integer, ?second: Integer, ?subsec: Rational) -> Literal::LocalTime
 	def with(hour: @hour, minute: @minute, second: @second, subsec: @subsec)
 		Literal::LocalTime.new(hour:, minute:, second:, subsec:)
 	end
@@ -170,13 +170,14 @@ class Literal::LocalTime < Literal::Data
 		Literal::LocalTime.new(hour:, minute:, second:, subsec: Rational(nanos, NANOSECONDS_PER_SECOND))
 	end
 
-	#: (Literal::LocalTime | Literal::LocalDateTime | Literal::ZonedDateTime | Time | String) -> -1 | 0 | 1
+	#: (Literal::LocalTime | Literal::LocalDateTime | Literal::ZonedDateTime | Time | String) -> -1 | 0 | 1 | nil
 	def <=>(other)
 		other = Literal::LocalTime.coerce(other)
 
 		to_total_nanoseconds <=> other.to_total_nanoseconds
 	end
 
+	#: () -> [Integer, Integer, Integer]
 	private def split_subsec
 		total_nanoseconds = (@subsec * 1_000_000_000).to_i
 		millisecond = total_nanoseconds / 1_000_000
@@ -186,6 +187,7 @@ class Literal::LocalTime < Literal::Data
 		[millisecond, microsecond, nanosecond]
 	end
 
+	#: () -> String?
 	private def format_fraction
 		nanos = (@subsec * 1_000_000_000).to_i
 		return nil if nanos == 0

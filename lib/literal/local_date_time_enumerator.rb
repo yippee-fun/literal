@@ -82,7 +82,7 @@ class Literal::LocalDateTimeEnumerator < Literal::Data
 		raise ArgumentError if @step == 0
 	end
 
-	#: () -> void
+	#: () -> Literal::DatePeriod
 	def interval
 		Literal::DatePeriod.new(@unit => @step)
 	end
