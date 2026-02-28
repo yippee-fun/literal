@@ -3,22 +3,22 @@
 class Literal::ISO8601::Parser
 	THROW_TAG = :literal_iso8601_parse_error
 
-	DASH = 45
-	PLUS = 43
+	DASH  = 45
+	PLUS  = 43
 	COMMA = 44
-	DOT = 46
+	DOT   = 46
 	SLASH = 47
 	COLON = 58
-	T = 84
-	W = 87
-	Y = 89
-	Z = 90
-	P = 80
-	R = 82
-	H = 72
-	D = 68
-	M = 77
-	S = 83
+	T     = 84
+	W     = 87
+	Y     = 89
+	Z     = 90
+	P     = 80
+	R     = 82
+	H     = 72
+	D     = 68
+	M     = 77
+	S     = 83
 
 	def initialize(value)
 		@value = value
