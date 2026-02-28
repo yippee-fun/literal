@@ -9,7 +9,7 @@ class Literal::ISO8601::OrdinalDate < Literal::ISO8601::Node
 	end
 
 	def valid?
-		@day_of_year >= 1 && @day_of_year <= Literal::Temporal.days_in_year(@year)
+		@day_of_year >= 1 && @day_of_year <= Literal::Temporal.days_in_year(year: @year)
 	end
 
 	alias_method :to_s, :iso8601

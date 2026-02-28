@@ -6,25 +6,25 @@ class Literal::PlainYear < Literal::Data
 	prop :year, Integer
 
 	def leap_year?
-		Literal::Temporal.days_in_year(@year)
+		Literal::Temporal.days_in_year(year: @year)
 	end
 
 	def ce?
-		Literal::Temporal.ce?(@year)
+		Literal::Temporal.ce?(year: @year)
 	end
 
 	def bce?
-		Literal::Temporal.bce?(@year)
+		Literal::Temporal.bce?(year: @year)
 	end
 
 	def iso8601
 		@year.to_s
 	end
 
-	def days_in_year    = Literal::Temporal.days_in_year(@year)
-	def hours_in_year   = Literal::Temporal.hours_in_year(@year)
-	def minutes_in_year = Literal::Temporal.minutes_in_year(@year)
-	def seconds_in_year = Literal::Temporal.seconds_in_year(@year)
+	def days_in_year    = Literal::Temporal.days_in_year(year: @year)
+	def hours_in_year   = Literal::Temporal.hours_in_year(year: @year)
+	def minutes_in_year = Literal::Temporal.minutes_in_year(year: @year)
+	def seconds_in_year = Literal::Temporal.seconds_in_year(year: @year)
 
 	alias_method :to_s, :iso8601
 
