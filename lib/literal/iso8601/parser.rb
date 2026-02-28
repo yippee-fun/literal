@@ -2,6 +2,12 @@
 
 class Literal::ISO8601::Parser
 	THROW_TAG = :literal_iso8601_parse_error
+	DURATION_UNITS_BY_DESIGNATOR =
+		Literal::ISO8601::DURATION_UNIT_DESIGNATORS.each_with_object({}) do |(unit, designator), units_by_designator|
+			byte = designator.getbyte(0)
+			units = units_by_designator.fetch(byte, [])
+			units_by_designator[byte] = units + [unit]
+		end.freeze
 
 	DASH  = 45
 	PLUS  = 43
@@ -11,14 +17,9 @@ class Literal::ISO8601::Parser
 	COLON = 58
 	T     = 84
 	W     = 87
-	Y     = 89
 	Z     = 90
 	P     = 80
 	R     = 82
-	H     = 72
-	D     = 68
-	M     = 77
-	S     = 83
 
 	def initialize(value)
 		@value = value
@@ -291,21 +292,15 @@ class Literal::ISO8601::Parser
 	end
 
 	private def parse_duration_unit(in_time)
-		case scan
-		when Y
-			:years
-		when M
-			in_time ? :minutes : :months
-		when W
-			:weeks
-		when D
-			:days
-		when H
-			:hours
-		when S
-			:seconds
+		units = DURATION_UNITS_BY_DESIGNATOR[scan]
+		fail_parse("expected duration unit designator") unless units
+
+		if units.length == 1
+			units[0]
+		elsif in_time
+			:minutes
 		else
-			fail_parse("expected duration unit designator")
+			:months
 		end
 	end
 

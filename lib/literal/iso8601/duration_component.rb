@@ -1,16 +1,6 @@
 # frozen_string_literal: true
 
 class Literal::ISO8601::DurationComponent < Literal::ISO8601::Node
-	UNIT_DESIGNATORS = {
-		years: "Y",
-		months: "M",
-		weeks: "W",
-		days: "D",
-		hours: "H",
-		minutes: "M",
-		seconds: "S",
-	}.freeze
-
 	prop :unit, Literal::ISO8601::DurationUnit
 	prop :value, Integer
 	prop :fraction, Integer, default: 0
@@ -29,6 +19,6 @@ class Literal::ISO8601::DurationComponent < Literal::ISO8601::Node
 	alias_method :to_s, :iso8601
 
 	private def unit_designator
-		UNIT_DESIGNATORS.fetch(@unit)
+		Literal::ISO8601::DURATION_UNIT_DESIGNATORS.fetch(@unit)
 	end
 end

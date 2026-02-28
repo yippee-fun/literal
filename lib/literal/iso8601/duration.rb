@@ -1,8 +1,18 @@
 # frozen_string_literal: true
 
 class Literal::ISO8601::Duration < Literal::ISO8601::Node
+	UNIT_ORDER_INDEX = {
+		years: 0,
+		months: 1,
+		weeks: 2,
+		days: 3,
+		hours: 4,
+		minutes: 5,
+		seconds: 6,
+	}.freeze
+
 	prop :sign, Literal::ISO8601::Sign, default: 1
-	prop :components, Array
+	prop :components, _Array(Literal::ISO8601::DurationComponent)
 
 	def iso8601
 		sign = (@sign < 0) ? "-" : ""
@@ -21,13 +31,11 @@ class Literal::ISO8601::Duration < Literal::ISO8601::Node
 	end
 
 	def valid?
-		return false if @components.empty?
-		return false unless @components.all?(&:valid?)
-		return false if mixed_week_with_other_units?
-		return false unless ordered_units?
-		return false unless valid_fraction_positions?
-
-		true
+		@components.length > 0 &&
+			@components.all?(&:valid?) &&
+			!mixed_week_with_other_units? &&
+			ordered_units? &&
+			valid_fraction_positions?
 	end
 
 	alias_method :to_s, :iso8601
@@ -57,15 +65,7 @@ class Literal::ISO8601::Duration < Literal::ISO8601::Node
 	end
 
 	private def unit_order_index(unit)
-		case unit
-		in :years then 0
-		in :months then 1
-		in :weeks then 2
-		in :days then 3
-		in :hours then 4
-		in :minutes then 5
-		in :seconds then 6
-		end
+		UNIT_ORDER_INDEX.fetch(unit)
 	end
 
 	private def valid_fraction_positions?

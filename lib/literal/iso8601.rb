@@ -6,15 +6,17 @@ module Literal::ISO8601
 
 	Sign = _Union(-1, 1)
 
-	DurationUnit = _Union(
-		:years,
-		:months,
-		:weeks,
-		:days,
-		:hours,
-		:minutes,
-		:seconds,
-	)
+	DURATION_UNIT_DESIGNATORS = {
+		years: "Y",
+		months: "M",
+		weeks: "W",
+		days: "D",
+		hours: "H",
+		minutes: "M",
+		seconds: "S",
+	}.freeze
+
+	DurationUnit = _Union(*DURATION_UNIT_DESIGNATORS.keys)
 
 	TimePrecision = _Union(
 		:hour,

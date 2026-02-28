@@ -31,4 +31,5 @@ test "iso8601 duration formatting and sign typing" do
 	refute invalid_weeks.valid?
 	refute invalid_fraction_position.valid?
 	assert_raises(Literal::TypeError) { Literal::ISO8601::Duration.new(sign: 0, components: []) }
+	assert_raises(Literal::TypeError) { Literal::ISO8601::Duration.new(components: ["P1D"]) }
 end
