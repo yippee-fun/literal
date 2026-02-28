@@ -292,7 +292,7 @@ class Literal::PlainDateTime < Literal::Data
 	end
 
 	protected def to_unix_timestamp_in_nanoseconds
-		(Literal::PlainDate.days_since_epoch(year: @year, month: @month, day: @day) * 86_400_000_000_000) +
+		(Literal::Temporal.days_since_epoch(year: @year, month: @month, day: @day) * 86_400_000_000_000) +
 			(@hour * 3_600_000_000_000) +
 			(@minute * 60_000_000_000) +
 			(@second * 1_000_000_000) +

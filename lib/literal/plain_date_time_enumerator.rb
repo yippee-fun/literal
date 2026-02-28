@@ -120,7 +120,7 @@ class Literal::PlainDateTimeEnumerator < Literal::Data
 	end
 
 	private def total_nanoseconds(plain_date_time)
-		days_since_epoch = Literal::PlainDate.days_since_epoch(
+		days_since_epoch = Literal::Temporal.days_since_epoch(
 			year: plain_date_time.year,
 			month: plain_date_time.month,
 			day: plain_date_time.day

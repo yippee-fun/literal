@@ -44,60 +44,16 @@ class Literal::PlainDate < Literal::Data
 		method(:coerce).to_proc
 	end
 
-	def self.days_since_epoch(year:, month:, day:)
-		civil_to_days(year, month, day)
-	end
-
-	private_class_method def self.civil_to_days(year, month, day)
-		year -= 1 if month <= 2
-		era = (year >= 0) ? (year / 400) : ((year - 399) / 400)
-		yoe = year - (era * 400)
-		mp = month + ((month > 2) ? -3 : 9)
-		doy = (((153 * mp) + 2) / 5) + day - 1
-		doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy
-
-		(era * 146_097) + doe - 719_468
-	end
-
-	# Returns an Integer between 0 and 6, where 0 is Sunday.
-	def self.zellers_congruence(year:, month:, day:)
-		year, month, day = adjusted_date_for_zeller(year:, month:, day:)
-
-		q = day
-		m = month
-		k = year % 100
-		j = year / 100
-
-		(q + ((13 * (m + 1)) / 5) + k + (k / 4) + (j / 4) - (2 * j)) % 7
-	end
-
-	private_class_method def self.adjusted_date_for_zeller(year:, month:, day:)
-		if month < 3
-			month += 12
-			year -= 1
-		end
-
-		[year, month, day].freeze
-	end
-
 	def name
-		DAY_NAMES[day_of_week_index]
+		Literal::Temporal::DAY_NAMES.fetch(current_day_of_week_index)
 	end
 
 	def short_name
-		SHORT_DAY_NAMES[day_of_week_index]
+		Literal::Temporal::SHORT_DAY_NAMES.fetch(current_day_of_week_index)
 	end
 
 	def day_of_year
-		day_of_year = @day
-
-		month = 1
-		while month < @month
-			day_of_year += Literal::PlainYearMonth.days_in_month(year: @year, month:)
-			month += 1
-		end
-
-		day_of_year
+		Literal::Temporal.day_of_year(year: @year, month: @month, day: @day)
 	end
 
 	def day_of_month
@@ -106,11 +62,11 @@ class Literal::PlainDate < Literal::Data
 
 	# Return the day of week from 1 to 7, starting on Monday.
 	def day_of_week
-		day_of_week_index + 1
+		current_day_of_week_index + 1
 	end
 
 	def next_day
-		days_in_month = Literal::PlainYearMonth.days_in_month(year: @year, month: @month)
+		days_in_month = Literal::Temporal.days_in_month(year: @year, month: @month)
 
 		if @day < days_in_month
 			Literal::PlainDate.new(year: @year, month: @month, day: @day + 1)
@@ -120,8 +76,6 @@ class Literal::PlainDate < Literal::Data
 			Literal::PlainDate.new(year: @year + 1, month: 1, day: 1)
 		end
 	end
-
-	alias_method :succ, :next_day
 
 	def prev_day
 		if @day > 1
@@ -134,17 +88,18 @@ class Literal::PlainDate < Literal::Data
 			Literal::PlainDate.new(
 				year: @year,
 				month: @month - 1,
-				day: Literal::PlainYearMonth.days_in_month(year: @year, month: @month - 1)
+				day: Literal::Temporal.days_in_month(year: @year, month: @month - 1)
 			)
 		else
 			Literal::PlainDate.new(
 				year: @year - 1,
 				month: 12,
-				day: Literal::PlainYearMonth.days_in_month(year: @year - 1, month: 12)
+				day: Literal::Temporal.days_in_month(year: @year - 1, month: 12)
 			)
 		end
 	end
 
+	alias_method :succ, :next_day
 	alias_method :pred, :prev_day
 
 	def <=>(other)
@@ -155,38 +110,46 @@ class Literal::PlainDate < Literal::Data
 	end
 
 	def monday?
-		0 == day_of_week_index
+		0 == current_day_of_week_index
 	end
 
 	def tuesday?
-		1 == day_of_week_index
+		1 == current_day_of_week_index
 	end
 
 	def wednesday?
-		2 == day_of_week_index
+		2 == current_day_of_week_index
 	end
 
 	def thursday?
-		3 == day_of_week_index
+		3 == current_day_of_week_index
 	end
 
 	def friday?
-		4 == day_of_week_index
+		4 == current_day_of_week_index
 	end
 
 	def saturday?
-		5 == day_of_week_index
+		5 == current_day_of_week_index
 	end
 
 	def sunday?
-		6 == day_of_week_index
+		6 == current_day_of_week_index
 	end
+
+	alias_method :mon?, :monday?
+	alias_method :tue?, :tuesday?
+	alias_method :wed?, :wednesday?
+	alias_method :thu?, :thursday?
+	alias_method :fri?, :friday?
+	alias_method :sat?, :saturday?
+	alias_method :sun?, :sunday?
 
 	def to_year_month
 		Literal::PlainYearMonth.new(year: @year, month: @month)
 	end
 
-	def to_date
+	def to_ruby_date
 		Date.new(@year, @month, @day)
 	end
 
@@ -203,8 +166,8 @@ class Literal::PlainDate < Literal::Data
 	def since(other)
 		other = Literal::PlainDate.coerce(other)
 
-		days = self.class.days_since_epoch(year: @year, month: @month, day: @day) -
-			self.class.days_since_epoch(year: other.year, month: other.month, day: other.day)
+		days = Literal::Temporal.days_since_epoch(year: @year, month: @month, day: @day) -
+			Literal::Temporal.days_since_epoch(year: other.year, month: other.month, day: other.day)
 
 		Literal::DatePeriod.new(days:)
 	end
@@ -217,50 +180,12 @@ class Literal::PlainDate < Literal::Data
 		Literal::PlainYear.new(year: @year)
 	end
 
-	def at(local_time = nil, **parts)
-		if local_time && parts.any?
-			raise Literal::ArgumentError, "Pass either a local_time or keyword parts, not both"
-		end
-
-		local_time = if local_time
-			Literal::PlainTime.coerce(local_time)
-		else
-			Literal::PlainTime.new(**parts)
-		end
-
-		local_time.to_plain_date_time(self)
-	end
-
 	def weekend?
-		day_of_week_index > 4
+		current_day_of_week_index > 4
 	end
 
 	def weekday?
-		day_of_week_index < 5
-	end
-
-	def +(other)
-		case other
-		when Literal::DatePeriod
-			if other.hours != 0 || other.nanoseconds != 0
-				raise Literal::ArgumentError, "Can't add a Literal::DatePeriod with time components to a Literal::PlainDate"
-			end
-
-			date_time = Literal::PlainDateTime.new(year: @year, month: @month, day: @day)
-			result = date_time + other
-			Literal::PlainDate.new(year: result.year, month: result.month, day: result.day)
-		else
-			raise Literal::ArgumentError, "Expected a Literal::DatePeriod, got #{other.inspect}"
-		end
-	end
-
-	def -(other)
-		case other
-		when Literal::DatePeriod
-			self + (-other)
-		else
-			raise Literal::ArgumentError, "Expected a Literal::DatePeriod, got #{other.inspect}"
-		end
+		current_day_of_week_index < 5
 	end
 
 	def next_monday
@@ -320,7 +245,7 @@ class Literal::PlainDate < Literal::Data
 	end
 
 	def each_hour
-		return enum_for(__method__) { 24 } unless block_given?
+		return enum_for(__method__) { Literal::Temporal::HOURS_IN_A_DAY } unless block_given?
 
 		hour = 0
 		while hour < 24
@@ -330,7 +255,7 @@ class Literal::PlainDate < Literal::Data
 	end
 
 	def each_minute
-		return enum_for(__method__) { 1_440 } unless block_given?
+		return enum_for(__method__) { Literal::Temporal::MINUTES_IN_A_DAY } unless block_given?
 
 		hour = 0
 		while hour < 24
@@ -344,7 +269,7 @@ class Literal::PlainDate < Literal::Data
 	end
 
 	def each_second
-		return enum_for(__method__) { 86_400 } unless block_given?
+		return enum_for(__method__) { Literal::Temporal::SECONDS_IN_A_DAY } unless block_given?
 
 		hour = 0
 		while hour < 24
@@ -361,19 +286,18 @@ class Literal::PlainDate < Literal::Data
 		end
 	end
 
-	# Return the day of the week as an integer from 0 to 6 but where the 0th is Monday.
-	private def day_of_week_index
-		(self.class.zellers_congruence(year: @year, month: @month, day: @day) + 5) % 7
+	private def current_day_of_week_index
+		Literal::Temporal.day_of_week_index(year: @year, month: @month, day: @day)
 	end
 
 	private def next_day_of_week(target_day_index)
-		days_until_target = (target_day_index + 7 - day_of_week_index) % 7
+		days_until_target = (target_day_index + 7 - current_day_of_week_index) % 7
 		days_until_target = 7 if days_until_target == 0
 		self + Literal::DatePeriod.new(days: days_until_target)
 	end
 
 	private def prev_day_of_week(target_day_index)
-		days_until_target = (day_of_week_index - target_day_index) % 7
+		days_until_target = (current_day_of_week_index - target_day_index) % 7
 		days_until_target = 7 if days_until_target == 0
 		self - Literal::DatePeriod.new(days: days_until_target)
 	end

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 test "local date parse and class helper" do
-	assert_equal 5, Literal::PlainDate.zellers_congruence(year: 2024, month: 2, day: 29)
+	assert_equal 5, Literal::Temporal.zellers_congruence(year: 2024, month: 2, day: 29)
 
 	local_date = Literal::PlainDate.parse("2024-02-29")
 	assert_equal 2024, local_date.year
