@@ -109,7 +109,7 @@ class Literal::PlainDateTime < Literal::Data
 	end
 
 	def iso8601
-		"#{to_date.iso8601}T#{to_plain_time.iso8601}"
+		"#{to_plain_date.iso8601}T#{to_plain_time.iso8601}"
 	end
 
 	alias_method :to_s, :iso8601
@@ -117,7 +117,7 @@ class Literal::PlainDateTime < Literal::Data
 	def since(other)
 		other = Literal::PlainDateTime.coerce(other)
 
-		total = (to_ruby_time.to_r * 1_000_000_000).to_i - (other.to_ruby_time.to_r * 1_000_000_000).to_i
+		total = to_unix_timestamp_in_nanoseconds - other.to_unix_timestamp_in_nanoseconds
 
 		Literal::Duration.new(nanoseconds: total)
 	end
@@ -130,10 +130,10 @@ class Literal::PlainDateTime < Literal::Data
 		raise Literal::ArgumentError, "increment must be positive, got #{increment}" unless increment > 0
 		raise Literal::ArgumentError, "mode must be one of #{ROUNDING_MODES.inspect}, got #{mode.inspect}" unless ROUNDING_MODES === mode
 
-		date = to_date
+		date = to_plain_date
 		time = to_plain_time.round(unit:, increment:, mode:)
 		if time.hour < @hour && [:hour, :hours, :minute, :minutes, :second, :seconds, :millisecond, :milliseconds, :microsecond, :microseconds, :nanosecond, :nanoseconds].include?(unit)
-			date += 1
+			date = date.next_day
 		end
 
 		Literal::PlainDateTime.new(
@@ -289,5 +289,15 @@ class Literal::PlainDateTime < Literal::Data
 			other.microsecond,
 			other.nanosecond,
 		]
+	end
+
+	protected def to_unix_timestamp_in_nanoseconds
+		(Literal::PlainDate.days_since_epoch(year: @year, month: @month, day: @day) * 86_400_000_000_000) +
+			(@hour * 3_600_000_000_000) +
+			(@minute * 60_000_000_000) +
+			(@second * 1_000_000_000) +
+			(@millisecond * 1_000_000) +
+			(@microsecond * 1_000) +
+			@nanosecond
 	end
 end

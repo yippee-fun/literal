@@ -49,6 +49,27 @@ class Literal::FixedOffsetTimeZone < Literal::TimeZone
 		instant.to_ruby_time + @offset_in_seconds
 	end
 
+	def to_plain_date_time(instant)
+		local_ruby_time = to_local_ruby_time(instant)
+		total_nanoseconds = (local_ruby_time.subsec * 1_000_000_000).to_i
+		millisecond = total_nanoseconds / 1_000_000
+		remainder = total_nanoseconds % 1_000_000
+		microsecond = remainder / 1_000
+		nanosecond = remainder % 1_000
+
+		Literal::PlainDateTime.new(
+			year: local_ruby_time.year,
+			month: local_ruby_time.month,
+			day: local_ruby_time.day,
+			hour: local_ruby_time.hour,
+			minute: local_ruby_time.min,
+			second: local_ruby_time.sec,
+			millisecond:,
+			microsecond:,
+			nanosecond:
+		)
+	end
+
 	def offset_in_seconds(_instant = Literal::Instant.now)
 		@offset_in_seconds
 	end

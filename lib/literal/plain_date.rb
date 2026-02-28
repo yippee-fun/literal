@@ -29,7 +29,7 @@ class Literal::PlainDate < Literal::Data
 		when Literal::PlainDate
 			value
 		when Literal::PlainDateTime, Literal::ZonedDateTime
-			value.to_local_date
+			value.to_plain_date
 		when Date, Time
 			new(year: value.year, month: value.month, day: value.day)
 		when String
@@ -41,6 +41,21 @@ class Literal::PlainDate < Literal::Data
 
 	def self.to_proc
 		method(:coerce).to_proc
+	end
+
+	def self.days_since_epoch(year:, month:, day:)
+		civil_to_days(year, month, day)
+	end
+
+	private_class_method def self.civil_to_days(year, month, day)
+		year -= 1 if month <= 2
+		era = (year >= 0) ? (year / 400) : ((year - 399) / 400)
+		yoe = year - (era * 400)
+		mp = month + ((month > 2) ? -3 : 9)
+		doy = ((153 * mp) + 2) / 5 + day - 1
+		doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy
+
+		(era * 146_097) + doe - 719_468
 	end
 
 	# Returns an Integer between 0 and 6, where 0 is Sunday.
@@ -193,7 +208,10 @@ class Literal::PlainDate < Literal::Data
 	def since(other)
 		other = Literal::PlainDate.coerce(other)
 
-		Literal::DatePeriod.new(days: (to_date - other.to_date).to_i)
+		days = self.class.days_since_epoch(year: @year, month: @month, day: @day) -
+			self.class.days_since_epoch(year: other.year, month: other.month, day: other.day)
+
+		Literal::DatePeriod.new(days:)
 	end
 
 	def until(other)
@@ -364,4 +382,5 @@ class Literal::PlainDate < Literal::Data
 		days_until_target = 7 if days_until_target == 0
 		self - Literal::DatePeriod.new(days: days_until_target)
 	end
+
 end

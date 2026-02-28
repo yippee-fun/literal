@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "date"
-
 class Literal::PlainDateTimeEnumerator < Literal::Data
 	include Enumerable
 
@@ -122,7 +120,11 @@ class Literal::PlainDateTimeEnumerator < Literal::Data
 	end
 
 	private def total_nanoseconds(plain_date_time)
-		date = Date.new(plain_date_time.year, plain_date_time.month, plain_date_time.day)
+		days_since_epoch = Literal::PlainDate.days_since_epoch(
+			year: plain_date_time.year,
+			month: plain_date_time.month,
+			day: plain_date_time.day
+		)
 		nanos_in_day = (plain_date_time.hour * NANOSECONDS_PER_HOUR) +
 			(plain_date_time.minute * NANOSECONDS_PER_MINUTE) +
 			(plain_date_time.second * NANOSECONDS_PER_SECOND) +
@@ -130,6 +132,6 @@ class Literal::PlainDateTimeEnumerator < Literal::Data
 			(plain_date_time.microsecond * 1_000) +
 			plain_date_time.nanosecond
 
-		(date.jd * NANOSECONDS_PER_DAY) + nanos_in_day
+		(days_since_epoch * NANOSECONDS_PER_DAY) + nanos_in_day
 	end
 end

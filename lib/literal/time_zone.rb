@@ -30,6 +30,10 @@ class Literal::TimeZone < Literal::Data
 		Literal::ZonedDateTime.new(instant:, time_zone: self)
 	end
 
+	def to_plain_date_time(_instant)
+		raise NotImplementedError, "#{self.class} must implement #to_plain_date_time"
+	end
+
 	def offset_in_minutes(instant = Literal::Instant.now)
 		Rational(offset_in_seconds(instant), 60)
 	end

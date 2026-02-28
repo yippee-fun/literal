@@ -16,33 +16,41 @@ class Literal::ZonedDateTime < Literal::Data
 	end
 
 	private def after_initialize
-		local_time = @time_zone.to_local_ruby_time(@instant)
-
-		@year = local_time.year
-		@month = local_time.month
-		@day = local_time.day
-		@hour = local_time.hour
-		@minute = local_time.min
-		@second = local_time.sec
-		@subsec = local_time.subsec
+		@offset_in_seconds = @time_zone.offset_in_seconds(@instant)
+		local_nanoseconds = @instant.unix_timestamp_in_nanoseconds + (@offset_in_seconds * 1_000_000_000)
+		@year, @month, @day, @hour, @minute, @second, @subsecond_nanoseconds = local_components_from_unix_nanoseconds(local_nanoseconds)
 	end
 
-	attr_reader :year
+	def year
+		@year
+	end
 
-	attr_reader :month
+	def month
+		@month
+	end
 
-	attr_reader :day
+	def day
+		@day
+	end
 
-	attr_reader :hour
+	def hour
+		@hour
+	end
 
-	attr_reader :minute
+	def minute
+		@minute
+	end
 
-	attr_reader :second
+	def second
+		@second
+	end
 
-	attr_reader :subsec
+	def subsec
+		Rational(@subsecond_nanoseconds, 1_000_000_000)
+	end
 
 	def nanosecond
-		(@subsec * 1_000_000_000).to_i % 1_000
+		@subsecond_nanoseconds % 1_000
 	end
 
 	def to_year
@@ -54,31 +62,35 @@ class Literal::ZonedDateTime < Literal::Data
 	end
 
 	def to_plain_date
-		Literal::PlainDate.new(year:, month:, day:)
+		Literal::PlainDate.new(year: @year, month: @month, day: @day)
 	end
 
 	def to_date
-		Date.new(year, month, day)
+		Date.new(@year, @month, @day)
 	end
 
 	def to_plain_time
-		Literal::PlainTime.new(hour:, minute:, second:, subsec: Rational(@subsec))
+		Literal::PlainTime.new(
+			hour: @hour,
+			minute: @minute,
+			second: @second,
+			subsec: Rational(@subsecond_nanoseconds, 1_000_000_000)
+		)
 	end
 
 	def to_plain_date_time
-		total_nanoseconds = (@subsec * 1_000_000_000).to_i
-		millisecond = total_nanoseconds / 1_000_000
-		remainder = total_nanoseconds % 1_000_000
+		millisecond = @subsecond_nanoseconds / 1_000_000
+		remainder = @subsecond_nanoseconds % 1_000_000
 		microsecond = remainder / 1_000
 		nanosecond = remainder % 1_000
 
 		Literal::PlainDateTime.new(
-			year:,
-			month:,
-			day:,
-			hour:,
-			minute:,
-			second:,
+			year: @year,
+			month: @month,
+			day: @day,
+			hour: @hour,
+			minute: @minute,
+			second: @second,
 			millisecond:,
 			microsecond:,
 			nanosecond:
@@ -131,15 +143,15 @@ class Literal::ZonedDateTime < Literal::Data
 	end
 
 	def offset_in_seconds
-		@time_zone.offset_in_seconds(@instant)
+		@offset_in_seconds
 	end
 
 	def offset_in_minutes
-		@time_zone.offset_in_minutes(@instant)
+		Rational(@offset_in_seconds, 60)
 	end
 
 	def offset_in_hours
-		@time_zone.offset_in_hours(@instant)
+		Rational(@offset_in_seconds, 3_600)
 	end
 
 	def hours_in_day
@@ -202,5 +214,31 @@ class Literal::ZonedDateTime < Literal::Data
 
 	def to_s
 		"#{iso8601} #{zone}"
+	end
+
+	private def local_components_from_unix_nanoseconds(unix_nanoseconds)
+		total_seconds, subsecond_nanoseconds = unix_nanoseconds.divmod(1_000_000_000)
+		days_since_epoch, second_of_day = total_seconds.divmod(86_400)
+
+		year, month, day = civil_from_days(days_since_epoch)
+		hour, remainder = second_of_day.divmod(3_600)
+		minute, second = remainder.divmod(60)
+
+		[year, month, day, hour, minute, second, subsecond_nanoseconds]
+	end
+
+	private def civil_from_days(days_since_epoch)
+		z = days_since_epoch + 719_468
+		era = ((z >= 0) ? z : z - 146_096) / 146_097
+		days_of_era = z - (era * 146_097)
+		year_of_era = (days_of_era - (days_of_era / 1_460) + (days_of_era / 36_524) - (days_of_era / 146_096)) / 365
+		year = year_of_era + (era * 400)
+		day_of_year = days_of_era - ((365 * year_of_era) + (year_of_era / 4) - (year_of_era / 100))
+		month_prime = ((5 * day_of_year) + 2) / 153
+		day = day_of_year - (((153 * month_prime) + 2) / 5) + 1
+		month = month_prime + ((month_prime < 10) ? 3 : -9)
+		year += 1 if month <= 2
+
+		[year, month, day]
 	end
 end
