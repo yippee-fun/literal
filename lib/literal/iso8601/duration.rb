@@ -1,16 +1,6 @@
 # frozen_string_literal: true
 
 class Literal::ISO8601::Duration < Literal::ISO8601::Node
-	UNIT_ORDER_INDEX = {
-		years: 0,
-		months: 1,
-		weeks: 2,
-		days: 3,
-		hours: 4,
-		minutes: 5,
-		seconds: 6,
-	}.freeze
-
 	prop :sign, Literal::ISO8601::Sign, default: 1
 	prop :components, _Array(Literal::ISO8601::DurationComponent)
 
@@ -41,16 +31,11 @@ class Literal::ISO8601::Duration < Literal::ISO8601::Node
 	alias_method :to_s, :iso8601
 
 	private def time_component?(component)
-		case component.unit
-		in :hours | :minutes | :seconds
-			true
-		else
-			false
-		end
+		unit_order_index(component.unit) >= Literal::ISO8601::FIRST_TIME_DURATION_UNIT_INDEX
 	end
 
 	private def mixed_week_with_other_units?
-		has_week = @components.any? { |component| component.unit == :weeks }
+		has_week = @components.any? { |component| component.unit == Literal::ISO8601::WEEK_DURATION_UNIT }
 		has_week && @components.length > 1
 	end
 
@@ -65,7 +50,7 @@ class Literal::ISO8601::Duration < Literal::ISO8601::Node
 	end
 
 	private def unit_order_index(unit)
-		UNIT_ORDER_INDEX.fetch(unit)
+		Literal::ISO8601::DURATION_UNIT_ORDER_INDEX.fetch(unit)
 	end
 
 	private def valid_fraction_positions?

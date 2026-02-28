@@ -2,11 +2,13 @@
 
 class Literal::ISO8601::Parser
 	THROW_TAG = :literal_iso8601_parse_error
-	DURATION_UNITS_BY_DESIGNATOR =
-		Literal::ISO8601::DURATION_UNIT_DESIGNATORS.each_with_object({}) do |(unit, designator), units_by_designator|
+	M = "M".getbyte(0)
+	DURATION_UNIT_BY_DESIGNATOR =
+		Literal::ISO8601::DURATION_UNIT_DESIGNATORS.each_with_object({}) do |(unit, designator), unit_by_designator|
 			byte = designator.getbyte(0)
-			units = units_by_designator.fetch(byte, [])
-			units_by_designator[byte] = units + [unit]
+			next if byte == M
+
+			unit_by_designator[byte] = unit
 		end.freeze
 
 	DASH  = 45
@@ -292,16 +294,15 @@ class Literal::ISO8601::Parser
 	end
 
 	private def parse_duration_unit(in_time)
-		units = DURATION_UNITS_BY_DESIGNATOR[scan]
-		fail_parse("expected duration unit designator") unless units
-
-		if units.length == 1
-			units[0]
-		elsif in_time
-			:minutes
-		else
-			:months
+		designator = scan
+		if designator == M
+			return in_time ? :minutes : :months
 		end
+
+		unit = DURATION_UNIT_BY_DESIGNATOR[designator]
+		return unit if unit
+
+		fail_parse("expected duration unit designator")
 	end
 
 	private def duration_start?

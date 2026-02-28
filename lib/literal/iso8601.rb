@@ -17,6 +17,9 @@ module Literal::ISO8601
 	}.freeze
 
 	DurationUnit = _Union(*DURATION_UNIT_DESIGNATORS.keys)
+	DURATION_UNIT_ORDER_INDEX = DURATION_UNIT_DESIGNATORS.keys.each_with_index.to_h.freeze
+	FIRST_TIME_DURATION_UNIT_INDEX = DURATION_UNIT_ORDER_INDEX.fetch(:hours)
+	WEEK_DURATION_UNIT = :weeks
 
 	TimePrecision = _Union(
 		:hour,
@@ -44,9 +47,7 @@ module Literal::ISO8601
 	)
 
 	IntervalEndpoint = _Union(
-		_Deferred { Literal::ISO8601::CalendarDate },
-		_Deferred { Literal::ISO8601::OrdinalDate },
-		_Deferred { Literal::ISO8601::WeekDate },
+		DateNode,
 		_Deferred { Literal::ISO8601::TimeOfDay },
 		_Deferred { Literal::ISO8601::DateTime },
 	)
