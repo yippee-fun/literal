@@ -12,11 +12,6 @@ module Literal::Temporal
 	SHORT_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].freeze
 	NON_LEAP_YEAR_DAY_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].freeze
 
-	ISO8601_YEAR_PATTERN = /\A(-?\d{1,})\z/
-	ISO8601_YEAR_MONTH_PATTERN = /\A(-?\d{1,})-(\d{2})\z/
-	ISO8601_DATE_PATTERN = /\A(-?\d{1,})-(\d{2})-(\d{2})\z/
-	ISO8601_DATE_TIME_PATTERN = /\A(-?\d{1,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\z/
-
 	def days_in_year(year)
 		leap_year?(year) ? 366 : 365
 	end

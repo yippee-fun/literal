@@ -135,9 +135,37 @@ module Literal::ISO8601
 		parse_or_error(value) { Parser.new(value).parse }
 	end
 
+	def try_parse(value)
+		return nil unless String === value
+
+		node = parse(value)
+		node if Node === node
+	end
+
+	def try_parse_valid(value)
+		return nil unless String === value
+
+		node = parse(value)
+		node if ValidNode === node
+	end
+
 	# Parses a date only, e.g. "2025-01-13" or "20250113".
 	def parse_date(value)
 		parse_or_error(value) { Parser.new(value).parse_date }
+	end
+
+	def try_parse_date(value)
+		return nil unless String === value
+
+		node = parse_date(value)
+		node if DateNode === node
+	end
+
+	def try_parse_valid_date(value)
+		return nil unless String === value
+
+		node = parse_date(value)
+		node if ValidDateNode === node
 	end
 
 	# Parses a time only, e.g. "10:15:30.25+01:30" or "101530Z".
@@ -145,9 +173,37 @@ module Literal::ISO8601
 		parse_or_error(value) { Parser.new(value).parse_time }
 	end
 
+	def try_parse_time(value)
+		return nil unless String === value
+
+		node = parse_time(value)
+		node if TimeOfDay === node
+	end
+
+	def try_parse_valid_time(value)
+		return nil unless String === value
+
+		node = parse_time(value)
+		node if ValidTimeOfDay === node
+	end
+
 	# Parses a date-time only, e.g. "2025-01-13T10:15:30+01:30".
 	def parse_date_time(value)
 		parse_or_error(value) { Parser.new(value).parse_date_time }
+	end
+
+	def try_parse_date_time(value)
+		return nil unless String === value
+
+		node = parse_date_time(value)
+		node if DateTime === node
+	end
+
+	def try_parse_valid_date_time(value)
+		return nil unless String === value
+
+		node = parse_date_time(value)
+		node if ValidDateTime === node
 	end
 
 	# Parses a duration only, e.g. "P1Y2M3DT4H5M6.7S".
@@ -155,9 +211,37 @@ module Literal::ISO8601
 		parse_or_error(value) { Parser.new(value).parse_duration }
 	end
 
+	def try_parse_duration(value)
+		return nil unless String === value
+
+		node = parse_duration(value)
+		node if Duration === node
+	end
+
+	def try_parse_valid_duration(value)
+		return nil unless String === value
+
+		node = parse_duration(value)
+		node if ValidDuration === node
+	end
+
 	# Parses an interval only, e.g. "2025-01-13/P1D".
 	def parse_interval(value)
 		parse_or_error(value) { Parser.new(value).parse_interval }
+	end
+
+	def try_parse_interval(value)
+		return nil unless String === value
+
+		node = parse_interval(value)
+		node if IntervalNode === node
+	end
+
+	def try_parse_valid_interval(value)
+		return nil unless String === value
+
+		node = parse_interval(value)
+		node if ValidInterval === node
 	end
 
 	def valid_fraction?(fraction, fraction_digits)

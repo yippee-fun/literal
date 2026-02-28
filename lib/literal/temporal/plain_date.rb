@@ -16,14 +16,13 @@ class Literal::PlainDate < Literal::Data
 	end
 
 	def self.parse(value)
-		match = ISO8601_PATTERN.match(value)
-		raise Literal::ArgumentError, "Invalid ISO 8601 local date: #{value.inspect}" unless match
+		node = Literal::ISO8601.try_parse_valid_date(value)
 
-		year = Integer(match[1], 10)
-		month = Integer(match[2], 10)
-		day = Integer(match[3], 10)
-
-		new(year:, month:, day:)
+		if Literal::ISO8601::CalendarDate === node
+			new(year: node.year, month: node.month, day: node.day)
+		else
+			raise Literal::ArgumentError, "Invalid ISO 8601 local date: #{value.inspect}"
+		end
 	end
 
 	def self.coerce(value)
