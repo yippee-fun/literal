@@ -3,31 +3,31 @@
 class Literal::Recurrence < Literal::Data
 	Disambiguation = _Union(:earlier, :later, :reject, :compatible)
 
-	prop :start, Literal::LocalDateTime do |value|
-		Literal::LocalDateTime.coerce(value)
+	prop :start, Literal::PlainDateTime do |value|
+		Literal::PlainDateTime.coerce(value)
 	end
 	prop :rule, Literal::RecurrenceRule
 	prop :time_zone, _Nilable(_Deferred { Literal::TimeZone }) do |value|
 		if value == nil
 			nil
 		else
-			Literal::TimeZone.coerce(value)
+			Literal::NamedTimeZone.coerce(value)
 		end
 	end
 	prop :disambiguation, Disambiguation
 	prop :count, _Nilable(Integer)
-	prop :until, _Nilable(Literal::LocalDateTime) do |value|
+	prop :until, _Nilable(Literal::PlainDateTime) do |value|
 		if value == nil
 			nil
 		else
-			Literal::LocalDateTime.coerce(value)
+			Literal::PlainDateTime.coerce(value)
 		end
 	end
-	prop :exdates, _Array(Literal::LocalDateTime), default: -> { [] } do |value|
-		value.map(&Literal::LocalDateTime)
+	prop :exdates, _Array(Literal::PlainDateTime), default: -> { [] } do |value|
+		value.map(&Literal::PlainDateTime)
 	end
-	prop :rdates, _Array(Literal::LocalDateTime), default: -> { [] } do |value|
-		value.map(&Literal::LocalDateTime)
+	prop :rdates, _Array(Literal::PlainDateTime), default: -> { [] } do |value|
+		value.map(&Literal::PlainDateTime)
 	end
 
 	def initialize(
@@ -43,16 +43,14 @@ class Literal::Recurrence < Literal::Data
 		super
 	end
 
-	#: () -> void
 	private def after_initialize
 		raise ArgumentError unless @count == nil || @count > 0
 		raise ArgumentError unless @until == nil || @start <= @until
 	end
 
-	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> bool
 	def include?(value)
 		begin
-			value = Literal::LocalDateTime.coerce(value)
+			value = Literal::PlainDateTime.coerce(value)
 		rescue ArgumentError
 			return false
 		end
@@ -72,9 +70,8 @@ class Literal::Recurrence < Literal::Data
 	alias_method :cover?, :include?
 	alias_method :===, :include?
 
-	#: (after: Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> Literal::LocalDateTime?
 	def next(after:)
-		after = Literal::LocalDateTime.coerce(after)
+		after = Literal::PlainDateTime.coerce(after)
 
 		from_generated = nil
 		each_generated_occurrence do |occurrence|
@@ -96,9 +93,8 @@ class Literal::Recurrence < Literal::Data
 		end
 	end
 
-	#: (before: Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> Literal::LocalDateTime?
 	def previous(before:)
-		before = Literal::LocalDateTime.coerce(before)
+		before = Literal::PlainDateTime.coerce(before)
 
 		from_generated = nil
 		each_generated_occurrence do |occurrence|
@@ -122,17 +118,14 @@ class Literal::Recurrence < Literal::Data
 	alias_method :succ, :next
 	alias_method :pred, :previous
 
-	#: () -> String
 	def to_cron
 		Literal::Cron.dump(self)
 	end
 
-	#: (Literal::LocalDateTime) -> bool
 	private def in_bounds?(value)
 		value >= @start && (@until == nil || value <= @until)
 	end
 
-	#: () { (Literal::LocalDateTime) -> void } -> void
 	private def each_generated_occurrence
 		occurrence = @start
 		count = 0
@@ -151,7 +144,6 @@ class Literal::Recurrence < Literal::Data
 		end
 	end
 
-	#: () -> Literal::DatePeriod
 	private def step_period
 		case @rule.frequency
 		in :secondly

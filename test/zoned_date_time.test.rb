@@ -4,14 +4,14 @@ test "zoned date time exposes local fields and arithmetic" do
 	instant = Literal::Instant.parse("2025-01-13T20:00:00Z")
 	zoned = Literal::ZonedDateTime.new(instant:, time_zone: "+01:30")
 
-	assert_equal "UTC", Literal::ZonedDateTime.now(Literal::TimeZone.utc).zone
+	assert_equal "UTC", Literal::ZonedDateTime.now(Literal::FixedOffsetTimeZone.utc).zone
 	assert_equal 0, zoned.subsec
 	assert_equal 0, zoned.nanosecond
-	assert_equal Literal::LocalYear.new(year: 2025), zoned.to_year
-	assert_equal Literal::LocalMonth.new(year: 2025, month: 1), zoned.to_month
-	assert_equal Literal::LocalDate.new(year: 2025, month: 1, day: 13), zoned.to_local_date
-	assert_equal Literal::LocalTime.new(hour: 21, minute: 30, second: 0, subsec: Rational(0, 1)), zoned.to_local_time
-	assert_equal Literal::LocalDateTime.new(year: 2025, month: 1, day: 13, hour: 21, minute: 30, second: 0, millisecond: 0, microsecond: 0, nanosecond: 0), zoned.to_local_date_time
+	assert_equal Literal::PlainYear.new(year: 2025), zoned.to_year
+	assert_equal Literal::PlainYearMonth.new(year: 2025, month: 1), zoned.to_month
+	assert_equal Literal::PlainDate.new(year: 2025, month: 1, day: 13), zoned.to_local_date
+	assert_equal Literal::PlainTime.new(hour: 21, minute: 30, second: 0, subsec: Rational(0, 1)), zoned.to_local_time
+	assert_equal Literal::PlainDateTime.new(year: 2025, month: 1, day: 13, hour: 21, minute: 30, second: 0, millisecond: 0, microsecond: 0, nanosecond: 0), zoned.to_plain_date_time
 	assert_equal instant, zoned.to_instant
 	assert_equal 2025, zoned.year
 	assert_equal 21, zoned.hour
@@ -30,13 +30,12 @@ test "zoned date time exposes local fields and arithmetic" do
 	assert_raises(ArgumentError) { zoned + 1 }
 	assert_raises(ArgumentError) { zoned - 1 }
 	assert_equal "2025-01-13T21:30:00+01:30 UTC+01:30", zoned.to_s
-	assert zoned.equals(Literal::ZonedDateTime.new(instant:, time_zone: "+01:30"))
-	assert_equal(-1, Literal::ZonedDateTime.compare(zoned, zoned + Literal::Duration.new(nanoseconds: 1_000_000_000)))
+	assert_equal Literal::ZonedDateTime.new(instant:, time_zone: "+01:30"), zoned
+	assert_equal(-1, zoned <=> (zoned + Literal::Duration.new(nanoseconds: 1_000_000_000)))
 	assert_equal 1, (zoned + Literal::Duration.new(nanoseconds: 1_000_000_000)).since(zoned).seconds
 	assert_equal 24.0, zoned.hours_in_day
 	assert_equal "2025-01-13T00:00:00+01:30", zoned.start_of_day.iso8601
 	assert_equal nil, zoned.next_transition
 	assert_equal nil, zoned.prev_transition
 	assert_equal "2025-01-13T22:00:00+01:30", zoned.round(unit: :hour).iso8601
-	assert_equal "2025-01-13T21:30:00+01:30", zoned.with.iso8601
 end

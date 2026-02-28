@@ -2,7 +2,7 @@
 
 require "date"
 
-class Literal::LocalDateTimeEnumerator < Literal::Data
+class Literal::PlainDateTimeEnumerator < Literal::Data
 	include Enumerable
 
 	UNIT_TABLE = {
@@ -55,8 +55,8 @@ class Literal::LocalDateTimeEnumerator < Literal::Data
 		:nanoseconds
 	)
 
-	prop :from, Literal::LocalDateTime
-	prop :to, Literal::LocalDateTime
+	prop :from, Literal::PlainDateTime
+	prop :to, Literal::PlainDateTime
 	prop :unit, Unit, &UnitCoercion
 	prop :step, Integer
 
@@ -77,17 +77,14 @@ class Literal::LocalDateTimeEnumerator < Literal::Data
 		nanoseconds: 1,
 	}.freeze
 
-	#: () -> void
 	private def after_initialize
 		raise ArgumentError if @step == 0
 	end
 
-	#: () -> Literal::DatePeriod
 	def interval
 		Literal::DatePeriod.new(@unit => @step)
 	end
 
-	#: () { (Literal::LocalDateTime) -> void } -> void
 	def each
 		return enum_for(__method__) { estimate_size } unless block_given?
 
@@ -108,7 +105,6 @@ class Literal::LocalDateTimeEnumerator < Literal::Data
 		end
 	end
 
-	#: () -> Integer?
 	private def estimate_size
 		nanos_per_unit = FIXED_UNIT_NANOSECONDS[@unit]
 		return nil unless nanos_per_unit
@@ -125,15 +121,14 @@ class Literal::LocalDateTimeEnumerator < Literal::Data
 		(delta.abs / step_size.abs) + 1
 	end
 
-	#: (Literal::LocalDateTime) -> Integer
-	private def total_nanoseconds(local_date_time)
-		date = Date.new(local_date_time.year, local_date_time.month, local_date_time.day)
-		nanos_in_day = (local_date_time.hour * NANOSECONDS_PER_HOUR) +
-			(local_date_time.minute * NANOSECONDS_PER_MINUTE) +
-			(local_date_time.second * NANOSECONDS_PER_SECOND) +
-			(local_date_time.millisecond * 1_000_000) +
-			(local_date_time.microsecond * 1_000) +
-			local_date_time.nanosecond
+	private def total_nanoseconds(plain_date_time)
+		date = Date.new(plain_date_time.year, plain_date_time.month, plain_date_time.day)
+		nanos_in_day = (plain_date_time.hour * NANOSECONDS_PER_HOUR) +
+			(plain_date_time.minute * NANOSECONDS_PER_MINUTE) +
+			(plain_date_time.second * NANOSECONDS_PER_SECOND) +
+			(plain_date_time.millisecond * 1_000_000) +
+			(plain_date_time.microsecond * 1_000) +
+			plain_date_time.nanosecond
 
 		(date.jd * NANOSECONDS_PER_DAY) + nanos_in_day
 	end

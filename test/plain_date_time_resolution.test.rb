@@ -2,10 +2,10 @@
 
 test "local date time resolution disambiguation" do
 	zone = Literal::FixedOffsetTimeZone.parse("+00:00")
-	local_date_time = Literal::LocalDateTime.new(year: 2025, month: 1, day: 13, hour: 10)
+	plain_date_time = Literal::PlainDateTime.new(year: 2025, month: 1, day: 13, hour: 10)
 	instant = Literal::Instant.parse("2025-01-13T10:00:00Z")
 
-	resolution = Literal::LocalDateTimeResolution.new(local_date_time:, time_zone: zone, instants: [instant])
+	resolution = Literal::PlainDateTimeResolution.new(plain_date_time:, time_zone: zone, instants: [instant])
 
 	assert resolution.resolved?
 	refute resolution.ambiguous?
@@ -16,11 +16,11 @@ end
 
 test "local date time resolution handles ambiguous and missing instants" do
 	zone = Literal::FixedOffsetTimeZone.parse("+00:00")
-	local_date_time = Literal::LocalDateTime.new(year: 2025, month: 1, day: 13, hour: 10)
+	plain_date_time = Literal::PlainDateTime.new(year: 2025, month: 1, day: 13, hour: 10)
 	earlier = Literal::Instant.parse("2025-01-13T10:00:00Z")
 	later = Literal::Instant.parse("2025-01-13T11:00:00Z")
 
-	ambiguous = Literal::LocalDateTimeResolution.new(local_date_time:, time_zone: zone, instants: [earlier, later])
+	ambiguous = Literal::PlainDateTimeResolution.new(plain_date_time:, time_zone: zone, instants: [earlier, later])
 	assert ambiguous.ambiguous?
 	refute ambiguous.resolved?
 	refute ambiguous.missing?
@@ -30,7 +30,7 @@ test "local date time resolution handles ambiguous and missing instants" do
 	assert_raises(ArgumentError) { ambiguous.disambiguate(disambiguation: :reject) }
 	assert_raises(ArgumentError) { ambiguous.disambiguate(disambiguation: :invalid) }
 
-	missing = Literal::LocalDateTimeResolution.new(local_date_time:, time_zone: zone, instants: [], gap: true)
+	missing = Literal::PlainDateTimeResolution.new(plain_date_time:, time_zone: zone, instants: [], gap: true)
 	assert missing.missing?
 	refute missing.resolved?
 	assert_raises(ArgumentError) { missing.disambiguate }

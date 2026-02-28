@@ -33,15 +33,13 @@ class Literal::RecurrenceRule < Literal::Data
 		super
 	end
 
-	#: () -> void
 	private def after_initialize
 		raise ArgumentError unless @interval > 0
 	end
 
-	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> bool
 	def matches?(value)
 		begin
-			value = Literal::LocalDateTime.coerce(value)
+			value = Literal::PlainDateTime.coerce(value)
 		rescue ArgumentError
 			return false
 		end

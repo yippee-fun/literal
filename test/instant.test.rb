@@ -2,11 +2,11 @@
 
 test "instant class helpers and formatting" do
 	ruby_time = Time.iso8601("2025-01-13T20:00:00.123456789Z")
-	from_ruby_time = Literal::Instant.from_ruby_time(ruby_time)
+	instant = Literal::Instant.coerce(ruby_time)
 
-	assert_equal ruby_time.to_i, from_ruby_time.unix_timestamp_in_seconds
+	assert_equal ruby_time.to_i, instant.unix_timestamp_in_seconds
 	assert Literal::Instant === Literal::Instant.now
-	assert_equal "Literal::Instant(1736798400.1234567)", from_ruby_time.inspect
+	assert_equal "Literal::Instant(1736798400.1234567)", instant.inspect
 end
 
 test "instant parse arithmetic and zone conversion" do
@@ -26,16 +26,15 @@ test "instant parse arithmetic and zone conversion" do
 	assert_raises(ArgumentError) { instant + 1 }
 	assert_raises(ArgumentError) { instant - 1 }
 
-	assert_equal "UTC", instant.utc.zone
+	assert_equal "UTC", instant.in_zone("UTC").zone
 	zoned = instant.in_zone("+01:30")
 	assert_equal "UTC+01:30", zoned.zone
 	assert_equal Rational(3, 2), zoned.offset_in_hours
-	assert_equal instant, instant.with
 	assert_equal instant, ["2025-01-13T20:00:00.123456789Z"].map(&Literal::Instant).first
 	assert_equal instant, Literal::Instant.coerce(zoned)
 	assert_equal 1, instant.since("2025-01-13T19:59:59.123456789Z").seconds
-	assert instant.equals(Literal::Instant.parse("2025-01-13T20:00:00.123456789Z"))
-	assert_equal(-1, Literal::Instant.compare(instant - Literal::Duration.new(nanoseconds: 1_000_000_000), instant))
+	assert_equal Literal::Instant.parse("2025-01-13T20:00:00.123456789Z"), instant
+	assert_equal(-1, (instant - Literal::Duration.new(nanoseconds: 1_000_000_000)) <=> instant)
 	assert_equal 1, instant.since(instant - Literal::Duration.new(nanoseconds: 1_000_000_000)).seconds
 	assert_equal 1, instant.until(instant + Literal::Duration.new(nanoseconds: 1_000_000_000)).seconds
 	assert_equal "2025-01-13T20:00:00.000000000Z", instant.round(unit: :second).iso8601

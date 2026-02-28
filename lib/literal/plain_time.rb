@@ -2,7 +2,7 @@
 
 require "date"
 
-class Literal::LocalTime < Literal::Data
+class Literal::PlainTime < Literal::Data
 	include Comparable
 
 	ROUNDING_MODES = Literal::Instant::ROUNDING_MODES
@@ -18,10 +18,9 @@ class Literal::LocalTime < Literal::Data
 	prop :second, _Integer(0..59), default: 0
 	prop :subsec, Rational, default: Rational(0, 1_000)
 
-	#: (String) -> Literal::LocalTime
 	def self.parse(value)
 		match = ISO8601_PATTERN.match(value)
-		raise ArgumentError unless match
+		raise Literal::ArgumentError, "Invalid ISO 8601 local time: #{value.inspect}" unless match
 
 		hour = Integer(match[1], 10)
 		minute = Integer(match[2], 10)
@@ -36,40 +35,32 @@ class Literal::LocalTime < Literal::Data
 		new(hour:, minute:, second:, subsec:)
 	end
 
-	#: (Literal::LocalTime | Literal::LocalDateTime | Literal::ZonedDateTime | Time | String) -> Literal::LocalTime
 	def self.coerce(value)
 		case value
-		when Literal::LocalTime
+		when Literal::PlainTime
 			value
-		when Literal::LocalDateTime, Literal::ZonedDateTime
-			value.to_local_time
+		when Literal::PlainDateTime, Literal::ZonedDateTime
+			value.to_plain_time
 		when Time
 			new(hour: value.hour, minute: value.min, second: value.sec, subsec: Rational(value.nsec, 1_000_000_000))
 		when String
 			parse(value)
 		else
-			raise ArgumentError
+			raise Literal::ArgumentError, "Can't coerce #{value.inspect} to a Literal::PlainTime"
 		end
 	end
 
-	#: () -> Proc
 	def self.to_proc
 		method(:coerce).to_proc
 	end
 
-	#: (Literal::LocalTime, Literal::LocalTime) -> -1 | 0 | 1
-	def self.compare(one, two)
-		one <=> two
-	end
 
-	#: (Literal::LocalDate | Date) -> Literal::LocalDateTime
-	#: (year: Integer, month: Integer, day: Integer) -> Literal::LocalDateTime
-	def to_local_date_time(*args)
+	def to_plain_date_time(*args)
 		millisecond, microsecond, nanosecond = split_subsec
 
 		case args
 		in [{ year: Integer => year, month: Integer => month, day: Integer => day }]
-			Literal::LocalDateTime.new(
+			Literal::PlainDateTime.new(
 				year:,
 				month:,
 				day:,
@@ -80,8 +71,8 @@ class Literal::LocalTime < Literal::Data
 				microsecond:,
 				nanosecond:,
 			)
-		in [Literal::LocalDate => day]
-			Literal::LocalDateTime.new(
+		in [Literal::PlainDate => day]
+			Literal::PlainDateTime.new(
 				year: day.year,
 				month: day.month,
 				day: day.day,
@@ -93,7 +84,7 @@ class Literal::LocalTime < Literal::Data
 				nanosecond:,
 			)
 		in [Date => date]
-			Literal::LocalDateTime.new(
+			Literal::PlainDateTime.new(
 				year: date.year,
 				month: date.month,
 				day: date.day,
@@ -107,12 +98,10 @@ class Literal::LocalTime < Literal::Data
 		end
 	end
 
-	#: (Literal::LocalDate | Literal::LocalDateTime | Literal::ZonedDateTime | Date | Time | String) -> Literal::LocalDateTime
-	def on(local_date)
-		to_local_date_time(Literal::LocalDate.coerce(local_date))
+	def on(plain_date)
+		to_plain_date_time(Literal::PlainDate.coerce(plain_date))
 	end
 
-	#: () -> String
 	def iso8601
 		base = "#{format('%02d', @hour)}:#{format('%02d', @minute)}:#{format('%02d', @second)}"
 		fraction = format_fraction
@@ -121,34 +110,21 @@ class Literal::LocalTime < Literal::Data
 
 	alias_method :to_s, :iso8601
 
-	#: (?hour: Integer, ?minute: Integer, ?second: Integer, ?subsec: Rational) -> Literal::LocalTime
-	def with(hour: @hour, minute: @minute, second: @second, subsec: @subsec)
-		Literal::LocalTime.new(hour:, minute:, second:, subsec:)
-	end
-
-	#: (Literal::LocalTime) -> bool
-	def equals(other)
-		self == other
-	end
-
-	#: (Literal::LocalTime | Literal::LocalDateTime | Literal::ZonedDateTime | Time | String) -> Literal::Duration
 	def since(other)
-		other = Literal::LocalTime.coerce(other)
+		other = Literal::PlainTime.coerce(other)
 
 		Literal::Duration.new(
 			nanoseconds: to_total_nanoseconds - other.to_total_nanoseconds
 		)
 	end
 
-	#: (Literal::LocalTime | Literal::LocalDateTime | Literal::ZonedDateTime | Time | String) -> Literal::Duration
 	def until(other)
-		Literal::LocalTime.coerce(other).since(self)
+		Literal::PlainTime.coerce(other).since(self)
 	end
 
-	#: (unit: Symbol, increment: Integer, mode: ROUNDING_MODES) -> Literal::LocalTime
 	def round(unit:, increment: 1, mode: :half_expand)
-		raise ArgumentError unless increment > 0
-		raise ArgumentError unless ROUNDING_MODES === mode
+		raise Literal::ArgumentError, "increment must be positive, got #{increment}" unless increment > 0
+		raise Literal::ArgumentError, "mode must be one of #{ROUNDING_MODES.inspect}, got #{mode.inspect}" unless ROUNDING_MODES === mode
 
 		base = case unit
 			in :hour | :hours then NANOSECONDS_PER_HOUR
@@ -157,7 +133,7 @@ class Literal::LocalTime < Literal::Data
 			in :millisecond | :milliseconds then 1_000_000
 			in :microsecond | :microseconds then 1_000
 			in :nanosecond | :nanoseconds then 1
-			else raise ArgumentError
+			else raise Literal::ArgumentError, "Unknown unit #{unit.inspect}"
 		end
 
 		step = base * increment
@@ -167,17 +143,15 @@ class Literal::LocalTime < Literal::Data
 		minute, remainder = remainder.divmod(NANOSECONDS_PER_MINUTE)
 		second, nanos = remainder.divmod(NANOSECONDS_PER_SECOND)
 
-		Literal::LocalTime.new(hour:, minute:, second:, subsec: Rational(nanos, NANOSECONDS_PER_SECOND))
+		Literal::PlainTime.new(hour:, minute:, second:, subsec: Rational(nanos, NANOSECONDS_PER_SECOND))
 	end
 
-	#: (Literal::LocalTime | Literal::LocalDateTime | Literal::ZonedDateTime | Time | String) -> -1 | 0 | 1 | nil
 	def <=>(other)
-		other = Literal::LocalTime.coerce(other)
+		other = Literal::PlainTime.coerce(other)
 
 		to_total_nanoseconds <=> other.to_total_nanoseconds
 	end
 
-	#: () -> [Integer, Integer, Integer]
 	private def split_subsec
 		total_nanoseconds = (@subsec * 1_000_000_000).to_i
 		millisecond = total_nanoseconds / 1_000_000
@@ -187,7 +161,6 @@ class Literal::LocalTime < Literal::Data
 		[millisecond, microsecond, nanosecond]
 	end
 
-	#: () -> String?
 	private def format_fraction
 		nanos = (@subsec * 1_000_000_000).to_i
 		return nil if nanos == 0
@@ -195,7 +168,6 @@ class Literal::LocalTime < Literal::Data
 		format("%09d", nanos).sub(/0+\z/, "")
 	end
 
-	#: () -> Integer
 	protected def to_total_nanoseconds
 		(@hour * NANOSECONDS_PER_HOUR) +
 			(@minute * NANOSECONDS_PER_MINUTE) +
@@ -203,7 +175,6 @@ class Literal::LocalTime < Literal::Data
 			(@subsec * NANOSECONDS_PER_SECOND).to_i
 	end
 
-	#: (Integer, Integer, Symbol) -> Integer
 	private def round_integer(value, step, mode)
 		quotient, remainder = value.divmod(step)
 

@@ -1,51 +1,44 @@
 # frozen_string_literal: true
 
-module Literal::TimeZone
-	def self.===(value)
-		case value
-		when Literal::FixedOffsetTimeZone
-			true
-		else
-			"Literal::NamedTimeZone" == value.class.name
-		end
-	end
-
+class Literal::TimeZone < Literal::Data
 	def self.coerce(value)
 		case value
-		when Literal::FixedOffsetTimeZone
+		when Literal::TimeZone
 			value
 		when String
-			begin
+			if Literal::FixedOffsetTimeZone::OFFSET_PATTERN === value
 				Literal::FixedOffsetTimeZone.parse(value)
-			rescue ArgumentError
+			else
 				Literal::NamedTimeZone.new(value)
 			end
 		else
-			if self === value
-				value
-			else
-				raise ArgumentError
-			end
+			raise Literal::ArgumentError, "Cannot coerce #{value.inspect} into a Literal::TimeZone"
 		end
 	end
 
-	def self.parse(value)
-		coerce(value)
+	def now
+		to_zoned_date_time(Literal::Instant.now)
 	end
 
-	def self.to_proc
-		-> (value) { coerce(value) }
+	def at(instant = Literal::Instant.now)
+		to_zoned_date_time(instant)
 	end
 
-	def self.utc
-		Literal::NamedTimeZone.utc
+	def to_zoned_date_time(instant)
+		instant = Literal::Instant.coerce(instant)
+
+		Literal::ZonedDateTime.new(instant:, time_zone: self)
 	end
 
-	def self.country_zones
-		Literal::NamedTimeZone.country_zones
+	def offset_in_minutes(instant = Literal::Instant.now)
+		Rational(offset_in_seconds(instant), 60)
 	end
 
-	def self.all_zones
-		Literal::NamedTimeZone.all_zones
+	def offset_in_hours(instant = Literal::Instant.now)
+		Rational(offset_in_seconds(instant), 3_600)
+	end
+
+	def from_plain_date_time(plain_date_time, disambiguation: :compatible)
+		resolve_local_date_time(plain_date_time, disambiguation:).disambiguate(disambiguation:)
 	end
 end

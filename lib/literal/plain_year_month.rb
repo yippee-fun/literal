@@ -1,30 +1,34 @@
 # frozen_string_literal: true
 
-class Literal::LocalMonth < Literal::Data
+class Literal::PlainYearMonth < Literal::Data
 	include Comparable
 
 	MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].freeze
 	SHORT_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].freeze
 	NON_LEAP_YEAR_DAY_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].freeze
+	ISO8601_PATTERN = /\A(-?\d{1,})-(\d{2})\z/
 
 	prop :year, Integer
 	prop :month, _Integer(1..12)
 
-	#: (year: Integer, month: Integer) -> Integer
+	def self.parse(value)
+		match = ISO8601_PATTERN.match(value)
+		raise Literal::ArgumentError, "Invalid ISO 8601 year-month: #{value.inspect}" unless match
+
+		year = Integer(match[1], 10)
+		month = Integer(match[2], 10)
+
+		new(year:, month:)
+	end
+
 	def self.days_in_month(year:, month:)
-		if month == 2 && Literal::LocalYear.leap_year?(year)
+		if month == 2 && Literal::PlainYear.leap_year?(year)
 			29
 		else
 			NON_LEAP_YEAR_DAY_IN_MONTH[month - 1]
 		end
 	end
 
-	#: (Literal::LocalMonth, Literal::LocalMonth) -> -1 | 0 | 1
-	def self.compare(one, two)
-		one <=> two
-	end
-
-	#: () -> Literal::LocalMonth
 	def next_month
 		if @month < 12
 			self.class.new(year: @year, month: @month + 1)
@@ -35,7 +39,6 @@ class Literal::LocalMonth < Literal::Data
 
 	alias_method :succ, :next_month
 
-	#: () -> Literal::LocalMonth
 	def prev_month
 		if @month > 1
 			self.class.new(year: @year, month: @month - 1)
@@ -46,150 +49,112 @@ class Literal::LocalMonth < Literal::Data
 
 	alias_method :pred, :prev_month
 
-	#: (Literal::LocalMonth) -> -1 | 0 | 1 | nil
 	def <=>(other)
 		case other
-		when Literal::LocalMonth
+		when Literal::PlainYearMonth
 			if @year == other.year
 				@month <=> other.month
 			else
 				@year <=> other.year
 			end
 		else
-			raise ArgumentError
+			nil
 		end
 	end
 
-	#: () -> Literal::LocalYear
 	def to_year
-		Literal::LocalYear.new(year: @year)
+		Literal::PlainYear.new(year: @year)
 	end
 
-	#: () -> Literal::YearMonth
-	def to_year_month
-		Literal::YearMonth.new(year: @year, month: @month)
+	def at_day(day)
+		Literal::PlainDate.new(year: @year, month: @month, day:)
 	end
 
-	#: () -> String
 	def iso8601
 		"#{@year}-#{format('%02d', @month)}"
 	end
 
 	alias_method :to_s, :iso8601
 
-	#: (?year: Integer, ?month: Integer) -> Literal::LocalMonth
-	def with(year: @year, month: @month)
-		Literal::LocalMonth.new(year:, month:)
-	end
-
-	#: (Literal::LocalMonth) -> bool
-	def equals(other)
-		self == other
-	end
-
-	#: (Integer) -> Literal::LocalDate
-	def to_local_date(day)
-		Literal::LocalDate.new(year: @year, month: @month, day:)
-	end
-
-	#: () -> String
 	def name
 		MONTH_NAMES[@month - 1]
 	end
 
-	#: () -> String
 	def short_name
 		SHORT_MONTH_NAMES[@month - 1]
 	end
 
-	#: () -> Integer
 	def number_of_days
 		self.class.days_in_month(year: @year, month: @month)
 	end
 
-	#: () -> Range[Literal::LocalDate]
 	def days
 		(first_day..last_day)
 	end
 
-	#: () { (Literal::LocalDate) -> void } -> void
 	def each_day
 		total = number_of_days
 		return enum_for(__method__) { total } unless block_given?
 
 		day = 1
 		while day <= total
-			yield Literal::LocalDate.new(year: @year, month: @month, day:)
+			yield Literal::PlainDate.new(year: @year, month: @month, day:)
 			day += 1
 		end
 	end
 
-	#: () -> Literal::LocalDate
 	def first_day
-		Literal::LocalDate.new(year: @year, month: @month, day: 1)
+		Literal::PlainDate.new(year: @year, month: @month, day: 1)
 	end
 
-	#: () -> Literal::LocalDate
 	def last_day
-		Literal::LocalDate.new(year: @year, month: @month, day: number_of_days)
+		Literal::PlainDate.new(year: @year, month: @month, day: number_of_days)
 	end
 
-	#: () -> bool
 	def january?
 		1 == @month
 	end
 
-	#: () -> bool
 	def february?
 		2 == @month
 	end
 
-	#: () -> bool
 	def march?
 		3 == @month
 	end
 
-	#: () -> bool
 	def april?
 		4 == @month
 	end
 
-	#: () -> bool
 	def may?
 		5 == @month
 	end
 
-	#: () -> bool
 	def june?
 		6 == @month
 	end
 
-	#: () -> bool
 	def july?
 		7 == @month
 	end
 
-	#: () -> bool
 	def august?
 		8 == @month
 	end
 
-	#: () -> bool
 	def september?
 		9 == @month
 	end
 
-	#: () -> bool
 	def october?
 		10 == @month
 	end
 
-	#: () -> bool
 	def november?
 		11 == @month
 	end
 
-	#: () -> bool
 	def december?
 		12 == @month
 	end

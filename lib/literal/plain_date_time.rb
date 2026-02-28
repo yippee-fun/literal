@@ -2,7 +2,7 @@
 
 require "date"
 
-class Literal::LocalDateTime < Literal::Data
+class Literal::PlainDateTime < Literal::Data
 	include Comparable
 
 	ROUNDING_MODES = Literal::Instant::ROUNDING_MODES
@@ -24,28 +24,26 @@ class Literal::LocalDateTime < Literal::Data
 	prop :microsecond, _Integer(0..999), default: 0
 	prop :nanosecond, _Integer(0..999), default: 0
 
-	#: (String) -> Literal::LocalDateTime
 	def self.parse(value)
 		match = ISO8601_PATTERN.match(value)
-		raise ArgumentError unless match
-		raise ArgumentError if /(?:Z|[+-]\d{2}:?\d{2})\z/ === value
+		raise Literal::ArgumentError, "Invalid ISO 8601 local date time: #{value.inspect}" unless match
+		raise Literal::ArgumentError, "Expected a local date time without a timezone offset, got #{value.inspect}" if /(?:Z|[+-]\d{2}:?\d{2})\z/ === value
 
-		local_date = Literal::LocalDate.parse(match[1])
-		local_time = Literal::LocalTime.parse(match[2])
-		local_time.to_local_date_time(local_date)
+		local_date = Literal::PlainDate.parse(match[1])
+		local_time = Literal::PlainTime.parse(match[2])
+		local_time.to_plain_date_time(local_date)
 	end
 
-	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> Literal::LocalDateTime
 	def self.coerce(value)
 		case value
-		when Literal::LocalDateTime
+		when Literal::PlainDateTime
 			value
 		when Literal::ZonedDateTime
-			value.to_local_date_time
-		when Literal::LocalDate
-			Literal::LocalDateTime.new(year: value.year, month: value.month, day: value.day)
+			value.to_plain_date_time
+		when Literal::PlainDate
+			Literal::PlainDateTime.new(year: value.year, month: value.month, day: value.day)
 		when Date
-			Literal::LocalDateTime.new(year: value.year, month: value.month, day: value.day)
+			Literal::PlainDateTime.new(year: value.year, month: value.month, day: value.day)
 		when Time
 			total_subsec = value.nsec
 			millisecond = total_subsec / 1_000_000
@@ -53,7 +51,7 @@ class Literal::LocalDateTime < Literal::Data
 			microsecond = remainder / 1_000
 			nanosecond = remainder % 1_000
 
-			Literal::LocalDateTime.new(
+			Literal::PlainDateTime.new(
 				year: value.year,
 				month: value.month,
 				day: value.day,
@@ -67,121 +65,79 @@ class Literal::LocalDateTime < Literal::Data
 		when String
 			parse(value)
 		else
-			raise ArgumentError
+			raise Literal::ArgumentError, "Can't coerce #{value.inspect} to a Literal::PlainDateTime"
 		end
 	end
 
-	#: () -> Proc
 	def self.to_proc
 		method(:coerce).to_proc
 	end
 
-	#: (Literal::LocalDateTime, Literal::LocalDateTime) -> -1 | 0 | 1
-	def self.compare(one, two)
-		one <=> two
-	end
 
-	#: () -> Literal::LocalYear
 	def to_year
-		Literal::LocalYear.new(year: @year)
+		Literal::PlainYear.new(year: @year)
 	end
 
-	#: () -> Literal::LocalMonth
-	def to_month
-		Literal::LocalMonth.new(year: @year, month: @month)
+	def to_year_month
+		Literal::PlainYearMonth.new(year: @year, month: @month)
 	end
 
-	#: () -> Literal::LocalDate
-	def to_local_date
-		Literal::LocalDate.new(year: @year, month: @month, day: @day)
+	def to_plain_date
+		Literal::PlainDate.new(year: @year, month: @month, day: @day)
 	end
 
-	#: () -> Date
 	def to_date
 		Date.new(@year, @month, @day)
 	end
 
-	#: () -> Literal::LocalTime
-	def to_local_time
+	def to_plain_time
 		subsec = Rational((@millisecond * 1_000_000) + (@microsecond * 1_000) + @nanosecond, 1_000_000_000)
-		Literal::LocalTime.new(hour: @hour, minute: @minute, second: @second, subsec:)
+		Literal::PlainTime.new(hour: @hour, minute: @minute, second: @second, subsec:)
 	end
 
-	#: () -> Literal::YearMonth
-	def to_year_month
-		Literal::YearMonth.new(year: @year, month: @month)
-	end
-
-	#: () -> Literal::MonthDay
 	def to_month_day
 		Literal::MonthDay.new(month: @month, day: @day)
 	end
 
-	#: () -> Date
 	def to_ruby_date
 		Date.new(@year, @month, @day)
 	end
 
-	#: () -> Time
 	def to_ruby_time
 		total_subsec = (@millisecond * 1_000_000) + (@microsecond * 1_000) + @nanosecond
 		subsec_seconds = Rational(total_subsec, 1_000_000_000)
 		Time.new(@year, @month, @day, @hour, @minute, @second + subsec_seconds, 0)
 	end
 
-	#: () -> String
 	def iso8601
-		"#{to_date.iso8601}T#{to_local_time.iso8601}"
+		"#{to_date.iso8601}T#{to_plain_time.iso8601}"
 	end
 
 	alias_method :to_s, :iso8601
 
-	#: (?year: Integer, ?month: Integer, ?day: Integer, ?hour: Integer, ?minute: Integer, ?second: Integer, ?millisecond: Integer, ?microsecond: Integer, ?nanosecond: Integer) -> Literal::LocalDateTime
-	def with(
-		year: @year,
-		month: @month,
-		day: @day,
-		hour: @hour,
-		minute: @minute,
-		second: @second,
-		millisecond: @millisecond,
-		microsecond: @microsecond,
-		nanosecond: @nanosecond
-	)
-		Literal::LocalDateTime.new(year:, month:, day:, hour:, minute:, second:, millisecond:, microsecond:, nanosecond:)
-	end
-
-	#: (Literal::LocalDateTime) -> bool
-	def equals(other)
-		self == other
-	end
-
-	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> Literal::Duration
 	def since(other)
-		other = Literal::LocalDateTime.coerce(other)
+		other = Literal::PlainDateTime.coerce(other)
 
 		total = (to_ruby_time.to_r * 1_000_000_000).to_i - (other.to_ruby_time.to_r * 1_000_000_000).to_i
 
 		Literal::Duration.new(nanoseconds: total)
 	end
 
-	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> Literal::Duration
 	def until(other)
-		Literal::LocalDateTime.coerce(other).since(self)
+		Literal::PlainDateTime.coerce(other).since(self)
 	end
 
-	#: (unit: Symbol, increment: Integer, mode: ROUNDING_MODES) -> Literal::LocalDateTime
 	def round(unit:, increment: 1, mode: :half_expand)
-		raise ArgumentError unless increment > 0
-		raise ArgumentError unless ROUNDING_MODES === mode
+		raise Literal::ArgumentError, "increment must be positive, got #{increment}" unless increment > 0
+		raise Literal::ArgumentError, "mode must be one of #{ROUNDING_MODES.inspect}, got #{mode.inspect}" unless ROUNDING_MODES === mode
 
 		date = to_date
-		time = to_local_time.round(unit:, increment:, mode:)
+		time = to_plain_time.round(unit:, increment:, mode:)
 		if time.hour < @hour && [:hour, :hours, :minute, :minutes, :second, :seconds, :millisecond, :milliseconds, :microsecond, :microseconds, :nanosecond, :nanoseconds].include?(unit)
 			date += 1
 		end
 
-		Literal::LocalDateTime.new(
+		Literal::PlainDateTime.new(
 			year: date.year,
 			month: date.month,
 			day: date.day,
@@ -194,14 +150,12 @@ class Literal::LocalDateTime < Literal::Data
 		)
 	end
 
-	#: (Literal::TimeZone | String, disambiguation: Symbol) -> Literal::ZonedDateTime
 	def in_zone(time_zone, disambiguation: :compatible)
-		zone = Literal::TimeZone.coerce(time_zone)
+		zone = Literal::NamedTimeZone.coerce(time_zone)
 
-		zone.from_local_date_time(self, disambiguation:)
+		zone.from_plain_date_time(self, disambiguation:)
 	end
 
-	#: (Literal::DatePeriod) -> Literal::LocalDateTime
 	def +(other)
 		case other
 		when Literal::DatePeriod
@@ -226,7 +180,7 @@ class Literal::LocalDateTime < Literal::Data
 				month = 12 - ((month.abs - 1) % 12)
 			end
 
-			while day > (days_in_month = Literal::LocalMonth.days_in_month(year:, month:))
+			while day > (days_in_month = Literal::PlainYearMonth.days_in_month(year:, month:))
 				day -= days_in_month
 				month += 1
 				if month > 12
@@ -241,7 +195,7 @@ class Literal::LocalDateTime < Literal::Data
 					year -= 1
 					month = 12
 				end
-				day += Literal::LocalMonth.days_in_month(year:, month:)
+				day += Literal::PlainYearMonth.days_in_month(year:, month:)
 			end
 
 			hour += other.hours
@@ -279,7 +233,7 @@ class Literal::LocalDateTime < Literal::Data
 			carry, hour = hour.divmod(24)
 			day += carry
 
-			while day > (days_in_month = Literal::LocalMonth.days_in_month(year:, month:))
+			while day > (days_in_month = Literal::PlainYearMonth.days_in_month(year:, month:))
 				day -= days_in_month
 				month += 1
 				if month > 12
@@ -294,18 +248,26 @@ class Literal::LocalDateTime < Literal::Data
 					year -= 1
 					month = 12
 				end
-				day += Literal::LocalMonth.days_in_month(year:, month:)
+				day += Literal::PlainYearMonth.days_in_month(year:, month:)
 			end
 
-			Literal::LocalDateTime.new(year:, month:, day:, hour:, minute:, second:, millisecond:, microsecond:, nanosecond:)
+			Literal::PlainDateTime.new(year:, month:, day:, hour:, minute:, second:, millisecond:, microsecond:, nanosecond:)
 		else
-			raise ArgumentError
+			raise Literal::ArgumentError, "Expected a Literal::DatePeriod, got #{other.inspect}"
 		end
 	end
 
-	#: (Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String) -> -1 | 0 | 1 | nil
+	def -(other)
+		case other
+		when Literal::DatePeriod
+			self + (-other)
+		else
+			raise Literal::ArgumentError, "Expected a Literal::DatePeriod, got #{other.inspect}"
+		end
+	end
+
 	def <=>(other)
-		other = Literal::LocalDateTime.coerce(other)
+		other = Literal::PlainDateTime.coerce(other)
 
 		[
 			@year,
@@ -328,15 +290,5 @@ class Literal::LocalDateTime < Literal::Data
 			other.microsecond,
 			other.nanosecond,
 		]
-	end
-
-	#: (Literal::DatePeriod) -> Literal::LocalDateTime
-	def -(other)
-		case other
-		when Literal::DatePeriod
-			self + (-other)
-		else
-			raise ArgumentError
-		end
 	end
 end

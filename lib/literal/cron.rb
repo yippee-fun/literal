@@ -38,9 +38,8 @@ module Literal::Cron
 		7 => 0,
 	}.freeze
 
-	#: (String, start: Literal::LocalDateTime | Literal::ZonedDateTime | Literal::LocalDate | Date | Time | String, time_zone: Literal::TimeZone | String | nil) -> Literal::Recurrence
 	def parse(expression, start:, time_zone: nil)
-		start = Literal::LocalDateTime.coerce(start)
+		start = Literal::PlainDateTime.coerce(start)
 
 		minute, hour, day_of_month, month, day_of_week = parse_fields(expression)
 
@@ -58,7 +57,6 @@ module Literal::Cron
 		Literal::Recurrence.new(start:, rule:, time_zone:)
 	end
 
-	#: (Literal::Recurrence) -> String
 	def dump(recurrence)
 		recurrence => Literal::Recurrence
 		raise ArgumentError unless representable?(recurrence)
@@ -74,7 +72,6 @@ module Literal::Cron
 		].join(" ")
 	end
 
-	#: (Literal::Recurrence) -> bool
 	def representable?(recurrence)
 		recurrence => Literal::Recurrence
 		rule = recurrence.rule
@@ -88,7 +85,6 @@ module Literal::Cron
 			recurrence.rdates.empty?
 	end
 
-	#: (String) -> [Array[Integer], Array[Integer], Array[Integer], Array[Integer], Array[Integer]]
 	private def parse_fields(expression)
 		expression = normalize_expression(expression)
 		fields = expression.split
@@ -103,7 +99,6 @@ module Literal::Cron
 		[minute, hour, day_of_month, month, day_of_week]
 	end
 
-	#: (String, min: Integer, max: Integer, aliases: Hash[Integer | String, Integer]) -> Array[Integer]
 	private def parse_field(field, min:, max:, aliases: {})
 		return [] if field == "*"
 
@@ -114,7 +109,6 @@ module Literal::Cron
 		values.map { |value| aliases.fetch(value, value) }.uniq.sort
 	end
 
-	#: (String, min: Integer, max: Integer, aliases: Hash[Integer | String, Integer]) -> Array[Integer]
 	private def parse_part(part, min:, max:, aliases: {})
 		base, step = part.split("/", 2)
 		step = if step
@@ -151,7 +145,6 @@ module Literal::Cron
 		end
 	end
 
-	#: (String, min: Integer, max: Integer, aliases: Hash[Integer | String, Integer]) -> Integer
 	private def parse_value(raw, min:, max:, aliases: {})
 		upcased = raw.upcase
 		if aliases.key?(upcased)
@@ -167,7 +160,6 @@ module Literal::Cron
 		value
 	end
 
-	#: (Array[Integer], min: Integer, max: Integer) -> String
 	private def encode_field(values, min:, max:)
 		return "*" if values.empty?
 
@@ -179,7 +171,6 @@ module Literal::Cron
 		end
 	end
 
-	#: (String) -> String
 	private def normalize_expression(expression)
 		expression = expression.strip
 		macro = expression.downcase
