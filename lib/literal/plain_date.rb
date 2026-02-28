@@ -43,7 +43,6 @@ class Literal::PlainDate < Literal::Data
 		method(:coerce).to_proc
 	end
 
-
 	# Returns an Integer between 0 and 6, where 0 is Sunday.
 	def self.zellers_congruence(year:, month:, day:)
 		year, month, day = adjusted_date_for_zeller(year:, month:, day:)

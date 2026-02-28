@@ -16,7 +16,6 @@ class Literal::MonthDay < Literal::Data
 		new(month:, day:)
 	end
 
-
 	private def after_initialize
 		raise ArgumentError if @day > Literal::PlainYearMonth.days_in_month(year: 2000, month: @month)
 	end

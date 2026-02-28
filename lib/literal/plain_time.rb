@@ -54,7 +54,6 @@ class Literal::PlainTime < Literal::Data
 		method(:coerce).to_proc
 	end
 
-
 	def to_plain_date_time(*args)
 		millisecond, microsecond, nanosecond = split_subsec
 

@@ -42,6 +42,14 @@ class Literal::Instant < Literal::Data
 		coerce(Time.iso8601(value).utc)
 	end
 
+	def succ
+		Literal::Instant.new(unix_timestamp_in_nanoseconds: @unix_timestamp_in_nanoseconds + 1)
+	end
+
+	def pred
+		Literal::Instant.new(unix_timestamp_in_nanoseconds: @unix_timestamp_in_nanoseconds - 1)
+	end
+
 	def unix_timestamp_in_seconds
 		@unix_timestamp_in_nanoseconds / 1_000_000_000
 	end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Represents a concrete interval on the UTC timeline.
+# Represents a concrete interval between two instants.
 class Literal::Interval < Literal::Data
 	prop :from, Literal::Instant
 	prop :to, Literal::Instant
@@ -11,9 +11,20 @@ class Literal::Interval < Literal::Data
 		end
 	end
 
+	def to_range
+		@from..@to
+	end
+
 	def start_time(time_zone)
 		Literal::ZonedDateTime.new(
 			instant: @from,
+			time_zone:
+		)
+	end
+
+	def end_time(time_zone)
+		Literal::ZonedDateTime.new(
+			instant: @to,
 			time_zone:
 		)
 	end

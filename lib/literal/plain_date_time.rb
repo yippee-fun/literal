@@ -73,7 +73,6 @@ class Literal::PlainDateTime < Literal::Data
 		method(:coerce).to_proc
 	end
 
-
 	def to_year
 		Literal::PlainYear.new(year: @year)
 	end
