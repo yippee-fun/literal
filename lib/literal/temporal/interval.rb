@@ -15,20 +15,6 @@ class Literal::Interval < Literal::Data
 		@from..@to
 	end
 
-	def start_time(time_zone)
-		Literal::ZonedDateTime.new(
-			instant: @from,
-			time_zone:
-		)
-	end
-
-	def end_time(time_zone)
-		Literal::ZonedDateTime.new(
-			instant: @to,
-			time_zone:
-		)
-	end
-
 	def duration
 		Literal::Duration.new(
 			nanoseconds: @to.unix_timestamp_in_nanoseconds - @from.unix_timestamp_in_nanoseconds

@@ -108,16 +108,4 @@ class Literal::DatePeriod < Literal::Data
 			nanoseconds: -@nanoseconds
 		)
 	end
-
-	def ago(time_zone)
-		zone = Literal::TimeZone.coerce(time_zone)
-
-		(zone.now.to_plain_date_time - self).in_zone(zone)
-	end
-
-	def from_now(time_zone)
-		zone = Literal::TimeZone.coerce(time_zone)
-
-		(zone.now.to_plain_date_time + self).in_zone(zone)
-	end
 end
