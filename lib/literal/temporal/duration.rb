@@ -4,34 +4,39 @@
 class Literal::Duration < Literal::Data
 	include Comparable
 
-	prop :nanoseconds, Integer, reader: :public, default: 0
+	prop :ns, Integer, reader: :public, default: 0
 
 	def seconds
-		@nanoseconds / 1_000_000_000
+		@ns / Literal::Temporal::NANOSECONDS_IN_A_SECOND
 	end
 
 	alias_method :to_i, :seconds
 
+	def nanoseconds = @ns
+
 	def subseconds
-		Rational(@nanoseconds % 1_000_000_000, 1_000_000_000)
+		Rational(
+			@ns % Literal::Temporal::NANOSECONDS_IN_A_SECOND,
+			Literal::Temporal::NANOSECONDS_IN_A_SECOND
+		)
 	end
 
 	def to_f
-		@nanoseconds / 1_000_000_000.0
+		seconds.to_f
 	end
 
 	def <=>(other)
 		case other
-		in Literal::Duration
-			@nanoseconds <=> other.nanoseconds
+		when Literal::Duration
+			@ns <=> other.ns
 		end
 	end
 
 	def +(other)
 		case other
-		in Literal::Duration
+		when Literal::Duration
 			Literal::Duration.new(
-				nanoseconds: @nanoseconds + other.nanoseconds
+				ns: @ns + other.ns
 			)
 		else
 			raise Literal::ArgumentError, "Expected a Literal::Duration, got #{other.inspect}."
@@ -40,9 +45,9 @@ class Literal::Duration < Literal::Data
 
 	def -(other)
 		case other
-		in Literal::Duration
+		when Literal::Duration
 			Literal::Duration.new(
-				nanoseconds: @nanoseconds - other.nanoseconds
+				ns: @ns - other.ns
 			)
 		else
 			raise Literal::ArgumentError, "Expected a Literal::Duration, got #{other.inspect}."
@@ -50,8 +55,6 @@ class Literal::Duration < Literal::Data
 	end
 
 	def -@
-		Literal::Duration.new(
-			nanoseconds: -@nanoseconds
-		)
+		Literal::Duration.new(ns: -@ns)
 	end
 end

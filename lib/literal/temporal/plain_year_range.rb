@@ -49,4 +49,56 @@ class Literal::PlainYearRange < Literal::Data
 			year = year.next_year
 		end
 	end
+
+	def each_month
+		enum_for(__method__) { number_of_months } unless block_given?
+
+		each_year do |year|
+			year.each_month do |month|
+				yield month
+			end
+		end
+	end
+
+	def each_day
+		enum_for(__method__) { number_of_days } unless block_given?
+
+		day = @from.first_day
+		last_day = @to.last_day
+
+		while day <= last_day
+			yield day
+			day = day.next_day
+		end
+	end
+
+	def each_hour
+		enum_for(__method__) { number_of_hours } unless block_given?
+
+		each_day do |day|
+			day.each_hour do |hour|
+				yield hour
+			end
+		end
+	end
+
+	def each_minute
+		enum_for(__method__) { number_of_minutes } unless block_given?
+
+		each_hour do |hour|
+			hour.each_minute do |minute|
+				yield minute
+			end
+		end
+	end
+
+	def each_second
+		enum_for(__method__) { number_of_seconds } unless block_given?
+
+		each_minute do |minute|
+			minute.each_second do |second|
+				yield second
+			end
+		end
+	end
 end

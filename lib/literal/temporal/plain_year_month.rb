@@ -5,7 +5,7 @@ class Literal::PlainYearMonth < Literal::Data
 
 	MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].freeze
 	SHORT_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].freeze
-	NON_LEAP_YEAR_DAY_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].freeze
+	DAYS_IN_MONTH_NON_LEAP_YEAR = [nil, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31].freeze
 	ISO8601_PATTERN = /\A(-?\d{1,})-(\d{2})\z/
 
 	prop :year, Integer
@@ -42,7 +42,7 @@ class Literal::PlainYearMonth < Literal::Data
 		if month == 2 && Literal::PlainYear.leap_year?(year)
 			29
 		else
-			NON_LEAP_YEAR_DAY_IN_MONTH[month - 1]
+			DAYS_IN_MONTH_NON_LEAP_YEAR[month]
 		end
 	end
 
