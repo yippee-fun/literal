@@ -10,12 +10,15 @@ module Literal
 		loader.ignore("#{__dir__}/ruby_lsp")
 
 		loader.inflector.inflect(
-			"json_data_type" => "JSONDataType"
+			"json_data_type" => "JSONDataType",
+			"iso8601" => "ISO8601",
+			"utc_zone" => "UTCZone"
 		)
 
 		loader.collapse("#{__dir__}/literal/flags")
 		loader.collapse("#{__dir__}/literal/errors")
 		loader.collapse("#{__dir__}/literal/serializers")
+		loader.collapse("#{__dir__}/literal/temporal")
 
 		loader.setup
 	end

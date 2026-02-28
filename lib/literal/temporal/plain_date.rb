@@ -5,13 +5,15 @@ require "date"
 class Literal::PlainDate < Literal::Data
 	include Comparable
 
-	DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].freeze
-	SHORT_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].freeze
-	ISO8601_PATTERN = /\A(-?\d{1,})-(\d{2})-(\d{2})\z/
+	prop :year, Integer
+	prop :month, _Integer(1..12)
+	prop :day, _Integer(1..31)
 
-	prop :year, Integer, reader: :public
-	prop :month, _Integer(1..12), reader: :public
-	prop :day, _Integer(1..31), reader: :public
+	def after_initialize
+		unless @day <= Literal::PlainYearMonth.days_in_month(year: @year, month: @month)
+			raise Literal::ArgumentError, "Invalid date: #{inspect}"
+		end
+	end
 
 	def self.parse(value)
 		match = ISO8601_PATTERN.match(value)
@@ -52,7 +54,7 @@ class Literal::PlainDate < Literal::Data
 		era = (year >= 0) ? (year / 400) : ((year - 399) / 400)
 		yoe = year - (era * 400)
 		mp = month + ((month > 2) ? -3 : 9)
-		doy = ((153 * mp) + 2) / 5 + day - 1
+		doy = (((153 * mp) + 2) / 5) + day - 1
 		doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy
 
 		(era * 146_097) + doe - 719_468
@@ -77,12 +79,6 @@ class Literal::PlainDate < Literal::Data
 		end
 
 		[year, month, day].freeze
-	end
-
-	private def after_initialize
-		unless @day <= Literal::PlainYearMonth.days_in_month(year: @year, month: @month)
-			raise Literal::ArgumentError, "#{@day} is not a valid day for month #{@month} in year #{@year}"
-		end
 	end
 
 	def name
@@ -382,5 +378,4 @@ class Literal::PlainDate < Literal::Data
 		days_until_target = 7 if days_until_target == 0
 		self - Literal::DatePeriod.new(days: days_until_target)
 	end
-
 end
