@@ -69,7 +69,7 @@ module Literal::Temporal
 	MonthInt = _Integer(1..12)
 
 	# A union of all english weekday names
-	EnglishWeekdayName = _Union(*WEEK_DAY_NAMES)
+	EnglishWeekdayName = _Union(*WEEKDAY_NAMES)
 
 	# A union of short english weekday names
 	ShortEnglishWeekdayName = _Union(*SHORT_WEEKDAY_NAMES)

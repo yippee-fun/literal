@@ -1,21 +1,6 @@
 # frozen_string_literal: true
 
 class Literal::TimeZone < Literal::Data
-	def self.coerce(value)
-		case value
-		when Literal::TimeZone
-			value
-		when String
-			if Literal::FixedOffsetTimeZone::OFFSET_PATTERN === value
-				Literal::FixedOffsetTimeZone.parse(value)
-			else
-				Literal::NamedTimeZone.new(value)
-			end
-		else
-			raise Literal::ArgumentError, "Cannot coerce #{value.inspect} into a Literal::TimeZone"
-		end
-	end
-
 	def now
 		to_zoned_date_time(Literal::Instant.now)
 	end

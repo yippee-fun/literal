@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::PlainDateTimeRange < Literal::Data
-	prop :from, Literal::Temporal::PlainDateTime
-	prop :to, Literal::Temporal::PlainDateTime
+	prop :from, Literal::PlainDateTime
+	prop :to, Literal::PlainDateTime
 
 	def after_initialize
 		if @from > @to
