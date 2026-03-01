@@ -38,6 +38,12 @@ module Literal::Temporal
 	# Month offsets used by the day-of-week congruence formula, starting with January in position 0
 	DAY_OF_WEEK_MONTH_OFFSETS = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4].freeze
 
+	# 100
+	YEARS_IN_A_CENTURY = 100
+
+	# 10
+	YEARS_IN_A_DECADE = 10
+
 	# 24
 	HOURS_IN_A_DAY = 24
 
@@ -58,6 +64,25 @@ module Literal::Temporal
 
 	# 12
 	MONTHS_IN_YEAR = 12
+
+	# 10
+	DECADES_IN_CENTURY = 10
+
+	# 2
+	WEEKS_IN_A_FORTNIGHT = 2
+
+	# 7
+	DAYS_IN_A_WEEK = 7
+
+	# 86,400,000,000,000
+	NANOSECONDS_IN_A_DAY = SECONDS_IN_A_DAY * NANOSECONDS_IN_A_SECOND
+
+	# 146,097
+	# This is useful for normalizing between large numbers of days and years in O(1) time
+	DAYS_IN_A_400_YEAR_CYCLE = 146_097
+
+	# 2,629,746,000,000,000
+	NANOSECONDS_IN_A_MONTH = (DAYS_IN_A_400_YEAR_CYCLE * NANOSECONDS_IN_A_DAY) / 400 / 12
 
 	# A positive integer constrained to the most number of days possible in any month
 	DayInt = _Integer(1..31)
@@ -204,5 +229,9 @@ module Literal::Temporal
 	# Returns true if the given year is BCE (Before Common Era), false if CE (Common Era)
 	def bce?(year:)
 		year < 0
+	end
+
+	def current_instant_ns
+		Process.clock_gettime(Process::CLOCK_REALTIME, :nanosecond)
 	end
 end

@@ -7,5 +7,9 @@ class Literal::Instant < Literal::Data
 	include Comparable
 
 	# The number of nanoseconds since the Unix Epoch (January 1, 1970, 00:00:00 UTC).
-	prop :unix_timestamp_in_nanoseconds, Integer
+	prop :ns, Integer
+
+	def self.now
+		Literal::Instant.new(ns: Literal::Temporal.current_instant_ns)
+	end
 end

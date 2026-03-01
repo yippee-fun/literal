@@ -169,7 +169,7 @@ class Literal::PlainDate < Literal::Data
 		days = Literal::Temporal.days_since_epoch(year: @year, month: @month, day: @day) -
 			Literal::Temporal.days_since_epoch(year: other.year, month: other.month, day: other.day)
 
-		Literal::DatePeriod.new(days:)
+		Literal::Period.new(days:)
 	end
 
 	def until(other)
@@ -293,12 +293,12 @@ class Literal::PlainDate < Literal::Data
 	private def next_day_of_week(target_day_index)
 		days_until_target = (target_day_index + 7 - current_day_of_week_index) % 7
 		days_until_target = 7 if days_until_target == 0
-		self + Literal::DatePeriod.new(days: days_until_target)
+		self + Literal::Period.new(days: days_until_target)
 	end
 
 	private def prev_day_of_week(target_day_index)
 		days_until_target = (current_day_of_week_index - target_day_index) % 7
 		days_until_target = 7 if days_until_target == 0
-		self - Literal::DatePeriod.new(days: days_until_target)
+		self - Literal::Period.new(days: days_until_target)
 	end
 end
