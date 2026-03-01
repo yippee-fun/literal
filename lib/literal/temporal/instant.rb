@@ -12,4 +12,42 @@ class Literal::Instant < Literal::Data
 	def self.now
 		Literal::Instant.new(ns: Literal::Temporal.current_instant_ns)
 	end
+
+	def <=>(other)
+		case other
+		when Literal::Instant
+			@ns <=> other.ns
+		end
+	end
+
+	def -(other)
+		case other
+		when Literal::Instant
+			Literal::Duration.new(ns: @ns - other.ns)
+		when Literal::Duration
+			Literal::Instant.new(ns: @ns - other.ns)
+		else
+			raise Literal::ArgumentError, "Expected a Literal::Instant or Literal::Duration, got #{other.inspect}."
+		end
+	end
+
+	def +(other)
+		case other
+		when Literal::Duration
+			Literal::Instant.new(ns: @ns + other.ns)
+		else
+			raise Literal::ArgumentError, "Expected a Literal::Duration, got #{other.inspect}."
+		end
+	end
+
+	def next_nanosecond
+		Literal::Instant.new(ns: @ns + 1)
+	end
+
+	def prev_nanosecond
+		Literal::Instant.new(ns: @ns - 1)
+	end
+
+	alias_method :succ, :next_nanosecond
+	alias_method :pred, :prev_nanosecond
 end
