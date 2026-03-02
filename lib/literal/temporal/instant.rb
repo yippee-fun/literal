@@ -50,4 +50,8 @@ class Literal::Instant < Literal::Data
 
 	alias_method :succ, :next_nanosecond
 	alias_method :pred, :prev_nanosecond
+
+	def inspect
+		"Literal::Instant(#{@ns})"
+	end
 end

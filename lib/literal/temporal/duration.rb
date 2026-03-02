@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# A specific duration of time.
+# An absolute duration of time with nanosecond precision
 class Literal::Duration < Literal::Data
 	include Comparable
 
