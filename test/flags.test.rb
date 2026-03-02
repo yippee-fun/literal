@@ -8,6 +8,28 @@ class Example < Literal::Flags8
 	)
 end
 
+test "define with ArgumentError" do
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Flags8) do
+			define(
+				bold: 0,
+				italic: 1,
+				underlined: 1, # Duplicate value
+			)
+		end
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Flags8) do
+			define(
+				bold: 0,
+				italic: 1,
+				underlined: nil, # non-Integer value
+			)
+		end
+	end
+end
+
 test "with" do
 	a = Example.new(italic: true, underlined: true)
 	b = a.with(bold: true, underlined: false)
