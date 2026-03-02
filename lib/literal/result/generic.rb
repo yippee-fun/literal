@@ -34,8 +34,7 @@ class Literal::Result::Generic
 			Literal.check(caught.result, self)
 			caught.result
 		else
-			Literal.check(caught, @success_type)
-			success(caught)
+			raise Literal::ArgumentError.new("Expected block to throw a success or failure result")
 		end
 	end
 
