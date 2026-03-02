@@ -64,7 +64,7 @@ class Literal::Failure < Literal::Result
 	end
 
 	def map(type)
-		raise ArgumentError unless block_given?
+		raise Literal::ArgumentError unless block_given?
 
 		Literal::Failure.new(
 			@error,
@@ -73,13 +73,18 @@ class Literal::Failure < Literal::Result
 		)
 	end
 
+	def tap
+		raise Literal::ArgumentError unless block_given?
+		self
+	end
+
 	def then
-		raise ArgumentError unless block_given?
+		raise Literal::ArgumentError unless block_given?
 		self
 	end
 
 	def value_or
-		raise ArgumentError unless block_given?
+		raise Literal::ArgumentError unless block_given?
 		yield(@error)
 	end
 end

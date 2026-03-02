@@ -64,7 +64,7 @@ class Literal::Success < Literal::Result
 	end
 
 	def map(type)
-		raise ArgumentError unless block_given?
+		raise Literal::ArgumentError unless block_given?
 		result = yield(@value)
 
 		Literal::Success.new(
@@ -74,8 +74,14 @@ class Literal::Success < Literal::Result
 		)
 	end
 
+	def tap
+		raise Literal::ArgumentError unless block_given?
+		yield(@value)
+		self
+	end
+
 	def then
-		raise ArgumentError unless block_given?
+		raise Literal::ArgumentError unless block_given?
 		result = yield(@value)
 
 		case result
@@ -97,7 +103,7 @@ class Literal::Success < Literal::Result
 	end
 
 	def value_or
-		raise ArgumentError unless block_given?
+		raise Literal::ArgumentError unless block_given?
 		@value
 	end
 end
