@@ -9,7 +9,7 @@ class Literal::SerializationContext
 
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 
-		@type = _Union(*@serializers.map(&:type))
+		@type = _TaggedUnion(**@serializers.to_h { |s| [s.tag, s.type] })
 		@kind = _Union(*@serializers.map(&:kind))
 
 		@map = @serializers.to_h { |it| [it.tag, it] }.freeze
