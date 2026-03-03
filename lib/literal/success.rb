@@ -74,13 +74,13 @@ class Literal::Success < Literal::Result
 		)
 	end
 
-	def tap
+	def also
 		raise Literal::ArgumentError unless block_given?
 		yield(@value)
 		self
 	end
 
-	def then
+	def and_then
 		raise Literal::ArgumentError unless block_given?
 		result = yield(@value)
 

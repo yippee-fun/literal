@@ -73,12 +73,12 @@ class Literal::Failure < Literal::Result
 		)
 	end
 
-	def tap
+	def also
 		raise Literal::ArgumentError unless block_given?
 		self
 	end
 
-	def then
+	def and_then
 		raise Literal::ArgumentError unless block_given?
 		self
 	end

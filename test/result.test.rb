@@ -31,29 +31,29 @@ test "result block must throw, not return, a result" do
 	assert_equal "Expected block to throw a success or failure result", error.message
 end
 
-test "then adopts returned success type" do
+test "and_then adopts returned success type" do
 	result = Literal::Result(Integer, Symbol) { |type| type.success(42) }
-		.then { |value| Literal::Result(String, RuntimeError) { |type| type.success(value.to_s) } }
+		.and_then { |value| Literal::Result(String, RuntimeError) { |type| type.success(value.to_s) } }
 
 	assert result.success?
 	assert_equal "42", result.value!
 	assert Literal::Result(String, _Union(Symbol, RuntimeError)) === result
 end
 
-test "then unions failure types" do
+test "and_then unions failure types" do
 	result = Literal::Result(Integer, Symbol) { |type| type.success(42) }
-		.then { Literal::Result(String, RuntimeError) { |type| type.failure(RuntimeError.new("boom")) } }
+		.and_then { Literal::Result(String, RuntimeError) { |type| type.failure(RuntimeError.new("boom")) } }
 
 	assert result.failure?
 	assert RuntimeError === result.error!
 	assert Literal::Result(String, _Union(Symbol, RuntimeError)) === result
 end
 
-test "failure then does not yield" do
+test "failure and_then does not yield" do
 	original = Literal::Result(Integer, Symbol) { |type| type.failure(:nope) }
 	yielded = false
 
-	result = original.then do
+	result = original.and_then do
 		yielded = true
 		Literal::Result(String, RuntimeError) { |type| type.success("ok") }
 	end
@@ -62,11 +62,35 @@ test "failure then does not yield" do
 	assert result.equal?(original)
 end
 
-test "then block must return result" do
+test "also yields success value and returns self" do
+	original = Literal::Result(Integer, Symbol) { |type| type.success(42) }
+	yielded = nil
+
+	result = original.also do |value|
+		yielded = value
+	end
+
+	assert_equal 42, yielded
+	assert result.equal?(original)
+end
+
+test "failure also does not yield" do
+	original = Literal::Result(Integer, Symbol) { |type| type.failure(:nope) }
+	yielded = false
+
+	result = original.also do
+		yielded = true
+	end
+
+	refute yielded
+	assert result.equal?(original)
+end
+
+test "and_then block must return result" do
 	result = Literal::Result(Integer, Symbol) { |type| type.success(42) }
 
 	error = assert_raises(Literal::ArgumentError) do
-		result.then(&:to_s)
+		result.and_then(&:to_s)
 	end
 
 	assert_equal "Expected block to return a Literal::Result, got String", error.message
