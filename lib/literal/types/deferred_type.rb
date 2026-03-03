@@ -13,6 +13,10 @@ class Literal::Types::DeferredType
 		"_Deferred"
 	end
 
+	def materialize
+		@block.call
+	end
+
 	def ===(other)
 		@block.call === other
 	end

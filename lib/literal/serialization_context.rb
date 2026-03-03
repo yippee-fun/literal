@@ -22,6 +22,8 @@ class Literal::SerializationContext
 	attr_reader :kind
 
 	def serialize(value, type:, strict: true)
+		type = type.materialize if type in Literal::Types::DeferredType
+
 		serializer = serializer_for_type(type)
 
 		if strict && !(type === value)
@@ -38,6 +40,8 @@ class Literal::SerializationContext
 	end
 
 	def deserialize(value, type:, strict: true)
+		type = type.materialize if type in Literal::Types::DeferredType
+
 		serializer = serializer_for_type(type)
 
 		if strict && !(_JSONData === value)
