@@ -9,7 +9,7 @@ class Literal::SerializationContext
 
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 
-		@type = _TaggedUnion(**@serializers.to_h { |s| [s.tag, s.type] })
+		@type = _TaggedUnion(**@serializers.to_h { |serializer| [serializer.tag, serializer.type] })
 		@kind = _Union(*@serializers.map(&:kind))
 
 		@map = @serializers.to_h { |it| [it.tag, it] }.freeze
@@ -23,6 +23,7 @@ class Literal::SerializationContext
 
 	def serialize(value, type:, strict: true)
 		type = type.materialize if type in Literal::Types::DeferredType
+		return nil if nil === value && type === nil
 
 		serializer = serializer_for_type(type)
 
@@ -41,6 +42,7 @@ class Literal::SerializationContext
 
 	def deserialize(value, type:, strict: true)
 		type = type.materialize if type in Literal::Types::DeferredType
+		return nil if nil === value && type === nil
 
 		serializer = serializer_for_type(type)
 
@@ -76,4 +78,5 @@ class Literal::SerializationContext
 			raise Literal::ArgumentError, "No serializer for tag #{tag.inspect}"
 		end
 	end
+
 end

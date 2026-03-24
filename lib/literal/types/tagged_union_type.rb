@@ -31,7 +31,9 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def ===(value)
-		@members.each_value.any? { |type| type === value }
+		Literal.with_match_guard(self, value) do
+			@members.each_value.any? { |type| type === value }
+		end
 	end
 
 	def [](tag)

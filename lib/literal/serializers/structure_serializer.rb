@@ -1,15 +1,29 @@
 # frozen_string_literal: true
 
+class Literal::Serializer::StructureType
+	include Literal::Type
+
+	def initialize(kind)
+		@kind = kind
+		freeze
+	end
+
+	def inspect
+		"SerializableStructure"
+	end
+
+	def ===(object)
+		Literal::DataStructure === object && object.class.literal_properties.all? { |property| @kind === property.type }
+	end
+end
+
 class Literal::StructureSerializer < Literal::Serializer
 	Tag = :structure
 
 	def initialize(context)
 		@context = context
 
-		@type = _Predicate("SerializableStructure") do |object|
-			Literal::DataStructure === object && object.class.literal_properties.all? { |property| @context.kind === property.type }
-		end
-
+		@type = Literal::Serializer::StructureType.new(@context.kind)
 		@kind = _Predicate("SerializableStructureKind") do |type|
 			Class === type && type < Literal::DataStructure && type.literal_properties.all? { |property| @context.kind === property.type }
 		end

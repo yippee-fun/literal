@@ -111,6 +111,20 @@ module Literal
 		end
 	end
 
+	def self.with_match_guard(type, value)
+		state = (Thread.current[:literal_match_state] ||= {})
+		key = [type.class, type.object_id, value.object_id]
+
+		return false if state[key]
+
+		added = true
+		state[key] = true
+		yield
+	ensure
+		state&.delete(key) if added
+		Thread.current[:literal_match_state] = nil if state&.empty?
+	end
+
 	def self.subtype?(type, supertype, context: nil)
 		context ||= SubtypeContext.new
 		raw_key = [type.object_id, supertype.object_id]

@@ -37,15 +37,17 @@ class Literal::Types::UnionType
 	def ===(value)
 		return true if @primitives.include?(value)
 
-		types = @types
+		Literal.with_match_guard(self, value) do
+			types = @types
 
-		i, len = 0, types.size
-		while i < len
-			return true if types[i] === value
-			i += 1
+			i, len = 0, types.size
+			while i < len
+				return true if types[i] === value
+				i += 1
+			end
+
+			false
 		end
-
-		false
 	end
 
 	def resolve(value)
