@@ -3,8 +3,12 @@
 class Literal::Types::DeferredType
 	include Literal::Type
 
+	UNMATERIALIZED = Object.new.freeze
+
 	def initialize(&block)
 		@block = block
+		@materialized = UNMATERIALIZED
+		@materializing = false
 	end
 
 	attr_reader :block
@@ -14,14 +18,20 @@ class Literal::Types::DeferredType
 	end
 
 	def materialize
-		@block.call
+		return @materialized unless UNMATERIALIZED.equal?(@materialized)
+		return self if @materializing
+
+		@materializing = true
+		@materialized = @block.call
+	ensure
+		@materializing = false
 	end
 
 	def ===(other)
-		@block.call === other
+		materialize === other
 	end
 
 	def >=(other, context: nil)
-		Literal.subtype?(other, @block.call, context:)
+		Literal.subtype?(other, materialize, context:)
 	end
 end

@@ -139,8 +139,8 @@ module Literal
 
 		subtype = type
 
-		subtype = subtype.block.call if Types::DeferredType === subtype
-		supertype = supertype.block.call if Types::DeferredType === supertype
+		subtype = subtype.materialize if Types::DeferredType === subtype
+		supertype = supertype.materialize if Types::DeferredType === supertype
 		resolved_key = [subtype.object_id, supertype.object_id]
 
 		if resolved_key != raw_key
