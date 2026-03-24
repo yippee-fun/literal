@@ -151,6 +151,77 @@ test "tagged union serialization roundtrip" do
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
 end
 
+test "implicit nil serialization" do
+	type = Example.type
+	assert_equal nil, Example.serialize(nil, type:)
+end
+
+test "implicit string serialization" do
+	type = Example.type
+	assert_equal ["string", "example"], Example.serialize("example", type:)
+end
+
+test "implicit symbol serialization" do
+	type = Example.type
+	assert_equal ["symbol", "example"], Example.serialize(:example, type:)
+end
+
+test "implicit integer serialization" do
+	type = Example.type
+	assert_equal ["integer", 42], Example.serialize(42, type:)
+end
+
+test "implicit float serialization" do
+	type = Example.type
+	assert_equal ["float", 3.14], Example.serialize(3.14, type:)
+end
+
+test "implicit boolean serialization" do
+	type = Example.type
+	assert_equal ["boolean", true], Example.serialize(true, type:)
+end
+
+test "implicit date serialization" do
+	type = Example.type
+	assert_equal ["date", "2025-01-13"], Example.serialize(Date.new(2025, 1, 13), type:)
+end
+
+test "implicit array serialization" do
+	type = Example.type
+	value = [1, 2, 3]
+
+	assert_equal ["array", [["integer", 1], ["integer", 2], ["integer", 3]]], Example.serialize(value, type:)
+end
+
+test "implicit set serialization" do
+	type = Example.type
+	value = Set[1, 2, 3]
+
+	assert_equal ["set", [["integer", 1], ["integer", 2], ["integer", 3]]], Example.serialize(value, type:)
+end
+
+test "implicit branch precedence" do
+	tag, type = Example.type.resolve(nil)
+	assert_equal :nilable, tag
+	assert_equal "_Nilable(_Deferred)", type.inspect
+
+	tag, type = Example.type.resolve([1, 2, 3])
+	assert_equal :array, tag
+	assert_equal "_Array(_Deferred)", type.inspect
+
+	tag, type = Example.type.resolve(Set[1, 2, 3])
+	assert_equal :set, tag
+	assert_equal "_Set(_Deferred)", type.inspect
+end
+
+test "recursive kind support" do
+	assert Example.kind === Example.type
+	assert Example.kind === _Union(Example.type, String)
+	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
+	assert Example.kind === _Array(Example.type)
+	assert Example.kind === _Set(Example.type)
+end
+
 test "union serialization roundtrip" do
 	type = _Union(String, Integer)
 	name_original = "Joel"

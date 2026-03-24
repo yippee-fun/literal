@@ -335,17 +335,17 @@ module Literal::Types
 	def _Pattern(regex, &block)
 		raise ArgumentError.new("Block required for Pattern") unless block
 
-		-> (value) {
+		_Predicate("Pattern(#{regex.inspect})") do |value|
 			if (data = regex.match(value))
 				!!block.call(*data.captures, **data.named_captures&.transform_keys(&:to_sym))
 			else
 				false
 			end
-		}
+		end
 	end
 
-	def _Predicate(message, &block)
-		PredicateType.new(message:, block:)
+	def _Predicate(message, recursion: PredicateType::RECURSION_REJECT, &block)
+		PredicateType.new(message:, block:, recursion:)
 	end
 
 	# Matches if the value is a `Proc` or responds to `#to_proc`.

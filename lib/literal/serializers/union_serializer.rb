@@ -6,7 +6,7 @@ class Literal::UnionSerializer < Literal::Serializer
 	def initialize(context)
 		@context = context
 		@type = @context.type
-		@kind = _Predicate("SerializableUnionKind") do |union|
+		@kind = _Predicate("SerializableUnionKind", recursion: :accept) do |union|
 			next false unless Literal::Types::UnionType === union
 
 			tags = Set[]

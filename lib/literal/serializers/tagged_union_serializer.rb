@@ -6,7 +6,7 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	def initialize(context)
 		@context = context
 		@type = _Union(@context.type)
-		@kind = _Predicate("SerializableTaggedUnion") do |type|
+		@kind = _Predicate("SerializableTaggedUnion", recursion: :accept) do |type|
 			Literal::Types::TaggedUnionType === type && type.members.each_value.all? { |member_type| @context.kind === member_type }
 		end
 	end

@@ -14,3 +14,17 @@ test "predicates are subtypes of themselves" do
 
 	assert_subtype predicate, predicate
 end
+
+test "predicate recursion rejects by default" do
+	predicate = nil
+	predicate = _Predicate("recursive") { |_it| predicate === :value }
+
+	refute predicate === :value
+end
+
+test "predicate recursion can accept" do
+	predicate = nil
+	predicate = _Predicate("recursive", recursion: :accept) { |_it| predicate === :value }
+
+	assert predicate === :value
+end
