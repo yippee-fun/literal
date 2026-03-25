@@ -20,11 +20,17 @@ class Literal::HashSerializer < Literal::Serializer
 		key_type = type.key_type
 		value_type = type.value_type
 
-		value.to_h do |key, item|
+		serialized_entries = value.map do |key, item|
 			[
 				serialize_contents(key, type: key_type),
 				serialize_contents(item, type: value_type),
 			]
+		end
+
+		if serialized_entries.all? { |key, _item| String === key }
+			serialized_entries.to_h
+		else
+			serialized_entries
 		end
 	end
 

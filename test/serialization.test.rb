@@ -200,6 +200,14 @@ test "implicit set serialization" do
 	assert_equal ["set", [["integer", 1], ["integer", 2], ["integer", 3]]], Example.serialize(value, type:)
 end
 
+test "implicit hash serialization" do
+	type = Example.type
+	value = { a: 1, b: 2 }
+
+	assert_equal ["hash", [[["symbol", "a"], ["integer", 1]], [["symbol", "b"], ["integer", 2]]]], Example.serialize(value, type:)
+	assert_equal value, Example.deserialize(Example.serialize(value, type:), type:)
+end
+
 test "implicit branch precedence" do
 	tag, type = Example.type.resolve(nil)
 	assert_equal :nilable, tag
