@@ -73,6 +73,8 @@ class Literal::Types::ConstraintType
 		case other
 		when Module
 			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
+		else
+			false
 		end
 	end
 
