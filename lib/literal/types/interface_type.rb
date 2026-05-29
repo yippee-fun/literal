@@ -35,15 +35,30 @@ class Literal::Types::InterfaceType
 			public_methods = other.public_instance_methods.to_set
 			@methods.subset?(public_methods)
 		when Literal::Types::IntersectionType
-			other.types.any? { |type| Literal.subtype?(type, self, context:) }
+			@methods.all? { |method| other.types.any? { |type| covers_method?(type, method, context:) } }
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |type| Literal.subtype?(type, self, context:) }
+			@methods.all? { |method| other.object_constraints.any? { |type| covers_method?(type, method, context:) } }
 		else
 			if OwnClassTypeMethodOwners.include?(other.method(:===).owner)
 				self === other
 			else
 				false
 			end
+		end
+	end
+
+	private def covers_method?(type, method, context:)
+		case type
+		when Literal::Types::InterfaceType
+			type.methods.include?(method)
+		when Literal::Types::IntersectionType
+			type.types.any? { |inner_type| covers_method?(inner_type, method, context:) }
+		when Literal::Types::ConstraintType
+			type.object_constraints.any? { |constraint| covers_method?(constraint, method, context:) }
+		when Module
+			type.public_instance_methods.include?(method)
+		else
+			Literal.subtype?(type, Literal::Types::InterfaceType.new([method]), context:)
 		end
 	end
 

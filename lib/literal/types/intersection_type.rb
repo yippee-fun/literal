@@ -39,6 +39,8 @@ class Literal::Types::IntersectionType
 					Literal.subtype?(other_type, type, context:)
 				end
 			end
+		when Literal::Types::InterfaceType
+			@types.all? { |type| Literal.subtype?(other, type, context:) }
 		when Literal::Types::ConstraintType
 			@types.all? do |type|
 				other.object_constraints.any? do |object_constraint|

@@ -17,8 +17,12 @@ end
 test "hierarchy" do
 	assert_subtype _Intersection(String), _Intersection(String)
 	assert_subtype _Constraint(String, size: 1..5), _Intersection(String)
+	assert_subtype _Interface(:a, :b), _Intersection(_Interface(:a), _Interface(:b))
+	assert_subtype _Interface(:a, :b, :c), _Intersection(_Interface(:a, :b), _Interface(:c))
 
 	refute_subtype _Constraint(Integer, size: 1..2), _Intersection(String)
+	refute_subtype _Interface(:a), _Intersection(_Interface(:a), _Interface(:b))
+	refute_subtype _Interface(:a, :c), _Intersection(_Interface(:a, :b), _Interface(:c))
 end
 
 test "error message" do

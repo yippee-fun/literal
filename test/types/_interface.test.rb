@@ -19,10 +19,18 @@ test "hierarchy" do
 	assert_subtype _Interface(:a, :b), _Interface(:a, :b)
 	assert_subtype _Callable, _Interface(:call)
 	assert_subtype _Procable, _Interface(:to_proc)
+	assert_subtype _Intersection(_Interface(:a), _Interface(:b)), _Interface(:a, :b)
+	assert_subtype _Intersection(_Interface(:a, :b), _Interface(:c)), _Interface(:a, :b, :c)
+	assert_subtype _Constraint(_Interface(:a), _Interface(:b)), _Interface(:a, :b)
+	assert_subtype _Constraint(_Interface(:a, :b), _Interface(:c)), _Interface(:a, :b, :c)
 
 	refute_subtype _Interface(:b), _Interface(:a)
 	refute_subtype _Interface(:a), _Interface(:a, :b)
 	refute_subtype Proc, _Interface(:to_proc, :random_method)
+	refute_subtype _Intersection(_Interface(:a), _Interface(:c)), _Interface(:a, :b)
+	refute_subtype _Intersection(_Interface(:a, :c), _Interface(:d)), _Interface(:a, :b, :c)
+	refute_subtype _Constraint(_Interface(:a), _Interface(:c)), _Interface(:a, :b)
+	refute_subtype _Constraint(_Interface(:a, :c), _Interface(:d)), _Interface(:a, :b, :c)
 
 	assert_subtype "Hello", _Interface(:to_s)
 	assert_subtype 1, _Interface(:+, :-)

@@ -55,6 +55,10 @@ class Literal::Types::ConstraintType
 			end
 
 			true
+		when Literal::Types::InterfaceType
+			return false unless @property_constraints.empty?
+
+			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		when Literal::Types::IntersectionType
 			other_object_constraints = other.types
 			return false unless @object_constraints.all? do |constraint|
