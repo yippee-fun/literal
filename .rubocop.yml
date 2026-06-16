@@ -9,3 +9,6 @@ AllCops:
 
 Lint/ConstantDefinitionInBlock:
   Enabled: false
+
+Layout/HashAlignment:
+  Enabled: false

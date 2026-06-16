@@ -156,7 +156,7 @@ module Literal::Types
 		)
 	end
 
-	#  Matches if the value is an `Enumerable` and all its elements match the given type.
+	# Matches if the value is an `Enumerable` and all its elements match the given type.
 	# ```ruby
 	# _Enumerable(String)
 	# ```
