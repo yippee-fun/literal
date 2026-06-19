@@ -82,6 +82,18 @@ module Literal
 		Literal::Brand.new(...)
 	end
 
+	def self.Function(sig, &)
+		if block_given?
+			Literal::Function::Generic.new(sig).new(&)
+		else
+			Literal::Function::Generic.new(sig)
+		end
+	end
+
+	def self.Pipeline(...)
+		Literal::Pipeline.new(...)
+	end
+
 	def self.Result(success_type, failure_type, &)
 		result_type = Result::Generic.new(success_type, failure_type)
 

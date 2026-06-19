@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::Success < Literal::Result
+	include Literal::Types
+
 	class Generic
 		include Literal::Type
 
@@ -89,13 +91,13 @@ class Literal::Success < Literal::Result
 			Literal::Failure.new(
 				result.error!,
 				success_type: result.success_type,
-				failure_type: Literal::Types::_Union(@failure_type, result.failure_type)
+				failure_type: unify_failure_types(@failure_type, result.failure_type)
 			)
 		when Literal::Success
 			Literal::Success.new(
 				result.value!,
 				success_type: result.success_type,
-				failure_type: Literal::Types::_Union(@failure_type, result.failure_type)
+				failure_type: unify_failure_types(@failure_type, result.failure_type)
 			)
 		else
 			raise Literal::ArgumentError.new("Expected block to return a Literal::Result, got #{result.class.inspect}")
@@ -105,5 +107,12 @@ class Literal::Success < Literal::Result
 	def value_or
 		raise Literal::ArgumentError unless block_given?
 		@value
+	end
+
+	private def unify_failure_types(a, b)
+		return b if _Never == a
+		return a if _Never == b
+
+		_Union(a, b)
 	end
 end
