@@ -24,4 +24,13 @@ class Literal::FloatSerializer < Literal::Serializer
 	def deserialize(raw, type:)
 		raw
 	end
+
+	def coerce(raw)
+		case raw
+		when Integer
+			raw.to_f
+		else
+			raw
+		end
+	end
 end

@@ -1,28 +1,47 @@
 # frozen_string_literal: true
 
+class Literal::Serializer::UnionType
+	include Literal::Type
+
+	def initialize(context)
+		@context = context
+		freeze
+	end
+
+	def inspect
+		"SerializableUnion"
+	end
+
+	def ===(value)
+		@context.type === value
+	end
+
+	def >=(other, context: nil)
+		return false unless Literal::Types::UnionType === other
+
+		tags = Set[]
+
+		other.each.all? do |member|
+			begin
+				tag = @context.tag_for_type(member)
+			rescue Literal::ArgumentError
+				next false
+			end
+
+			next false if tags.include?(tag)
+
+			tags << tag
+		end
+	end
+end
+
 class Literal::UnionSerializer < Literal::Serializer
 	Tag = :union
 
 	def initialize(context)
 		@context = context
-		@type = @context.type
-		@kind = _Predicate("SerializableUnionKind", recursion: :accept) do |union|
-			next false unless Literal::Types::UnionType === union
-
-			tags = Set[]
-
-			union.each.all? do |member|
-				begin
-					tag = @context.tag_for_type(member)
-				rescue Literal::ArgumentError
-					next false
-				end
-
-				next false if tags.include?(tag)
-
-				tags << tag
-			end
-		end
+		@type = Literal::Serializer::UnionType.new(@context)
+		@kind = _Kind(@type)
 	end
 
 	def tag

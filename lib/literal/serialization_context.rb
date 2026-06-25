@@ -46,6 +46,7 @@ class Literal::SerializationContext
 		return nil if nil === value && type === nil
 
 		serializer = serializer_for_type(type)
+		value = serializer.coerce(value)
 
 		if strict && !(_JSONData === value)
 			raise Literal::ArgumentError, "Value #{value.inspect} is not valid JSON data and cannot be deserialized as #{type.inspect}"
@@ -80,9 +81,7 @@ class Literal::SerializationContext
 		end
 	end
 
-	private
-
-	def type_order(serializer)
+	private def type_order(serializer)
 		case serializer.tag
 		when :nilable
 			2
@@ -94,5 +93,4 @@ class Literal::SerializationContext
 			1
 		end
 	end
-
 end

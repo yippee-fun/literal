@@ -15,4 +15,9 @@ class Literal::Serializer
 	def deserialize_contents(value, type:)
 		@context.deserialize(value, type:, strict: false)
 	end
+
+	# This gives you an opportunity to coerce raw values before type checking and deserialization.
+	def coerce(raw)
+		raw
+	end
 end

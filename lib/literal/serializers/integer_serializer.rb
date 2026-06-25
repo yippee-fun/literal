@@ -24,4 +24,15 @@ class Literal::IntegerSerializer < Literal::Serializer
 	def deserialize(value, type:)
 		value
 	end
+
+	# If we can coerce a float to an integer without losing anything, we’ll accept it.
+	def coerce(value)
+		case value
+		when Float
+			coerced = value.to_i
+			(coerced == value) ? coerced : value
+		else
+			value
+		end
+	end
 end

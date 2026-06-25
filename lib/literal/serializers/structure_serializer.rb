@@ -15,6 +15,10 @@ class Literal::Serializer::StructureType
 	def ===(object)
 		Literal::DataStructure === object && object.class.literal_properties.all? { |property| @kind === property.type }
 	end
+
+	def >=(other, context: nil)
+		Class === other && other < Literal::DataStructure && other.literal_properties.all? { |property| @kind === property.type }
+	end
 end
 
 class Literal::StructureSerializer < Literal::Serializer
@@ -24,9 +28,7 @@ class Literal::StructureSerializer < Literal::Serializer
 		@context = context
 
 		@type = Literal::Serializer::StructureType.new(@context.kind)
-		@kind = _Predicate("SerializableStructureKind") do |type|
-			Class === type && type < Literal::DataStructure && type.literal_properties.all? { |property| @context.kind === property.type }
-		end
+		@kind = _Kind(@type)
 	end
 
 	def tag
