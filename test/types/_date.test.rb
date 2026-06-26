@@ -15,7 +15,7 @@ test "===" do
 	assert _Date(year: 2025) === Date.new(2025, 1, 13)
 	refute _Date(year: 2025) === Date.new(2024, 1, 13)
 
-	assert _Date(DateTime, _Interface(:to_datetime)) === DateTime.now
-	assert _Date(DateTime, year: 2025) === DateTime.new(2025, 1, 13)
+	refute _Date(DateTime, _Interface(:to_datetime)) === DateTime.now
+	refute _Date(DateTime, year: 2025) === DateTime.new(2025, 1, 13)
 	refute _Date(DateTime, year: 2025) === Date.new(2025, 1, 13)
 end

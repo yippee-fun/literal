@@ -28,7 +28,6 @@ class Literal::StructureSerializer < Literal::Serializer
 		@context = context
 
 		@type = Literal::Serializer::StructureType.new(@context.kind)
-		@kind = _Kind(@type)
 	end
 
 	def tag
@@ -36,7 +35,19 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
-	attr_reader :kind
+
+	def json_schema(type)
+		properties = type.literal_properties.to_h do |property|
+			[property.name.to_s, json_schema_for(property.type)]
+		end
+
+		{
+			"type" => "object",
+			"properties" => properties,
+			"required" => type.literal_properties.filter(&:required?).map { |property| property.name.to_s },
+			"additionalProperties" => false,
+		}
+	end
 
 	def serialize(value, type:)
 		type.literal_properties.to_h do |property|

@@ -16,6 +16,7 @@ test "hierarchy" do
 	assert_subtype _Constraint(_Array(Array)), _Constraint(_Array(Enumerable))
 	assert_subtype _Constraint(Array, size: 1..5), _Constraint(Array, size: 1..5)
 	assert_subtype _Constraint(Array, size: 1..2), _Constraint(Array, size: 1..3)
+	assert_subtype Array, _Constraint(Enumerable, Array)
 	assert_subtype _Intersection(Array), _Constraint(Enumerable, Array)
 	assert_subtype _Constraint(_Array(Enumerable), name: _String(size: 1..5)), _Constraint(_Array(Enumerable), name: _String(size: 1..5))
 	assert_subtype _Interface(:a, :b), _Constraint(_Interface(:a), _Interface(:b))

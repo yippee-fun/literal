@@ -16,6 +16,10 @@ class Literal::Serializer
 		@context.deserialize(value, type:, strict: false)
 	end
 
+	def json_schema_for(type)
+		@context.json_schema(type)
+	end
+
 	# This gives you an opportunity to coerce raw values before type checking and deserialization.
 	def coerce(raw)
 		raw

@@ -9,9 +9,10 @@ class Literal::SerializationContext
 
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 		ordered_serializers = @serializers.sort_by { |serializer| type_order(serializer) }
+		@serializer_kinds = @serializers.to_h { |serializer| [serializer, _Kind(serializer.type)] }.freeze
 
 		@type = _TaggedUnion(**ordered_serializers.to_h { |serializer| [serializer.tag, serializer.type] })
-		@kind = _Union(*@serializers.map(&:kind))
+		@kind = _Union(*@serializer_kinds.values)
 
 		@map = @serializers.to_h { |it| [it.tag, it] }.freeze
 
@@ -21,6 +22,12 @@ class Literal::SerializationContext
 	attr_reader :serializers
 	attr_reader :type
 	attr_reader :kind
+
+	def json_schema(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+		serializer = serializer_for_type(type)
+		serializer.json_schema(type)
+	end
 
 	def serialize(value, type:, strict: true)
 		type = type.materialize if type in Literal::Types::DeferredType
@@ -62,11 +69,29 @@ class Literal::SerializationContext
 	end
 
 	def serializer_for_type(type)
-		if (serializer = @serializers.find { |it| it.kind === type })
+		if type in Literal::Types::UnionType
+			if literal_enum_union?(type) && (serializer = serializer_matching_type(type))
+				serializer
+			elsif (serializer = @map[:union])
+				serializer
+			else
+				raise Literal::ArgumentError, "No serializer type #{type.inspect}"
+			end
+		elsif (serializer = serializer_matching_type(type))
 			serializer
+		elsif type in Literal::Types::ConstraintType
+			type.object_constraints.each do |constraint|
+				return serializer if (serializer = serializer_matching_type(constraint))
+			end
+
+			raise Literal::ArgumentError, "No serializer type #{type.inspect}"
 		else
 			raise Literal::ArgumentError, "No serializer type #{type.inspect}"
 		end
+	end
+
+	def serializer_kind(serializer)
+		@serializer_kinds.fetch(serializer)
 	end
 
 	def tag_for_type(type)
@@ -92,5 +117,18 @@ class Literal::SerializationContext
 		else
 			1
 		end
+	end
+
+	private def serializer_matching_type(type)
+		@serializers.find { |it| serializer_kind(it) === type }
+	end
+
+	private def literal_enum_union?(type)
+		return false unless type.types.empty?
+
+		type.primitives.all? { |primitive| String === primitive } ||
+			type.primitives.all? { |primitive| Symbol === primitive } ||
+			type.primitives.all? { |primitive| Integer === primitive } ||
+			type.primitives.all? { |primitive| Float === primitive }
 	end
 end

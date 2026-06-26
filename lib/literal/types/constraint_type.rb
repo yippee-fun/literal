@@ -59,15 +59,12 @@ class Literal::Types::ConstraintType
 			return false unless @property_constraints.empty?
 
 			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
-		when Literal::Types::IntersectionType
-			other_object_constraints = other.types
-			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, constraint, context:) }
-			end
-
-			true
 		when Literal::Types::FrozenType
 			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
+		when Module
+			return false unless @property_constraints.empty?
+
+			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		else
 			false
 		end

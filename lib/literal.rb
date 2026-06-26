@@ -168,7 +168,7 @@ module Literal
 				when Module
 					supertype >= subtype
 				when Numeric
-					Numeric >= supertype
+					supertype >= subtype.class
 				when String
 					String >= supertype
 				when Symbol
@@ -177,6 +177,8 @@ module Literal
 					::Array >= supertype
 				when ::Hash
 					::Hash >= supertype
+				when Date
+					Date >= supertype
 				when Literal::Type
 					subtype.<=(supertype, context:)
 				else

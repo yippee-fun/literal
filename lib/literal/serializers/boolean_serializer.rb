@@ -3,7 +3,6 @@
 class Literal::BooleanSerializer < Literal::Serializer
 	Tag = :boolean
 	Type = _Boolean
-	Kind = _Kind(Type)
 
 	def tag
 		Tag
@@ -13,8 +12,8 @@ class Literal::BooleanSerializer < Literal::Serializer
 		Type
 	end
 
-	def kind
-		Kind
+	def json_schema(type)
+		{ "type" => "boolean" }
 	end
 
 	def serialize(value, type:)

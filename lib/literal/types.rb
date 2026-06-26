@@ -87,6 +87,21 @@ module Literal::Types
 		)
 	end
 
+	# Matches if the value is an instance of exactly the given class.
+	# ```ruby
+	# _Instance(Date)
+	# ```
+	def _Instance(type)
+		InstanceType.new(type)
+	end
+
+	# Nilable version of `_Instance`.
+	def _Instance?(...)
+		_Nilable(
+			_Instance(...)
+		)
+	end
+
 	# Similar to `_Intersection`, but allows you to specify attribute constraints as keyword arguments.
 	# ```ruby
 	# _Constraint(Array, size: 1..3)
@@ -116,7 +131,7 @@ module Literal::Types
 	# _Date(year: 2025)
 	# ```
 	def _Date(...)
-		_Constraint(Date, ...)
+		_Constraint(_Instance(Date), ...)
 	end
 
 	# Nilable version of `_Date`.
@@ -247,7 +262,9 @@ module Literal::Types
 
 	# Matches if *all* given types are matched.
 	def _Intersection(*types)
-		IntersectionType.new(types)
+		raise Literal::ArgumentError.new("_Intersection type must have at least one type.") if types.size < 1
+
+		_Constraint(*types)
 	end
 
 	# Nilable version of `_Intersection`

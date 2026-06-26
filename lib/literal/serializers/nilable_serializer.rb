@@ -6,7 +6,6 @@ class Literal::NilableSerializer < Literal::Serializer
 	def initialize(context)
 		@context = context
 		@type = _Nilable(@context.type)
-		@kind = _Kind(@type)
 	end
 
 	def tag
@@ -14,7 +13,15 @@ class Literal::NilableSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
-	attr_reader :kind
+
+	def json_schema(type)
+		{
+			"anyOf" => [
+				json_schema_for(type.type),
+				{ "type" => "null" },
+			],
+		}
+	end
 
 	def serialize(value, type:)
 		case value

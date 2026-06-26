@@ -29,7 +29,6 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	def initialize(context)
 		@context = context
 		@type = Literal::Serializer::TaggedUnionType.new(@context)
-		@kind = _Kind(@type)
 	end
 
 	def tag
@@ -37,16 +36,35 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
-	attr_reader :kind
+
+	def json_schema(type)
+		{
+			"oneOf" => type.members.map do |tag, member_type|
+				{
+					"type" => "object",
+					"properties" => {
+						"type" => { "type" => "string", "const" => tag.name },
+						"value" => json_schema_for(member_type),
+					},
+					"required" => ["type", "value"],
+					"additionalProperties" => false,
+				}
+			end,
+		}
+	end
 
 	def serialize(value, type:)
 		tag, member_type = type.resolve(value)
 
-		[tag.name, serialize_contents(value, type: member_type)]
+		{
+			"type" => tag.name,
+			"value" => serialize_contents(value, type: member_type),
+		}
 	end
 
 	def deserialize(raw, type:)
-		tag, value = raw
+		tag = raw.fetch("type")
+		value = raw.fetch("value")
 		member_type = type[tag.to_sym]
 
 		deserialize_contents(value, type: member_type)

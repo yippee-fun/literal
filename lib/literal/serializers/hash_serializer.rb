@@ -6,7 +6,6 @@ class Literal::HashSerializer < Literal::Serializer
 	def initialize(context)
 		@context = context
 		@type = _Hash(@context.type, @context.type)
-		@kind = _Kind(@type)
 	end
 
 	def tag
@@ -14,7 +13,29 @@ class Literal::HashSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
-	attr_reader :kind
+
+	def json_schema(type)
+		key_schema = json_schema_for(type.key_type)
+		value_schema = json_schema_for(type.value_type)
+
+		if string_key_schema?(key_schema)
+			{
+				"type" => "object",
+				"propertyNames" => key_schema,
+				"additionalProperties" => value_schema,
+			}
+		else
+			{
+				"type" => "array",
+				"items" => {
+					"type" => "array",
+					"prefixItems" => [key_schema, value_schema],
+					"minItems" => 2,
+					"maxItems" => 2,
+				},
+			}
+		end
+	end
 
 	def serialize(value, type:)
 		key_type = type.key_type
@@ -44,5 +65,9 @@ class Literal::HashSerializer < Literal::Serializer
 				deserialize_contents(item, type: value_type),
 			]
 		end
+	end
+
+	private def string_key_schema?(schema)
+		schema["type"] == "string" || (schema["anyOf"] && schema["anyOf"].all? { |item| string_key_schema?(item) })
 	end
 end
