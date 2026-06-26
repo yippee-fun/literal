@@ -36,6 +36,7 @@ Example = Literal::SerializationContext.new(
 	Literal::TaggedUnionSerializer,
 	Literal::UnionSerializer,
 	Literal::HashSerializer,
+	Literal::MapSerializer,
 	Literal::ArraySerializer,
 	Literal::SetSerializer,
 	Literal::NilableSerializer,
@@ -314,6 +315,27 @@ test "hash json schema" do
 	)
 end
 
+test "map json schema" do
+	assert_equal(
+		Example.json_schema(_Map(name: String, age: Integer, nickname: _Nilable(String))),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"age" => { "type" => "integer" },
+				"nickname" => {
+					"anyOf" => [
+						{ "type" => "string" },
+						{ "type" => "null" },
+					],
+				},
+			},
+			"required" => ["name", "age"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
 test "nilable json schema" do
 	assert_equal(
 		Example.json_schema(_Nilable(Integer)),
@@ -570,6 +592,15 @@ test "hash serialization roundtrip" do
 	serialized = Example.serialize(original, type:)
 
 	assert_equal(serialized, { "foo" => 1, "bar" => 2 })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "map serialization roundtrip" do
+	original = { name: "Joel", age: 42, nickname: nil }
+	type = _Map(name: String, age: Integer, nickname: _Nilable(String))
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "name" => "Joel", "age" => 42, "nickname" => nil })
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
