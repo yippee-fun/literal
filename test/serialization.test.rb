@@ -37,6 +37,7 @@ Example = Literal::SerializationContext.new(
 	Literal::UnionSerializer,
 	Literal::HashSerializer,
 	Literal::MapSerializer,
+	Literal::TupleSerializer,
 	Literal::ArraySerializer,
 	Literal::SetSerializer,
 	Literal::NilableSerializer,
@@ -336,6 +337,27 @@ test "map json schema" do
 	)
 end
 
+test "tuple json schema" do
+	assert_equal(
+		Example.json_schema(_Tuple(String, Integer, _Nilable(Symbol))),
+		{
+			"type" => "array",
+			"prefixItems" => [
+				{ "type" => "string" },
+				{ "type" => "integer" },
+				{
+					"anyOf" => [
+						{ "type" => "string" },
+						{ "type" => "null" },
+					],
+				},
+			],
+			"minItems" => 3,
+			"maxItems" => 3,
+		},
+	)
+end
+
 test "nilable json schema" do
 	assert_equal(
 		Example.json_schema(_Nilable(Integer)),
@@ -604,6 +626,15 @@ test "map serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "tuple serialization roundtrip" do
+	original = ["Joel", 42, :admin]
+	type = _Tuple(String, Integer, Symbol)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["Joel", 42, "admin"])
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
 test "nilable serialization roundtrip" do
 	type = _Nilable(Integer)
 	non_nil = 42
@@ -759,6 +790,7 @@ test "recursive kind support" do
 	assert Example.kind === _Union(Example.type, String)
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
+	assert Example.kind === _Tuple(Example.type, String)
 	assert Example.kind === _Set(Example.type)
 end
 
