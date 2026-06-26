@@ -53,7 +53,7 @@ class Literal::StringSerializer < Literal::Serializer
 				case constraint
 				when Regexp
 					if defined? JsRegex
-						schema["pattern"] = JsRegex.new(constraint, target: "ES2018").to_s
+						schema["pattern"] = JsRegex.new(constraint, target: "ES2018").source
 					end
 				end
 			end

@@ -63,7 +63,7 @@ end
 test "string regex pattern serialization" do
 	assert_equal(
 		Example.json_schema(_String(/\A[A-Z]+\z/)),
-		{ "type" => "string", "pattern" => "/^[A-Z]+$/" },
+		{ "type" => "string", "pattern" => "^[A-Z]+$" },
 	)
 end
 
@@ -462,6 +462,16 @@ test "union json schema" do
 	)
 
 	assert_equal(
+		Example.json_schema(_Union(nil, String)),
+		{
+			"anyOf" => [
+				{ "type" => "null" },
+				{ "type" => "string" },
+			],
+		},
+	)
+
+	assert_equal(
 		Example.json_schema(_Union(String, _String(length: 1..))),
 		{
 			"oneOf" => [
@@ -809,6 +819,12 @@ test "union serialization roundtrip" do
 	assert_equal(age_serialized, 42)
 	assert_equal(Example.deserialize(name_serialized, type:), name_original)
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
+end
+
+test "natural union number deserialization accepts integers" do
+	type = _Union(Float, String)
+
+	assert_equal(Example.deserialize(1, type:), 1.0)
 end
 
 test "discriminated union serialization roundtrip" do

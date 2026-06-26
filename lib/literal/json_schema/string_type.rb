@@ -63,7 +63,7 @@ class Literal::JSONSchema::StringType < Literal::Data
 	def json_schema
 		{ "type" => "string" }.tap do |schema|
 			schema["format"] = format if format
-			schema["pattern"] =	JsRegex.new(pattern, target: "ES2018").to_s if pattern
+			schema["pattern"] =	JsRegex.new(pattern, target: "ES2018").source if pattern
 			schema["minLength"] = min_length unless min_length.nil?
 			schema["maxLength"] = max_length unless max_length.nil?
 		end

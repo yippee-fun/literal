@@ -10,7 +10,7 @@ test "string json schema" do
 		{
 			"type" => "string",
 			"format" => "email",
-			"pattern" => "/^[A-Z]+$/",
+			"pattern" => "^[A-Z]+$",
 			"minLength" => 7,
 			"maxLength" => 64,
 		},

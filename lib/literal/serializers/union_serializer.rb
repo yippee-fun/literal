@@ -115,7 +115,14 @@ class Literal::UnionSerializer < Literal::Serializer
 		json_type = raw_json_type(raw_value)
 
 		type.each.find { |member| natural_json_type(member) == json_type } ||
+			natural_number_member_type(json_type, type) ||
 			raise(Literal::ArgumentError, "No union member type for JSON type #{json_type.inspect} in #{type.inspect}")
+	end
+
+	private def natural_number_member_type(json_type, type)
+		return unless json_type == "integer"
+
+		type.each.find { |member| natural_json_type(member) == "number" }
 	end
 
 	private def raw_json_type(value)
