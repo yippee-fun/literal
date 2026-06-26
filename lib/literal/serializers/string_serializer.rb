@@ -14,6 +14,8 @@ class Literal::StringSerializer < Literal::Serializer
 
 	def json_schema(type)
 		case type
+		when Literal::JSONSchema::StringType
+			type.json_schema
 		when String
 			{ "type" => "string", "const" => type }
 		when Literal::Types::UnionType

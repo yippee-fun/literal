@@ -10,7 +10,8 @@ module Literal
 		loader.ignore("#{__dir__}/ruby_lsp")
 
 		loader.inflector.inflect(
-			"json_data_type" => "JSONDataType"
+			"json_data_type" => "JSONDataType",
+			"json_schema" => "JSONSchema"
 		)
 
 		loader.collapse("#{__dir__}/literal/flags")

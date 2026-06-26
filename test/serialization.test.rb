@@ -67,6 +67,23 @@ test "string regex pattern serialization" do
 	)
 end
 
+test "json schema scalar type serialization" do
+	assert_equal(
+		Example.json_schema(Literal::JSONSchema::String(format: "email", min_length: 1)),
+		{ "type" => "string", "format" => "email", "minLength" => 1 },
+	)
+
+	assert_equal(
+		Example.json_schema(Literal::JSONSchema::Integer(minimum: 0, exclusive_maximum: 10)),
+		{ "type" => "integer", "minimum" => 0, "exclusiveMaximum" => 10 },
+	)
+
+	assert_equal(
+		Example.json_schema(Literal::JSONSchema::Number(exclusive_minimum: 0, maximum: 1.5)),
+		{ "type" => "number", "exclusiveMinimum" => 0, "maximum" => 1.5 },
+	)
+end
+
 test "array length range serialization" do
 	assert_equal(
 		Example.json_schema(_Constraint(_Array(String), length: 5..10)),

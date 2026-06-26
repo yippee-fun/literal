@@ -14,6 +14,8 @@ class Literal::FloatSerializer < Literal::Serializer
 
 	def json_schema(type)
 		case type
+		when Literal::JSONSchema::NumberType
+			type.json_schema
 		when Float
 			{ "type" => "number", "const" => type }
 		when Literal::Types::UnionType
