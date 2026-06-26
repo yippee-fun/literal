@@ -37,16 +37,6 @@ class Literal::DateSerializer < Literal::Serializer
 				case constraint
 				when Date
 					schema["const"] = serialize_date(constraint)
-				when Range
-					schema["minimum"] = serialize_date(constraint.begin) if constraint.begin
-
-					if constraint.end
-						if constraint.exclude_end?
-							schema["exclusiveMaximum"] = serialize_date(constraint.end)
-						else
-							schema["maximum"] = serialize_date(constraint.end)
-						end
-					end
 				end
 			end
 		end

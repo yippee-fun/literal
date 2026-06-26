@@ -269,31 +269,17 @@ test "date json schema" do
 
 	assert_equal(
 		Example.json_schema(_Date((Date.new(2025, 1, 1))..(Date.new(2025, 12, 31)))),
-		{
-			"type" => "string",
-			"format" => "date",
-			"minimum" => "2025-01-01",
-			"maximum" => "2025-12-31",
-		},
+		{ "type" => "string", "format" => "date" },
 	)
 
 	assert_equal(
 		Example.json_schema(_Date((Date.new(2025, 1, 1))...(Date.new(2026, 1, 1)))),
-		{
-			"type" => "string",
-			"format" => "date",
-			"minimum" => "2025-01-01",
-			"exclusiveMaximum" => "2026-01-01",
-		},
+		{ "type" => "string", "format" => "date" },
 	)
 
 	assert_equal(
 		Example.json_schema(_Date((Date.new(2025, 1, 1))..)),
-		{
-			"type" => "string",
-			"format" => "date",
-			"minimum" => "2025-01-01",
-		},
+		{ "type" => "string", "format" => "date" },
 	)
 end
 
