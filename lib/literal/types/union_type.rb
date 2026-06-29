@@ -113,11 +113,8 @@ class Literal::Types::UnionType
 	end
 
 	def <=(other, context: nil)
-		case other
-		when Module
-			@primitives.all? { |primitive| Literal.subtype?(primitive, other, context:) } &&
-				@types.all? { |type| Literal.subtype?(type, other, context:) }
-		end
+		@primitives.all? { |primitive| Literal.subtype?(primitive, other, context:) } &&
+			@types.all? { |type| Literal.subtype?(type, other, context:) }
 	end
 
 	freeze
