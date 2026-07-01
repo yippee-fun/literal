@@ -841,8 +841,40 @@ test "string and date union is not naturally discriminated" do
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
-test "integer and number union is not naturally discriminated" do
+test "integer and finite float union serializes as number" do
 	type = _Union(Integer, _Float(finite?: true))
+
+	assert_equal(Example.json_schema(type), { "type" => "number" })
+	assert_equal(Example.json_schema(_Union(_Float(finite?: true), Integer)), { "type" => "number" })
+	assert_equal(Example.serialize(1, type:), 1)
+	assert_equal(Example.serialize(1.5, type:), 1.5)
+	assert_equal(Example.deserialize(1, type:), 1)
+	assert_equal(Example.deserialize(1.5, type:), 1.5)
+end
+
+test "integer and finite float union can be combined with other natural types" do
+	type = _Union(String, Integer, _Float(finite?: true))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"oneOf" => [
+				{ "type" => "string" },
+				{ "type" => "number" },
+			],
+		},
+	)
+
+	assert_equal(Example.serialize("Joel", type:), "Joel")
+	assert_equal(Example.serialize(1, type:), 1)
+	assert_equal(Example.serialize(1.5, type:), 1.5)
+	assert_equal(Example.deserialize("Joel", type:), "Joel")
+	assert_equal(Example.deserialize(1, type:), 1)
+	assert_equal(Example.deserialize(1.5, type:), 1.5)
+end
+
+test "integer and plain float union is not serializable" do
+	type = _Union(Integer, Float)
 
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end

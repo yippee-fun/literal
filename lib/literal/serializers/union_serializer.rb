@@ -23,18 +23,28 @@ class Literal::Serializer::UnionType
 	end
 
 	SafeNaturalJSONTypes = Set["string", "integer", "number", "boolean", "null"].freeze
+	FiniteFloatType = Literal::Types._Float(finite?: true)
 
 	private def natural?(type)
 		seen = Set[]
+		has_integer = false
+		number_member = nil
 
 		type.each.all? do |member|
 			json_type = natural_json_type(member)
 			return false unless json_type
+
+			case json_type
+			when "integer"
+				has_integer = true
+			when "number"
+				number_member = member
+			end
+
 			return false if seen.include?(json_type)
-			return false if numeric_ambiguous?(seen, json_type)
 
 			seen << json_type
-		end
+		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float?(number_member)))
 	end
 
 	private def natural_json_type(type)
@@ -44,9 +54,12 @@ class Literal::Serializer::UnionType
 		json_type if SafeNaturalJSONTypes.include?(json_type)
 	end
 
-	private def numeric_ambiguous?(seen, json_type)
-		(json_type == "integer" && seen.include?("number")) ||
-			(json_type == "number" && seen.include?("integer"))
+	private def numeric_ambiguous?(seen)
+		seen.include?("integer") && seen.include?("number")
+	end
+
+	private def finite_float?(type)
+		Literal.subtype?(type, FiniteFloatType) && Literal.subtype?(FiniteFloatType, type)
 	end
 end
 
@@ -59,8 +72,10 @@ class Literal::UnionSerializer < Literal::Serializer
 	attr_reader :type
 
 	def json_schema(type)
+		return { "type" => "number" } if number_union?(type)
+
 		{
-			"oneOf" => type.map { |member| json_schema_for(member) }.to_a,
+			"oneOf" => json_schema_members(type),
 		}
 	end
 
@@ -70,23 +85,38 @@ class Literal::UnionSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw_value, type:)
-		member_type = natural_member_type(raw_value, type)
+		member_type = if number_union?(type)
+			integer_and_finite_float_member_type(raw_value, type)
+		else
+			natural_member_type(raw_value, type)
+		end
+
 		deserialize_contents(raw_value, type: member_type)
 	end
 
 	SafeNaturalJSONTypes = Set["string", "integer", "number", "boolean", "null"].freeze
+	FiniteFloatType = Literal::Types._Float(finite?: true)
 
 	private def natural?(type)
 		seen = Set[]
+		has_integer = false
+		number_member = nil
 
 		type.each.all? do |member|
 			json_type = natural_json_type(member)
 			return false unless json_type
+
+			case json_type
+			when "integer"
+				has_integer = true
+			when "number"
+				number_member = member
+			end
+
 			return false if seen.include?(json_type)
-			return false if numeric_ambiguous?(seen, json_type)
 
 			seen << json_type
-		end
+		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float?(number_member)))
 	end
 
 	private def natural_json_type(type)
@@ -96,9 +126,45 @@ class Literal::UnionSerializer < Literal::Serializer
 		json_type if SafeNaturalJSONTypes.include?(json_type)
 	end
 
-	private def numeric_ambiguous?(seen, json_type)
-		(json_type == "integer" && seen.include?("number")) ||
-			(json_type == "number" && seen.include?("integer"))
+	private def numeric_ambiguous?(seen)
+		seen.include?("integer") && seen.include?("number")
+	end
+
+	private def number_union?(type)
+		members = type.to_a
+
+		members.length == 2 &&
+			members.any? { |member| member == Integer } &&
+			members.any? { |member| finite_float?(member) }
+	end
+
+	private def json_schema_members(type)
+		if integer_and_finite_float?(type)
+			type.each.reject { |member| member == Integer || finite_float?(member) }
+				.map { |member| json_schema_for(member) } << { "type" => "number" }
+		else
+			type.each.map { |member| json_schema_for(member) }
+		end
+	end
+
+	private def integer_and_finite_float?(type)
+		members = type.to_a
+
+		members.any? { |member| member == Integer } &&
+			members.any? { |member| finite_float?(member) }
+	end
+
+	private def finite_float?(type)
+		Literal.subtype?(type, FiniteFloatType) && Literal.subtype?(FiniteFloatType, type)
+	end
+
+	private def integer_and_finite_float_member_type(raw_value, type)
+		case raw_value
+		when Integer
+			type.each.find { |member| member == Integer }
+		when Float
+			type.each.find { |member| finite_float?(member) }
+		end || raise(Literal::ArgumentError, "No union member type for JSON value #{raw_value.inspect} in #{type.inspect}")
 	end
 
 	private def natural_member_type(raw_value, type)
