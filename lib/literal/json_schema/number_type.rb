@@ -9,6 +9,12 @@ class Literal::JSONSchema::NumberType < Literal::Data
 	prop :exclusive_maximum, _Nilable(::Numeric)
 	prop :multiple_of, _Nilable(::Numeric)
 
+	def after_initialize
+		if multiple_of && multiple_of <= 0
+			raise Literal::ArgumentError, "multiple_of must be greater than 0."
+		end
+	end
+
 	def inspect
 		"Literal::JSONSchema::Number(#{json_schema.inspect})"
 	end

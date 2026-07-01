@@ -3,7 +3,12 @@
 require "js_regex"
 
 test "string json schema" do
-	type = Literal::JSONSchema::String(format: "email", pattern: /\A[A-Z]+\z/, min_length: 7, max_length: 64)
+	type = Literal::JSONSchema::String(
+		format: "email",
+		pattern: /\A[A-Z]+\z/,
+		min_length: 7,
+		max_length: 64,
+	)
 
 	assert_equal(
 		type.json_schema,
@@ -71,6 +76,12 @@ test "integer json schema factory" do
 	assert Literal::JSONSchema::IntegerType === Literal::JSONSchema::Integer(minimum: 0)
 end
 
+test "integer multiple_of must be positive" do
+	assert_raises(Literal::ArgumentError) do
+		Literal::JSONSchema::Integer(multiple_of: 0)
+	end
+end
+
 test "number json schema" do
 	type = Literal::JSONSchema::Number(exclusive_minimum: 0, maximum: 1.5)
 
@@ -97,4 +108,10 @@ end
 test "number json schema factory" do
 	assert Literal::JSONSchema::NumberType === Literal::JSONSchema::Number
 	assert Literal::JSONSchema::NumberType === Literal::JSONSchema::Number(maximum: 1.5)
+end
+
+test "number multiple_of must be positive" do
+	assert_raises(Literal::ArgumentError) do
+		Literal::JSONSchema::Number(multiple_of: 0)
+	end
 end

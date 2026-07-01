@@ -15,10 +15,11 @@ class Literal::HashSerializer < Literal::Serializer
 	attr_reader :type
 
 	def json_schema(type)
-		key_schema = json_schema_for(type.key_type)
-		value_schema = json_schema_for(type.value_type)
+		hash_type = hash_type_for(type)
+		key_schema = json_schema_for(hash_type.key_type)
+		value_schema = json_schema_for(hash_type.value_type)
 
-		if string_key_schema?(key_schema)
+		schema = if string_key_schema?(key_schema)
 			{
 				"type" => "object",
 				"propertyNames" => key_schema,
@@ -35,11 +36,15 @@ class Literal::HashSerializer < Literal::Serializer
 				},
 			}
 		end
+
+		apply_size_constraints(schema, type)
+		schema
 	end
 
 	def serialize(value, type:)
-		key_type = type.key_type
-		value_type = type.value_type
+		hash_type = hash_type_for(type)
+		key_type = hash_type.key_type
+		value_type = hash_type.value_type
 
 		serialized_entries = value.map do |key, item|
 			[
@@ -56,8 +61,9 @@ class Literal::HashSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		key_type = type.key_type
-		value_type = type.value_type
+		hash_type = hash_type_for(type)
+		key_type = hash_type.key_type
+		value_type = hash_type.value_type
 
 		raw.to_h do |key, item|
 			[
@@ -69,5 +75,45 @@ class Literal::HashSerializer < Literal::Serializer
 
 	private def string_key_schema?(schema)
 		schema["type"] == "string" || (schema["anyOf"] && schema["anyOf"].all? { |item| string_key_schema?(item) })
+	end
+
+	private def apply_size_constraints(schema, type)
+		return unless Literal::Types::ConstraintType === type
+
+		type.property_constraints.each do |property, constraint|
+			case [property, constraint]
+			in [:length | :size, Range]
+				apply_max_size_constraint(schema, range_end(constraint)) if constraint.end
+				apply_min_size_constraint(schema, constraint.begin) if constraint.begin
+			in [:length | :size, Integer]
+				apply_max_size_constraint(schema, constraint)
+				apply_min_size_constraint(schema, constraint)
+			end
+		end
+	end
+
+	private def apply_max_size_constraint(schema, value)
+		schema[object_schema?(schema) ? "maxProperties" : "maxItems"] = value
+	end
+
+	private def apply_min_size_constraint(schema, value)
+		schema[object_schema?(schema) ? "minProperties" : "minItems"] = value
+	end
+
+	private def object_schema?(schema)
+		schema["type"] == "object"
+	end
+
+	private def range_end(range)
+		range.exclude_end? ? range.end - 1 : range.end
+	end
+
+	private def hash_type_for(type)
+		case type
+		when Literal::Types::HashType
+			type
+		when Literal::Types::ConstraintType
+			type.object_constraints.find { |constraint| Literal::Types::HashType === constraint }
+		end
 	end
 end

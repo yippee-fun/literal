@@ -15,6 +15,16 @@ class SerializationPost < Literal::Data
 	prop :subtitle, _Nilable(String)
 end
 
+class SerializationArticle < Literal::Data
+	prop :title, String, description: "Published headline"
+	prop :body, String
+end
+
+class SerializationDraft < Literal::Data
+	prop :title, String
+	prop? :subtitle, String
+end
+
 class SerializationEnvelope < Literal::Data
 	prop :id, Integer
 	prop :owner, SerializationPerson
@@ -303,6 +313,15 @@ test "hash json schema" do
 	)
 
 	assert_equal(
+		Example.json_schema(_Hash(_String(/\A[a-z_]+\z/), Integer)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string", "pattern" => "^[a-z_]+$" },
+			"additionalProperties" => { "type" => "integer" },
+		},
+	)
+
+	assert_equal(
 		Example.json_schema(_Hash(Integer, String)),
 		{
 			"type" => "array",
@@ -315,6 +334,46 @@ test "hash json schema" do
 				"minItems" => 2,
 				"maxItems" => 2,
 			},
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Hash(Symbol, Integer), size: 1..5)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+			"minProperties" => 1,
+			"maxProperties" => 5,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Hash(Symbol, Integer), length: 1...5)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+			"minProperties" => 1,
+			"maxProperties" => 4,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Hash(Integer, String), size: 2)),
+		{
+			"type" => "array",
+			"items" => {
+				"type" => "array",
+				"prefixItems" => [
+					{ "type" => "integer" },
+					{ "type" => "string" },
+				],
+				"minItems" => 2,
+				"maxItems" => 2,
+			},
+			"minItems" => 2,
+			"maxItems" => 2,
 		},
 	)
 end
@@ -399,6 +458,32 @@ test "structure json schema" do
 						{ "type" => "null" },
 					],
 				},
+			},
+			"required" => ["title"],
+			"additionalProperties" => false,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationArticle),
+		{
+			"type" => "object",
+			"properties" => {
+				"title" => { "type" => "string", "description" => "Published headline" },
+				"body" => { "type" => "string" },
+			},
+			"required" => ["title", "body"],
+			"additionalProperties" => false,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationDraft),
+		{
+			"type" => "object",
+			"properties" => {
+				"title" => { "type" => "string" },
+				"subtitle" => { "type" => "string" },
 			},
 			"required" => ["title"],
 			"additionalProperties" => false,
@@ -669,6 +754,17 @@ test "structure serialization roundtrip" do
 
 	assert_equal(serialized, { "name" => "Joel", "age" => 42 })
 	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "optional structure property serialization roundtrip" do
+	type = SerializationDraft
+	without_subtitle = SerializationDraft.new(title: "Draft")
+	with_subtitle = SerializationDraft.new(title: "Draft", subtitle: "Optional")
+
+	assert_equal(Example.serialize(without_subtitle, type:), { "title" => "Draft" })
+	assert_equal(Example.serialize(with_subtitle, type:), { "title" => "Draft", "subtitle" => "Optional" })
+	assert_equal(Example.deserialize({ "title" => "Draft" }, type:), without_subtitle)
+	assert_equal(Example.deserialize({ "title" => "Draft", "subtitle" => "Optional" }, type:), with_subtitle)
 end
 
 test "tagged union serialization roundtrip" do
