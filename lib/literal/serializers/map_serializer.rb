@@ -42,6 +42,10 @@ class Literal::MapSerializer < Literal::Serializer
 		}
 	end
 
+	def mergeable_object?(type)
+		Literal::Types::MapType === type
+	end
+
 	def serialize(value, type:)
 		type.shape.to_h do |key, value_type|
 			[key.name, serialize_contents(value[key], type: value_type)]

@@ -192,18 +192,7 @@ class Literal::UnionSerializer < Literal::Serializer
 	end
 
 	private def object_member?(member_type)
-		serializer = @context.serializer_for_type(member_type)
-
-		case serializer.tag
-		when :structure
-			return false unless Class === member_type && member_type < Literal::DataStructure
-		when :map
-			return false unless Literal::Types::MapType === member_type
-		else
-			return false
-		end
-
-		mergeable_object_schema?(json_schema_for(member_type))
+		@context.serializer_for_type(member_type).mergeable_object?(member_type)
 	rescue Literal::ArgumentError
 		false
 	end

@@ -25,7 +25,6 @@ class Literal::SerializationContext
 
 	def json_schema(type)
 		type = type.materialize if type in Literal::Types::DeferredType
-		return { "type" => "null" } if type.nil?
 
 		serializer = serializer_for_type(type)
 		serializer.json_schema(type)
@@ -33,7 +32,6 @@ class Literal::SerializationContext
 
 	def serialize(value, type:, strict: true)
 		type = type.materialize if type in Literal::Types::DeferredType
-		return nil if nil === value && type === nil
 
 		serializer = serializer_for_type(type)
 
@@ -52,7 +50,6 @@ class Literal::SerializationContext
 
 	def deserialize(value, type:, strict: true)
 		type = type.materialize if type in Literal::Types::DeferredType
-		return nil if nil === value && type === nil
 
 		serializer = serializer_for_type(type)
 		value = serializer.coerce(value)

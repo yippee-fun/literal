@@ -780,7 +780,7 @@ end
 
 test "implicit nil serialization" do
 	type = Example.type
-	assert_equal nil, Example.serialize(nil, type:)
+	assert_equal({ "$type" => "nilable", "value" => nil }, Example.serialize(nil, type:))
 end
 
 test "implicit string serialization" do

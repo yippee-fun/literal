@@ -15,6 +15,8 @@ class Literal::NilableSerializer < Literal::Serializer
 	attr_reader :type
 
 	def json_schema(type)
+		return { "type" => "null" } if type.nil?
+
 		{
 			"anyOf" => [
 				json_schema_for(type.type),

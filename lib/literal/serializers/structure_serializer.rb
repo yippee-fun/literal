@@ -63,6 +63,10 @@ class Literal::StructureSerializer < Literal::Serializer
 		}
 	end
 
+	def mergeable_object?(type)
+		Class === type && type < Literal::DataStructure
+	end
+
 	def serialize(value, type:)
 		type.literal_properties.filter_map do |property|
 			property_value = value.__send__(property.name)

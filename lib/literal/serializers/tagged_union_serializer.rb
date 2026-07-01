@@ -67,7 +67,7 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 		member_type = type[tag.to_sym]
 
 		if object_member?(member_type)
-			deserialize_contents(raw.reject { |key, _| key == "$type" }, type: member_type)
+			deserialize_contents(raw.except("$type"), type: member_type)
 		else
 			deserialize_contents(raw.fetch("value"), type: member_type)
 		end
@@ -98,18 +98,7 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	private def object_member?(member_type)
-		serializer = @context.serializer_for_type(member_type)
-
-		case serializer.tag
-		when :structure
-			return false unless Class === member_type && member_type < Literal::DataStructure
-		when :map
-			return false unless Literal::Types::MapType === member_type
-		else
-			return false
-		end
-
-		mergeable_object_schema?(json_schema_for(member_type))
+		@context.serializer_for_type(member_type).mergeable_object?(member_type)
 	rescue Literal::ArgumentError
 		false
 	end

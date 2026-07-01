@@ -20,6 +20,10 @@ class Literal::Serializer
 		@context.json_schema(type)
 	end
 
+	def mergeable_object?(type)
+		false
+	end
+
 	# This gives you an opportunity to coerce raw values before type checking and deserialization.
 	def coerce(raw)
 		raw
