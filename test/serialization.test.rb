@@ -40,7 +40,7 @@ class SerializationEnvelope < Literal::Data
 	prop :metadata, _Hash(Symbol, _Array(_Nilable(_Union(String, Integer))))
 	prop :schedule, _Array(Date)
 	prop :choice, _TaggedUnion(person: SerializationPerson, note: String)
-	prop :payload, _Union(_Hash(Symbol, Integer), _Array(String))
+	prop :payload, _TaggedUnion(hash: _Hash(Symbol, Integer), array: _Array(String))
 end
 
 Example = Literal::SerializationContext.new(
@@ -696,6 +696,15 @@ test "map serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "map with type key serialization roundtrip" do
+	original = { "$type": "user", name: "Joel" }
+	type = _Map("$type": String, name: String)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "user", "name" => "Joel" })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
 test "tuple serialization roundtrip" do
 	original = ["Joel", 42, :admin]
 	type = _Tuple(String, Integer, Symbol)
@@ -778,118 +787,31 @@ test "tagged union hash with type key serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "implicit nil serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "nilable", "value" => nil }, Example.serialize(nil, type:))
+test "tagged union map with type key serialization roundtrip" do
+	type = _TaggedUnion(map: _Map("$type": String, name: String), integer: Integer)
+	original = { "$type": "user", name: "Joel" }
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "map", "value" => { "$type" => "user", "name" => "Joel" } })
+	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "implicit string serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "string", "value" => "example" }, Example.serialize("example", type:))
-end
-
-test "implicit symbol serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "symbol", "value" => "example" }, Example.serialize(:example, type:))
-end
-
-test "implicit integer serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "integer", "value" => 42 }, Example.serialize(42, type:))
-end
-
-test "implicit float serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "float", "value" => 3.14 }, Example.serialize(3.14, type:))
-end
-
-test "implicit boolean serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "boolean", "value" => true }, Example.serialize(true, type:))
-end
-
-test "implicit date serialization" do
-	type = Example.type
-	assert_equal({ "$type" => "date", "value" => "2025-01-13" }, Example.serialize(Date.new(2025, 1, 13), type:))
-end
-
-test "implicit array serialization" do
-	type = Example.type
-	value = [1, 2, 3]
-
-	assert_equal(
-		{
-			"$type" => "array",
-			"value" => [
-				{ "$type" => "integer", "value" => 1 },
-				{ "$type" => "integer", "value" => 2 },
-				{ "$type" => "integer", "value" => 3 },
-			],
-		},
-		Example.serialize(value, type:),
-	)
-end
-
-test "implicit set serialization" do
-	type = Example.type
-	value = Set[1, 2, 3]
-
-	assert_equal(
-		{
-			"$type" => "set",
-			"value" => [
-				{ "$type" => "integer", "value" => 1 },
-				{ "$type" => "integer", "value" => 2 },
-				{ "$type" => "integer", "value" => 3 },
-			],
-		},
-		Example.serialize(value, type:),
-	)
-end
-
-test "implicit hash serialization" do
-	type = Example.type
-	value = { a: 1, b: 2 }
-
-	assert_equal(
-		{
-			"$type" => "hash",
-			"value" => [
-				[
-					{ "$type" => "symbol", "value" => "a" },
-					{ "$type" => "integer", "value" => 1 },
-				],
-				[
-					{ "$type" => "symbol", "value" => "b" },
-					{ "$type" => "integer", "value" => 2 },
-				],
-			],
-		},
-		Example.serialize(value, type:),
-	)
-	assert_equal value, Example.deserialize(Example.serialize(value, type:), type:)
-end
-
-test "implicit branch precedence" do
-	tag, type = Example.type.resolve(nil)
-	assert_equal :nilable, tag
-	assert_equal "_Nilable(_Deferred)", type.inspect
-
-	tag, type = Example.type.resolve([1, 2, 3])
-	assert_equal :array, tag
-	assert_equal "_Array(_Deferred)", type.inspect
-
-	tag, type = Example.type.resolve(Set[1, 2, 3])
-	assert_equal :set, tag
-	assert_equal "_Set(_Deferred)", type.inspect
+test "serialization context type matches serializable values" do
+	assert Example.type === nil
+	assert Example.type === "example"
+	assert Example.type === :example
+	assert Example.type === 42
+	assert Example.type === 3.14
+	assert Example.type === true
+	assert Example.type === Date.new(2025, 1, 13)
+	assert Example.type === [1, 2, 3]
+	assert Example.type === Set[1, 2, 3]
+	assert Example.type === { a: 1, b: 2 }
 end
 
 test "recursive kind support" do
-	assert Example.kind === Example.type
-	assert Example.kind === _Union(Example.type, String)
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
-	assert Example.kind === _Tuple(Example.type, String)
 	assert Example.kind === _Set(Example.type)
 end
 
@@ -913,6 +835,18 @@ test "natural union number deserialization accepts integers" do
 	assert_equal(Example.deserialize(1, type:), 1.0)
 end
 
+test "string and date union is not naturally discriminated" do
+	type = _Union(String, Date)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "integer and number union is not naturally discriminated" do
+	type = _Union(Integer, _Float(finite?: true))
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
 test "same-kind union serialization roundtrip" do
 	type = _Union(String, _String(length: 1..))
 	original = "Joel"
@@ -922,22 +856,22 @@ test "same-kind union serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "discriminated union object with value property serialization roundtrip" do
+test "non-natural union object is not serializable" do
 	type = _Union(SerializationValueObject, String)
-	original = SerializationValueObject.new(value: "payload")
-	serialized = Example.serialize(original, type:)
 
-	assert_equal(serialized, { "value" => "payload", "$type" => "structure" })
-	assert_equal(Example.deserialize(serialized, type:), original)
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
-test "discriminated union hash with type key serialization roundtrip" do
+test "non-natural union hash is not serializable" do
 	type = _Union(_Hash(String, String), Integer)
-	original = { "$type" => "user", "name" => "Joel" }
-	serialized = Example.serialize(original, type:)
 
-	assert_equal(serialized, { "$type" => "hash", "value" => { "$type" => "user", "name" => "Joel" } })
-	assert_equal(Example.deserialize(serialized, type:), original)
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "non-natural union map is not serializable" do
+	type = _Union(_Map("$type": String, name: String), Integer)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
 test "big nested serialization roundtrip" do

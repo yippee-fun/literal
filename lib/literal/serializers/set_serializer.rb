@@ -1,15 +1,9 @@
 # frozen_string_literal: true
 
 class Literal::SetSerializer < Literal::Serializer
-	Tag = :set
-
 	def initialize(context)
 		@context = context
 		@type = _Set(@context.type)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type

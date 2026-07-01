@@ -1,15 +1,9 @@
 # frozen_string_literal: true
 
 class Literal::ArraySerializer < Literal::Serializer
-	Tag = :array
-
 	def initialize(context)
 		super
 		@type = _Array(@context.type)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type

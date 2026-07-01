@@ -36,16 +36,10 @@ class Literal::Serializer::StructureType
 end
 
 class Literal::StructureSerializer < Literal::Serializer
-	Tag = :structure
-
 	def initialize(context)
 		@context = context
 
 		@type = Literal::Serializer::StructureType.new(@context.kind)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type

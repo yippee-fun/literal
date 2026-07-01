@@ -22,15 +22,9 @@ class Literal::Serializer::TupleType
 end
 
 class Literal::TupleSerializer < Literal::Serializer
-	Tag = :tuple
-
 	def initialize(context)
 		@context = context
 		@type = Literal::Serializer::TupleType.new(@context)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type

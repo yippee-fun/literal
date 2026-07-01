@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::FloatSerializer < Literal::Serializer
-	Tag = :float
 	Type = _Float(finite?: true)
-
-	def tag
-		Tag
-	end
 
 	def type
 		Type

@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::JSONSchemaNumberSerializer < Literal::Serializer
-	Tag = :json_schema_number
 	Type = Literal::JSONSchema::NumberType
-
-	def tag
-		Tag
-	end
 
 	def type
 		Type

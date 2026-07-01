@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::SymbolSerializer < Literal::Serializer
-	Tag = :symbol
 	Type = Symbol
-
-	def tag
-		Tag
-	end
 
 	def type
 		Type

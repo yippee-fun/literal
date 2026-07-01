@@ -24,15 +24,9 @@ class Literal::Serializer::TaggedUnionType
 end
 
 class Literal::TaggedUnionSerializer < Literal::Serializer
-	Tag = :tagged_union
-
 	def initialize(context)
 		@context = context
 		@type = Literal::Serializer::TaggedUnionType.new(@context)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type

@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::DateSerializer < Literal::Serializer
-	Tag = :date
 	Type = Date
-
-	def tag
-		Tag
-	end
 
 	def type
 		Type

@@ -8,13 +8,10 @@ class Literal::SerializationContext
 		@kind = _Deferred { @kind }
 
 		@serializers = serializers.map { |it| it.new(self) }.freeze
-		ordered_serializers = @serializers.sort_by { |serializer| type_order(serializer) }
 		@serializer_kinds = @serializers.to_h { |serializer| [serializer, _Kind(serializer.type)] }.freeze
 
-		@type = _TaggedUnion(**ordered_serializers.to_h { |serializer| [serializer.tag, serializer.type] })
+		@type = _Union(*@serializers.map(&:type))
 		@kind = _Union(*@serializer_kinds.values)
-
-		@map = @serializers.to_h { |it| [it.tag, it] }.freeze
 
 		freeze
 	end
@@ -77,31 +74,6 @@ class Literal::SerializationContext
 
 	def serializer_kind(serializer)
 		@serializer_kinds.fetch(serializer)
-	end
-
-	def tag_for_type(type)
-		serializer_for_type(type).tag
-	end
-
-	def serializer_for_tag(tag)
-		if (serializer = @map[tag])
-			serializer
-		else
-			raise Literal::ArgumentError, "No serializer for tag #{tag.inspect}"
-		end
-	end
-
-	private def type_order(serializer)
-		case serializer.tag
-		when :nilable
-			2
-		when :union
-			3
-		when :tagged_union
-			4
-		else
-			1
-		end
 	end
 
 	private def serializer_matching_type(type)

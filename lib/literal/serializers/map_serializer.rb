@@ -18,15 +18,9 @@ class Literal::Serializer::MapType
 end
 
 class Literal::MapSerializer < Literal::Serializer
-	Tag = :map
-
 	def initialize(context)
 		@context = context
 		@type = Literal::Serializer::MapType.new(@context)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type
@@ -43,7 +37,7 @@ class Literal::MapSerializer < Literal::Serializer
 	end
 
 	def mergeable_object?(type)
-		Literal::Types::MapType === type
+		Literal::Types::MapType === type && !type.shape.key?(:$type)
 	end
 
 	def serialize(value, type:)

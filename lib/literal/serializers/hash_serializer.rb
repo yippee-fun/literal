@@ -1,15 +1,9 @@
 # frozen_string_literal: true
 
 class Literal::HashSerializer < Literal::Serializer
-	Tag = :hash
-
 	def initialize(context)
 		@context = context
 		@type = _Hash(@context.type, @context.type)
-	end
-
-	def tag
-		Tag
 	end
 
 	attr_reader :type

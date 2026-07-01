@@ -1,12 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::IntegerSerializer < Literal::Serializer
-	Tag = :integer
 	Type = Integer
-
-	def tag
-		Tag
-	end
 
 	def type
 		Type
