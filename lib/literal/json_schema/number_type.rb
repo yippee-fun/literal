@@ -27,7 +27,7 @@ class Literal::JSONSchema::NumberType < Literal::Data
 	end
 
 	def <=(other, context: nil)
-		Literal.subtype?(::Float, other, context:)
+		Literal.subtype?(::Numeric, other, context:)
 	end
 
 	def json_schema

@@ -60,10 +60,10 @@ class Literal::StringSerializer < Literal::Serializer
 
 			type.property_constraints.each do |property, constraint|
 				case [property, constraint]
-				in [:length, Range]
+				in [:length | :size, Range]
 					schema["maxLength"] = range_end(constraint) if constraint.end
 					schema["minLength"] = constraint.begin if constraint.begin
-				in [:length, Integer]
+				in [:length | :size, Integer]
 					schema["maxLength"] = constraint
 					schema["minLength"] = constraint
 				end

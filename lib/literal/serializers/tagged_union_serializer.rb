@@ -49,7 +49,7 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 		tag, member_type = type.resolve(value)
 		serialized = serialize_contents(value, type: member_type)
 
-		if Hash === serialized
+		if object_member?(member_type)
 			return {
 				**serialized,
 				"$type" => tag.name,
@@ -66,17 +66,17 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 		tag = raw.fetch("$type")
 		member_type = type[tag.to_sym]
 
-		if raw.key?("value")
-			deserialize_contents(raw.fetch("value"), type: member_type)
+		if object_member?(member_type)
+			deserialize_contents(raw.reject { |key, _| key == "$type" }, type: member_type)
 		else
-			deserialize_contents(raw.except("$type"), type: member_type)
+			deserialize_contents(raw.fetch("value"), type: member_type)
 		end
 	end
 
 	private def tagged_json_schema(tag, member_type)
 		member_schema = json_schema_for(member_type)
 
-		if object_schema?(member_schema)
+		if mergeable_object_schema?(member_schema)
 			return merge_discriminator_schema(tag, member_schema)
 		end
 
@@ -91,15 +91,34 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 		}
 	end
 
-	private def object_schema?(schema)
-		schema["type"] == "object"
+	private def mergeable_object_schema?(schema)
+		schema["type"] == "object" &&
+			schema.fetch("additionalProperties", nil) == false &&
+			!schema.fetch("properties", {}).key?("$type")
+	end
+
+	private def object_member?(member_type)
+		serializer = @context.serializer_for_type(member_type)
+
+		case serializer.tag
+		when :structure
+			return false unless Class === member_type && member_type < Literal::DataStructure
+		when :map
+			return false unless Literal::Types::MapType === member_type
+		else
+			return false
+		end
+
+		mergeable_object_schema?(json_schema_for(member_type))
+	rescue Literal::ArgumentError
+		false
 	end
 
 	private def merge_discriminator_schema(tag, schema)
 		schema.merge(
 			"properties" => {
-				"$type" => { "const" => tag },
 				**schema.fetch("properties", {}),
+				"$type" => { "const" => tag },
 			},
 			"required" => ["$type", *schema.fetch("required", [])],
 		)

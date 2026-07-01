@@ -53,7 +53,7 @@ class Literal::HashSerializer < Literal::Serializer
 			]
 		end
 
-		if serialized_entries.all? { |key, _item| String === key }
+		if object_hash_type?(hash_type)
 			serialized_entries.to_h
 		else
 			serialized_entries
@@ -75,6 +75,14 @@ class Literal::HashSerializer < Literal::Serializer
 
 	private def string_key_schema?(schema)
 		schema["type"] == "string" || (schema["anyOf"] && schema["anyOf"].all? { |item| string_key_schema?(item) })
+	end
+
+	private def object_hash_type?(hash_type)
+		return false if Literal::Types::DeferredType === hash_type.key_type
+
+		string_key_schema?(json_schema_for(hash_type.key_type))
+	rescue Literal::ArgumentError
+		false
 	end
 
 	private def apply_size_constraints(schema, type)

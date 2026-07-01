@@ -101,8 +101,9 @@ test "number json schema" do
 end
 
 test "number json schema subtype" do
-	assert_subtype Literal::JSONSchema::Number, Float
+	assert_subtype Literal::JSONSchema::Number, Numeric
 	assert_subtype Literal::JSONSchema::Number(maximum: 1.5), Numeric
+	refute_subtype Literal::JSONSchema::Number, Float
 end
 
 test "number json schema factory" do

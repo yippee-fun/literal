@@ -171,15 +171,15 @@ module Literal
 				when Numeric
 					supertype >= subtype.class
 				when String
-					String >= supertype
+					supertype >= String
 				when Symbol
-					Symbol >= supertype
+					supertype >= Symbol
 				when ::Array
-					::Array >= supertype
+					supertype >= ::Array
 				when ::Hash
-					::Hash >= supertype
+					supertype >= ::Hash
 				when Date
-					Date >= supertype
+					supertype >= Date
 				when Literal::Type
 					subtype.<=(supertype, context:)
 				else

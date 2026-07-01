@@ -60,7 +60,7 @@ class Literal::UnionSerializer < Literal::Serializer
 
 		if natural?(type)
 			serialized
-		elsif Hash === serialized
+		elsif object_member?(member_type)
 			{
 				**serialized,
 				"$type" => label_for_member(type, member_type),
@@ -86,10 +86,10 @@ class Literal::UnionSerializer < Literal::Serializer
 			raise Literal::ArgumentError, "No union member type for tag #{tag_name.inspect} in #{type.inspect}"
 		end
 
-		if raw_value.key?("value")
-			deserialize_contents(raw_value.fetch("value"), type: member_type)
+		if object_member?(member_type)
+			deserialize_contents(raw_value.reject { |key, _| key == "$type" }, type: member_type)
 		else
-			deserialize_contents(raw_value.except("$type"), type: member_type)
+			deserialize_contents(raw_value.fetch("value"), type: member_type)
 		end
 	end
 
@@ -170,7 +170,7 @@ class Literal::UnionSerializer < Literal::Serializer
 	private def discriminated_json_schema(label, member)
 		member_schema = json_schema_for(member)
 
-		if object_schema?(member_schema)
+		if mergeable_object_schema?(member_schema)
 			return merge_discriminator_schema(label, member_schema)
 		end
 
@@ -185,15 +185,34 @@ class Literal::UnionSerializer < Literal::Serializer
 		}
 	end
 
-	private def object_schema?(schema)
-		schema["type"] == "object"
+	private def mergeable_object_schema?(schema)
+		schema["type"] == "object" &&
+			schema.fetch("additionalProperties", nil) == false &&
+			!schema.fetch("properties", {}).key?("$type")
+	end
+
+	private def object_member?(member_type)
+		serializer = @context.serializer_for_type(member_type)
+
+		case serializer.tag
+		when :structure
+			return false unless Class === member_type && member_type < Literal::DataStructure
+		when :map
+			return false unless Literal::Types::MapType === member_type
+		else
+			return false
+		end
+
+		mergeable_object_schema?(json_schema_for(member_type))
+	rescue Literal::ArgumentError
+		false
 	end
 
 	private def merge_discriminator_schema(label, schema)
 		schema.merge(
 			"properties" => {
-				"$type" => { "const" => label },
 				**schema.fetch("properties", {}),
+				"$type" => { "const" => label },
 			},
 			"required" => ["$type", *schema.fetch("required", [])],
 		)

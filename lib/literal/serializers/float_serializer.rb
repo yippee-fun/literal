@@ -1,8 +1,31 @@
 # frozen_string_literal: true
 
+class Literal::Serializer::NumberType
+	include Literal::Type
+
+	def inspect
+		"SerializableNumber"
+	end
+
+	def ===(value)
+		Float === value
+	end
+
+	def >=(other, context: nil)
+		case other
+		when Literal::Types::UnionType
+			other.types.empty? && other.primitives.all? { |primitive| Float === primitive }
+		else
+			other == Float || Float === other || Literal::JSONSchema::NumberType === other
+		end
+	end
+
+	freeze
+end
+
 class Literal::FloatSerializer < Literal::Serializer
 	Tag = :float
-	Type = Float
+	Type = Literal::Serializer::NumberType.new
 
 	def tag
 		Tag

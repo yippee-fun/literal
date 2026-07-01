@@ -20,6 +20,10 @@ class SerializationArticle < Literal::Data
 	prop :body, String
 end
 
+class SerializationValueObject < Literal::Data
+	prop :value, String
+end
+
 class SerializationDraft < Literal::Data
 	prop :title, String
 	prop? :subtitle, String
@@ -67,6 +71,11 @@ test "string length range serialization" do
 	assert_equal(
 		Example.json_schema(_String(length: ...10)),
 		{ "type" => "string", "maxLength" => 9 },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(size: 2..4)),
+		{ "type" => "string", "minLength" => 2, "maxLength" => 4 },
 	)
 end
 
@@ -708,6 +717,13 @@ test "hash serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "hash serialization shape follows key type schema" do
+	type = _Hash(_Union(String, Integer), String)
+
+	assert_equal(Example.serialize({ "foo" => "bar" }, type:), [["foo", "bar"]])
+	assert_equal(Example.serialize({ 1 => "bar" }, type:), [[1, "bar"]])
+end
+
 test "map serialization roundtrip" do
 	original = { name: "Joel", age: 42, nickname: nil }
 	type = _Map(name: String, age: Integer, nickname: _Nilable(String))
@@ -779,6 +795,24 @@ test "tagged union serialization roundtrip" do
 	assert_equal(age_serialized, { "$type" => "age", "value" => 42 })
 	assert_equal(Example.deserialize(name_serialized, type:), name_original)
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
+end
+
+test "tagged union object with value property serialization roundtrip" do
+	type = _TaggedUnion(object: SerializationValueObject, note: String)
+	original = SerializationValueObject.new(value: "payload")
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "value" => "payload", "$type" => "object" })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "tagged union hash with type key serialization roundtrip" do
+	type = _TaggedUnion(hash: _Hash(String, String), integer: Integer)
+	original = { "$type" => "user", "name" => "Joel" }
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "hash", "value" => { "$type" => "user", "name" => "Joel" } })
+	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
 test "implicit nil serialization" do
@@ -925,6 +959,24 @@ test "discriminated union serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "discriminated union object with value property serialization roundtrip" do
+	type = _Union(SerializationValueObject, String)
+	original = SerializationValueObject.new(value: "payload")
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "value" => "payload", "$type" => "structure" })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "discriminated union hash with type key serialization roundtrip" do
+	type = _Union(_Hash(String, String), Integer)
+	original = { "$type" => "user", "name" => "Joel" }
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "hash", "value" => { "$type" => "user", "name" => "Joel" } })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
 test "big nested serialization roundtrip" do
 	original = SerializationEnvelope.new(
 		id: 7,
@@ -952,11 +1004,11 @@ test "big nested serialization roundtrip" do
 		"metadata" => {
 			"primary" => ["active", 1, nil],
 			"secondary" => [2, "backup"],
-		},
-		"schedule" => ["2025-01-13", "2025-01-20"],
-		"choice" => { "$type" => "person", "name" => "Jill", "age" => 40 },
-		"payload" => { "$type" => "hash", "count" => 3, "total" => 9 },
-	})
+			},
+			"schedule" => ["2025-01-13", "2025-01-20"],
+			"choice" => { "$type" => "person", "name" => "Jill", "age" => 40 },
+			"payload" => { "$type" => "hash", "value" => { "count" => 3, "total" => 9 } },
+		})
 
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
