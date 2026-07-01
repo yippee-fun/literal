@@ -71,22 +71,8 @@ class Literal::SerializationContext
 	end
 
 	def serializer_for_type(type)
-		if type in Literal::Types::UnionType
-			if literal_enum_union?(type) && (serializer = serializer_matching_type(type))
-				serializer
-			elsif (serializer = @map[:union])
-				serializer
-			else
-				raise Literal::ArgumentError, "No serializer type #{type.inspect}"
-			end
-		elsif (serializer = serializer_matching_type(type))
+		if (serializer = serializer_matching_type(type))
 			serializer
-		elsif type in Literal::Types::ConstraintType
-			type.object_constraints.each do |constraint|
-				return serializer if (serializer = serializer_matching_type(constraint))
-			end
-
-			raise Literal::ArgumentError, "No serializer type #{type.inspect}"
 		else
 			raise Literal::ArgumentError, "No serializer type #{type.inspect}"
 		end
@@ -123,14 +109,5 @@ class Literal::SerializationContext
 
 	private def serializer_matching_type(type)
 		@serializers.find { |it| serializer_kind(it) === type }
-	end
-
-	private def literal_enum_union?(type)
-		return false unless type.types.empty?
-
-		type.primitives.all? { |primitive| String === primitive } ||
-			type.primitives.all? { |primitive| Symbol === primitive } ||
-			type.primitives.all? { |primitive| Integer === primitive } ||
-			type.primitives.all? { |primitive| Float === primitive }
 	end
 end

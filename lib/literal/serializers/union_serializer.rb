@@ -45,7 +45,7 @@ class Literal::UnionSerializer < Literal::Serializer
 	def json_schema(type)
 		if natural?(type)
 			{
-				"anyOf" => type.map { |member| json_schema_for(member) }.to_a,
+				"oneOf" => type.map { |member| json_schema_for(member) }.to_a,
 			}
 		else
 			{
@@ -87,7 +87,7 @@ class Literal::UnionSerializer < Literal::Serializer
 		end
 
 		if object_member?(member_type)
-			deserialize_contents(raw_value.reject { |key, _| key == "$type" }, type: member_type)
+			deserialize_contents(raw_value.except("$type"), type: member_type)
 		else
 			deserialize_contents(raw_value.fetch("value"), type: member_type)
 		end

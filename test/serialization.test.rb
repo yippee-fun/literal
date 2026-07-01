@@ -24,6 +24,10 @@ class SerializationValueObject < Literal::Data
 	prop :value, String
 end
 
+class SerializationBooleanConst < Literal::Data
+	prop :foo, true
+end
+
 class SerializationDraft < Literal::Data
 	prop :title, String
 	prop? :subtitle, String
@@ -174,6 +178,16 @@ test "boolean json schema" do
 		Example.json_schema(_Boolean),
 		{ "type" => "boolean" },
 	)
+
+	assert_equal(
+		Example.json_schema(true),
+		{ "type" => "boolean", "const" => true },
+	)
+
+	assert_equal(
+		Example.json_schema(false),
+		{ "type" => "boolean", "const" => false },
+	)
 end
 
 test "integer json schema" do
@@ -252,25 +266,9 @@ test "symbol json schema" do
 	assert_equal(
 		Example.json_schema(_Union(Symbol, _Symbol(size: 5..10))),
 		{
-			"oneOf" => [
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "symbol:0" },
-						"value" => { "type" => "string" },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "symbol:1" },
-						"value" => { "type" => "string", "minLength" => 5, "maxLength" => 10 },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
+			"anyOf" => [
+				{ "type" => "string" },
+				{ "type" => "string", "minLength" => 5, "maxLength" => 10 },
 			],
 		},
 	)
@@ -499,6 +497,18 @@ test "structure json schema" do
 			"additionalProperties" => false,
 		},
 	)
+
+	assert_equal(
+		Example.json_schema(SerializationBooleanConst),
+		{
+			"type" => "object",
+			"properties" => {
+				"foo" => { "type" => "boolean", "const" => true },
+			},
+			"required" => ["foo"],
+			"additionalProperties" => false,
+		},
+	)
 end
 
 test "tagged union json schema" do
@@ -542,7 +552,7 @@ test "union json schema" do
 	assert_equal(
 		Example.json_schema(_Union(String, Integer)),
 		{
-			"anyOf" => [
+			"oneOf" => [
 				{ "type" => "string" },
 				{ "type" => "integer" },
 			],
@@ -552,7 +562,7 @@ test "union json schema" do
 	assert_equal(
 		Example.json_schema(_Union(nil, String)),
 		{
-			"anyOf" => [
+			"oneOf" => [
 				{ "type" => "null" },
 				{ "type" => "string" },
 			],
@@ -562,25 +572,9 @@ test "union json schema" do
 	assert_equal(
 		Example.json_schema(_Union(String, _String(length: 1..))),
 		{
-			"oneOf" => [
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "string:0" },
-						"value" => { "type" => "string" },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "string:1" },
-						"value" => { "type" => "string", "minLength" => 1 },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
+			"anyOf" => [
+				{ "type" => "string" },
+				{ "type" => "string", "minLength" => 1 },
 			],
 		},
 	)
@@ -588,25 +582,9 @@ test "union json schema" do
 	assert_equal(
 		Example.json_schema(_Union("small", _String(length: 1..))),
 		{
-			"oneOf" => [
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "string:0" },
-						"value" => { "type" => "string", "const" => "small" },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "string:1" },
-						"value" => { "type" => "string", "minLength" => 1 },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
+			"anyOf" => [
+				{ "type" => "string", "const" => "small" },
+				{ "type" => "string", "minLength" => 1 },
 			],
 		},
 	)
@@ -622,25 +600,9 @@ test "union json schema" do
 	assert_equal(
 		Example.json_schema(_Union(Integer, _Integer(5..10))),
 		{
-			"oneOf" => [
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "integer:0" },
-						"value" => { "type" => "integer" },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
-				{
-					"type" => "object",
-					"properties" => {
-						"$type" => { "const" => "integer:1" },
-						"value" => { "type" => "integer", "minimum" => 5, "maximum" => 10 },
-					},
-					"required" => ["$type", "value"],
-					"additionalProperties" => false,
-				},
+			"anyOf" => [
+				{ "type" => "integer" },
+				{ "type" => "integer", "minimum" => 5, "maximum" => 10 },
 			],
 		},
 	)
@@ -951,12 +913,12 @@ test "natural union number deserialization accepts integers" do
 	assert_equal(Example.deserialize(1, type:), 1.0)
 end
 
-test "discriminated union serialization roundtrip" do
+test "same-kind union serialization roundtrip" do
 	type = _Union(String, _String(length: 1..))
 	original = "Joel"
 	serialized = Example.serialize(original, type:)
 
-	assert_equal(serialized, { "$type" => "string:0", "value" => "Joel" })
+	assert_equal(serialized, "Joel")
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
@@ -1006,9 +968,9 @@ test "big nested serialization roundtrip" do
 			"primary" => ["active", 1, nil],
 			"secondary" => [2, "backup"],
 			},
-			"schedule" => ["2025-01-13", "2025-01-20"],
-			"choice" => { "$type" => "person", "name" => "Jill", "age" => 40 },
-			"payload" => { "$type" => "hash", "value" => { "count" => 3, "total" => 9 } },
+		"schedule" => ["2025-01-13", "2025-01-20"],
+		"choice" => { "$type" => "person", "name" => "Jill", "age" => 40 },
+		"payload" => { "$type" => "hash", "value" => { "count" => 3, "total" => 9 } },
 		})
 
 	assert_equal(Example.deserialize(serialized, type:), original)

@@ -71,14 +71,14 @@ class Literal::Types::ConstraintType
 		else
 			literal_value?(other) && self === other
 		end
-		end
+	end
 
 	def <=(other, context: nil)
 		case other
 		when Module
 			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
 		else
-			false
+			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
 		end
 	end
 

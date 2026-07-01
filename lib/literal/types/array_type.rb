@@ -28,6 +28,8 @@ class Literal::Types::ArrayType
 		case other
 		when Literal::Types::ArrayType
 			Literal.subtype?(other.type, @type, context:)
+		when Literal::Types::ConstraintType
+			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
 		else
 			false
 		end

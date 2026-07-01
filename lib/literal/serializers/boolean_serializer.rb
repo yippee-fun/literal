@@ -13,7 +13,12 @@ class Literal::BooleanSerializer < Literal::Serializer
 	end
 
 	def json_schema(type)
-		{ "type" => "boolean" }
+		case type
+		when true, false
+			{ "type" => "boolean", "const" => type }
+		else
+			{ "type" => "boolean" }
+		end
 	end
 
 	def serialize(value, type:)

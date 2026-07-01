@@ -10,12 +10,23 @@ class Literal::Data < Literal::DataStructure
 			end
 		end
 
-		def prop(name, type, kind = :keyword, reader: :public, writer: false, predicate: false, default: nil, description: nil)
+		def prop(name, type, kind = :keyword, reader: :public, predicate: false, default: nil, description: nil)
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:)
 		end
 
-		def prop?(name, type, kind = :keyword, reader: :public, writer: false, predicate: false, description: nil, &coercion)
-			super(name, type, kind, reader:, writer: false, predicate:, description:, &coercion)
+		def prop?(name, type, kind = :keyword, reader: :public, predicate: false, description: nil, &coercion)
+			Literal::Properties.instance_method(:prop).bind_call(
+				self,
+				name,
+				Literal::Types._Union(type, Literal::Undefined),
+				kind,
+				reader:,
+				writer: false,
+				predicate:,
+				default: Literal::Undefined,
+				description:,
+				&coercion
+			)
 		end
 
 		def literal_properties

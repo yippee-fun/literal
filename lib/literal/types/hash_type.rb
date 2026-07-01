@@ -39,6 +39,8 @@ class Literal::Types::HashType
 			) && (
 				Literal.subtype?(other.value_type, @value_type, context:)
 			)
+		when Literal::Types::ConstraintType
+			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
 		else
 			false
 		end
