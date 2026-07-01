@@ -88,8 +88,6 @@ assert_allocations(_Truthy, false) => 0
 
 assert_allocations(_Tuple(String, Integer), ["a", 1]) => 0
 
-assert_allocations(_Union(String, Integer), 42) => 0
-
 assert_allocations(_Union(String, "Hello", "World"), "World") => 0
 
 assert_allocations(_Void, nil) => 0

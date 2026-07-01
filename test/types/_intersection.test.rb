@@ -39,7 +39,7 @@ test "error message" do
 	assert_equal error.message, <<~MSG
 		Type mismatch
 
-		    _Intersection(_Interface(:size), _Interface(:each))
+		    _Constraint(_Interface(:size), _Interface(:each))
 		      Expected: _Interface(:each)
 		      Actual (String): "string"
 	MSG

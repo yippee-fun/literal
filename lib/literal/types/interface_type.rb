@@ -34,8 +34,6 @@ class Literal::Types::InterfaceType
 		when Module
 			public_methods = other.public_instance_methods.to_set
 			@methods.subset?(public_methods)
-		when Literal::Types::IntersectionType
-			@methods.all? { |method| other.types.any? { |type| covers_method?(type, method, context:) } }
 		when Literal::Types::ConstraintType
 			@methods.all? { |method| other.object_constraints.any? { |type| covers_method?(type, method, context:) } }
 		else
@@ -51,8 +49,6 @@ class Literal::Types::InterfaceType
 		case type
 		when Literal::Types::InterfaceType
 			type.methods.include?(method)
-		when Literal::Types::IntersectionType
-			type.types.any? { |inner_type| covers_method?(inner_type, method, context:) }
 		when Literal::Types::ConstraintType
 			type.object_constraints.any? { |constraint| covers_method?(constraint, method, context:) }
 		when Module

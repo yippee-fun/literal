@@ -1,20 +1,19 @@
 # frozen_string_literal: true
 
 class Literal::BooleanSerializer < Literal::Serializer
-	Tag = :boolean
 	Type = _Boolean
-	Kind = _Kind(Type)
-
-	def tag
-		Tag
-	end
 
 	def type
 		Type
 	end
 
-	def kind
-		Kind
+	def json_schema(type)
+		case type
+		when true, false
+			{ "type" => "boolean", "const" => type }
+		else
+			{ "type" => "boolean" }
+		end
 	end
 
 	def serialize(value, type:)

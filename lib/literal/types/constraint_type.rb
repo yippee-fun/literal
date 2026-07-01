@@ -51,7 +51,8 @@ class Literal::Types::ConstraintType
 
 			other_property_constraints = other.property_constraints
 			return false unless @property_constraints.all? do |k, v|
-				Literal.subtype?(other_property_constraints[k], v, context:)
+				Literal.subtype?(other_property_constraints[k], v, context:) ||
+					other_object_constraints.any? { |constraint| constraint_property_subtype?(constraint, k, v, context:) }
 			end
 
 			true
@@ -59,17 +60,16 @@ class Literal::Types::ConstraintType
 			return false unless @property_constraints.empty?
 
 			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
-		when Literal::Types::IntersectionType
-			other_object_constraints = other.types
-			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, constraint, context:) }
-			end
-
-			true
 		when Literal::Types::FrozenType
 			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
+		when Literal::Types::UnionType
+			other.<=(self, context:)
+		when Module
+			return false unless @property_constraints.empty?
+
+			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		else
-			false
+			literal_value?(other) && self === other
 		end
 	end
 
@@ -78,7 +78,7 @@ class Literal::Types::ConstraintType
 		when Module
 			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
 		else
-			false
+			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
 		end
 	end
 
@@ -111,6 +111,30 @@ class Literal::Types::ConstraintType
 	private def inspect_property_constraints
 		if @property_constraints.length > 0
 			@property_constraints.map { |k, t| "#{k}: #{t.inspect}" }.join(", ")
+		end
+	end
+
+	private def constraint_property_subtype?(constraint, property, type, context:)
+		case [constraint, property, type]
+		in [Range, :finite?, true]
+			finite_range?(constraint)
+		else
+			false
+		end
+	end
+
+	private def finite_range?(range)
+		range.begin && range.end &&
+			(!Numeric === range.begin || range.begin.finite?) &&
+			(!Numeric === range.end || range.end.finite?)
+	end
+
+	private def literal_value?(value)
+		case value
+		when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
+			true
+		else
+			false
 		end
 	end
 

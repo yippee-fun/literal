@@ -1,12 +1,36 @@
 # frozen_string_literal: true
 
 require "set"
+require "js_regex"
 
 include Literal::Types
 
 class SerializationPerson < Literal::Data
 	prop :name, String
 	prop :age, Integer
+end
+
+class SerializationPost < Literal::Data
+	prop :title, String
+	prop :subtitle, _Nilable(String)
+end
+
+class SerializationArticle < Literal::Data
+	prop :title, String, description: "Published headline"
+	prop :body, String
+end
+
+class SerializationValueObject < Literal::Data
+	prop :value, String
+end
+
+class SerializationBooleanConst < Literal::Data
+	prop :foo, true
+end
+
+class SerializationDraft < Literal::Data
+	prop :title, String
+	prop? :subtitle, String
 end
 
 class SerializationEnvelope < Literal::Data
@@ -16,13 +40,14 @@ class SerializationEnvelope < Literal::Data
 	prop :metadata, _Hash(Symbol, _Array(_Nilable(_Union(String, Integer))))
 	prop :schedule, _Array(Date)
 	prop :choice, _TaggedUnion(person: SerializationPerson, note: String)
-	prop :payload, _Union(_Hash(Symbol, Integer), _Array(String))
+	prop :payload, _TaggedUnion(hash: _Hash(Symbol, Integer), array: _Array(String))
 end
 
 Example = Literal::SerializationContext.new(
 	Literal::StringSerializer,
 	Literal::SymbolSerializer,
 	Literal::IntegerSerializer,
+	Literal::JSONSchemaNumberSerializer,
 	Literal::FloatSerializer,
 	Literal::BooleanSerializer,
 	Literal::DateSerializer,
@@ -30,10 +55,573 @@ Example = Literal::SerializationContext.new(
 	Literal::TaggedUnionSerializer,
 	Literal::UnionSerializer,
 	Literal::HashSerializer,
+	Literal::MapSerializer,
+	Literal::TupleSerializer,
 	Literal::ArraySerializer,
 	Literal::SetSerializer,
 	Literal::NilableSerializer,
 )
+
+test "string length range serialization" do
+	assert_equal(
+		Example.json_schema(_String(length: 1..)),
+		{ "type" => "string", "minLength" => 1 },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(length: ..10)),
+		{ "type" => "string", "maxLength" => 10 },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(length: ...10)),
+		{ "type" => "string", "maxLength" => 9 },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(size: 2..4)),
+		{ "type" => "string", "minLength" => 2, "maxLength" => 4 },
+	)
+end
+
+test "string regex pattern serialization" do
+	assert_equal(
+		Example.json_schema(_String(/\A[A-Z]+\z/)),
+		{ "type" => "string", "pattern" => "^[A-Z]+$" },
+	)
+end
+
+test "json schema scalar type serialization" do
+	assert_equal(
+		Example.json_schema(Literal::JSONSchema::String(format: "email", min_length: 1)),
+		{ "type" => "string", "format" => "email", "minLength" => 1 },
+	)
+
+	assert_equal(
+		Example.json_schema(Literal::JSONSchema::Integer(minimum: 0, exclusive_maximum: 10)),
+		{ "type" => "integer", "minimum" => 0, "exclusiveMaximum" => 10 },
+	)
+
+	assert_equal(
+		Example.json_schema(Literal::JSONSchema::Number(exclusive_minimum: 0, maximum: 1.5)),
+		{ "type" => "number", "exclusiveMinimum" => 0, "maximum" => 1.5 },
+	)
+end
+
+test "array length range serialization" do
+	assert_equal(
+		Example.json_schema(_Constraint(_Array(String), length: 5..10)),
+		{
+			"type" => "array",
+			"items" => { "type" => "string" },
+			"minItems" => 5,
+			"maxItems" => 10,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Array(String), size: 1...10)),
+		{
+			"type" => "array",
+			"items" => { "type" => "string" },
+			"minItems" => 1,
+			"maxItems" => 9,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Array(String), length: 1..)),
+		{
+			"type" => "array",
+			"items" => { "type" => "string" },
+			"minItems" => 1,
+		},
+	)
+end
+
+test "set length range serialization" do
+	assert_equal(
+		Example.json_schema(_Constraint(_Set(String), length: 5..10)),
+		{
+			"type" => "array",
+			"uniqueItems" => true,
+			"items" => { "type" => "string" },
+			"minItems" => 5,
+			"maxItems" => 10,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Set(String), size: 1...10)),
+		{
+			"type" => "array",
+			"uniqueItems" => true,
+			"items" => { "type" => "string" },
+			"minItems" => 1,
+			"maxItems" => 9,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Set(String), length: 1..)),
+		{
+			"type" => "array",
+			"uniqueItems" => true,
+			"items" => { "type" => "string" },
+			"minItems" => 1,
+		},
+	)
+end
+
+test "boolean json schema" do
+	assert_equal(
+		Example.json_schema(_Boolean),
+		{ "type" => "boolean" },
+	)
+
+	assert_equal(
+		Example.json_schema(true),
+		{ "type" => "boolean", "const" => true },
+	)
+
+	assert_equal(
+		Example.json_schema(false),
+		{ "type" => "boolean", "const" => false },
+	)
+end
+
+test "integer json schema" do
+	assert_equal(
+		Example.json_schema(Integer),
+		{ "type" => "integer" },
+	)
+
+	assert_equal(
+		Example.json_schema(42),
+		{ "type" => "integer", "const" => 42 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Integer(5..10)),
+		{ "type" => "integer", "minimum" => 5, "maximum" => 10 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Integer(5...10)),
+		{ "type" => "integer", "minimum" => 5, "exclusiveMaximum" => 10 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Integer(5..)),
+		{ "type" => "integer", "minimum" => 5 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Integer(1..10, 3..6)),
+		{ "type" => "integer", "minimum" => 3, "maximum" => 6 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Integer(1..10, 3...6)),
+		{ "type" => "integer", "minimum" => 3, "exclusiveMaximum" => 6 },
+	)
+end
+
+test "float json schema" do
+	assert_equal(
+		Example.json_schema(_Float(finite?: true)),
+		{ "type" => "number" },
+	)
+
+	assert_equal(
+		Example.json_schema(3.14),
+		{ "type" => "number", "const" => 3.14 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Float(1.5..3.5)),
+		{ "type" => "number", "minimum" => 1.5, "maximum" => 3.5 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Float(1.5..10.5, 3.5..6.5)),
+		{ "type" => "number", "minimum" => 3.5, "maximum" => 6.5 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(1.5, 2.5, 3.5)),
+		{ "type" => "number", "enum" => [1.5, 2.5, 3.5] },
+	)
+end
+
+test "symbol json schema" do
+	assert_equal(
+		Example.json_schema(Symbol),
+		{ "type" => "string" },
+	)
+
+	assert_equal(
+		Example.json_schema(:active),
+		{ "type" => "string", "const" => "active" },
+	)
+
+	assert_equal(
+		Example.json_schema(_Symbol(size: 5..10)),
+		{ "type" => "string", "minLength" => 5, "maxLength" => 10 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(:small, :medium, :large)),
+		{
+			"type" => "string",
+			"enum" => ["small", "medium", "large"],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(Symbol, _Symbol(size: 5..10))),
+		{
+			"anyOf" => [
+				{ "type" => "string" },
+				{ "type" => "string", "minLength" => 5, "maxLength" => 10 },
+			],
+		},
+	)
+end
+
+test "date json schema" do
+	assert_equal(
+		Example.json_schema(Date),
+		{ "type" => "string", "format" => "date" },
+	)
+
+	assert_equal(
+		Example.json_schema(Date.new(2025, 1, 13)),
+		{ "type" => "string", "format" => "date", "const" => "2025-01-13" },
+	)
+
+	assert_equal(
+		Example.json_schema(_Date((Date.new(2025, 1, 1))..(Date.new(2025, 12, 31)))),
+		{ "type" => "string", "format" => "date" },
+	)
+
+	assert_equal(
+		Example.json_schema(_Date((Date.new(2025, 1, 1))...(Date.new(2026, 1, 1)))),
+		{ "type" => "string", "format" => "date" },
+	)
+
+	assert_equal(
+		Example.json_schema(_Date((Date.new(2025, 1, 1))..)),
+		{ "type" => "string", "format" => "date" },
+	)
+end
+
+test "hash json schema" do
+	assert_equal(
+		Example.json_schema(_Hash(Symbol, Integer)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Hash(_Union(:small, :large), String)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string", "enum" => ["small", "large"] },
+			"additionalProperties" => { "type" => "string" },
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Hash(_String(/\A[a-z_]+\z/), Integer)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string", "pattern" => "^[a-z_]+$" },
+			"additionalProperties" => { "type" => "integer" },
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Hash(Integer, String)),
+		{
+			"type" => "array",
+			"items" => {
+				"type" => "array",
+				"prefixItems" => [
+					{ "type" => "integer" },
+					{ "type" => "string" },
+				],
+				"minItems" => 2,
+				"maxItems" => 2,
+			},
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Hash(Symbol, Integer), size: 1..5)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+			"minProperties" => 1,
+			"maxProperties" => 5,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Hash(Symbol, Integer), length: 1...5)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+			"minProperties" => 1,
+			"maxProperties" => 4,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Hash(Integer, String), size: 2)),
+		{
+			"type" => "array",
+			"items" => {
+				"type" => "array",
+				"prefixItems" => [
+					{ "type" => "integer" },
+					{ "type" => "string" },
+				],
+				"minItems" => 2,
+				"maxItems" => 2,
+			},
+			"minItems" => 2,
+			"maxItems" => 2,
+		},
+	)
+end
+
+test "map json schema" do
+	assert_equal(
+		Example.json_schema(_Map(name: String, age: Integer, nickname: _Nilable(String))),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"age" => { "type" => "integer" },
+				"nickname" => {
+					"anyOf" => [
+						{ "type" => "string" },
+						{ "type" => "null" },
+					],
+				},
+			},
+			"required" => ["name", "age"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "tuple json schema" do
+	assert_equal(
+		Example.json_schema(_Tuple(String, Integer, _Nilable(Symbol))),
+		{
+			"type" => "array",
+			"prefixItems" => [
+				{ "type" => "string" },
+				{ "type" => "integer" },
+				{
+					"anyOf" => [
+						{ "type" => "string" },
+						{ "type" => "null" },
+					],
+				},
+			],
+			"minItems" => 3,
+			"maxItems" => 3,
+		},
+	)
+end
+
+test "nilable json schema" do
+	assert_equal(
+		Example.json_schema(_Nilable(Integer)),
+		{
+			"anyOf" => [
+				{ "type" => "integer" },
+				{ "type" => "null" },
+			],
+		},
+	)
+end
+
+test "structure json schema" do
+	assert_equal(
+		Example.json_schema(SerializationPerson),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"age" => { "type" => "integer" },
+			},
+			"required" => ["name", "age"],
+			"additionalProperties" => false,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationPost),
+		{
+			"type" => "object",
+			"properties" => {
+				"title" => { "type" => "string" },
+				"subtitle" => {
+					"anyOf" => [
+						{ "type" => "string" },
+						{ "type" => "null" },
+					],
+				},
+			},
+			"required" => ["title"],
+			"additionalProperties" => false,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationArticle),
+		{
+			"type" => "object",
+			"properties" => {
+				"title" => { "type" => "string", "description" => "Published headline" },
+				"body" => { "type" => "string" },
+			},
+			"required" => ["title", "body"],
+			"additionalProperties" => false,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationDraft),
+		{
+			"type" => "object",
+			"properties" => {
+				"title" => { "type" => "string" },
+				"subtitle" => { "type" => "string" },
+			},
+			"required" => ["title"],
+			"additionalProperties" => false,
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationBooleanConst),
+		{
+			"type" => "object",
+			"properties" => {
+				"foo" => { "type" => "boolean", "const" => true },
+			},
+			"required" => ["foo"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "tagged union json schema" do
+	assert_equal(
+		Example.json_schema(_TaggedUnion(person: SerializationPerson, note: String)),
+		{
+			"oneOf" => [
+				{
+					"type" => "object",
+					"properties" => {
+						"$type" => { "const" => "person" },
+						"name" => { "type" => "string" },
+						"age" => { "type" => "integer" },
+					},
+					"required" => ["$type", "name", "age"],
+					"additionalProperties" => false,
+				},
+				{
+					"type" => "object",
+					"properties" => {
+						"$type" => { "const" => "note" },
+						"value" => { "type" => "string" },
+					},
+					"required" => ["$type", "value"],
+					"additionalProperties" => false,
+				},
+			],
+		},
+	)
+end
+
+test "union json schema" do
+	assert_equal(
+		Example.json_schema(_Union("small", "medium", "large")),
+		{
+			"type" => "string",
+			"enum" => ["small", "medium", "large"],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(String, Integer)),
+		{
+			"oneOf" => [
+				{ "type" => "string" },
+				{ "type" => "integer" },
+			],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(nil, String)),
+		{
+			"oneOf" => [
+				{ "type" => "null" },
+				{ "type" => "string" },
+			],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(String, _String(length: 1..))),
+		{
+			"anyOf" => [
+				{ "type" => "string" },
+				{ "type" => "string", "minLength" => 1 },
+			],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union("small", _String(length: 1..))),
+		{
+			"anyOf" => [
+				{ "type" => "string", "const" => "small" },
+				{ "type" => "string", "minLength" => 1 },
+			],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(1, 2, 3)),
+		{
+			"type" => "integer",
+			"enum" => [1, 2, 3],
+		},
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(Integer, _Integer(5..10))),
+		{
+			"anyOf" => [
+				{ "type" => "integer" },
+				{ "type" => "integer", "minimum" => 5, "maximum" => 10 },
+			],
+		},
+	)
+end
 
 test "array serialization roundtrip" do
 	original = [1, 2, 3]
@@ -91,7 +679,7 @@ end
 
 test "float serialization roundtrip" do
 	original = 3.14
-	type = Float
+	type = _Float(finite?: true)
 	serialized = Example.serialize(original, type:)
 
 	assert_equal(serialized, 3.14)
@@ -104,6 +692,40 @@ test "hash serialization roundtrip" do
 	serialized = Example.serialize(original, type:)
 
 	assert_equal(serialized, { "foo" => 1, "bar" => 2 })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "hash serialization shape follows key type schema" do
+	type = _Hash(_Union(String, Integer), String)
+
+	assert_equal(Example.serialize({ "foo" => "bar" }, type:), [["foo", "bar"]])
+	assert_equal(Example.serialize({ 1 => "bar" }, type:), [[1, "bar"]])
+end
+
+test "map serialization roundtrip" do
+	original = { name: "Joel", age: 42, nickname: nil }
+	type = _Map(name: String, age: Integer, nickname: _Nilable(String))
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "name" => "Joel", "age" => 42, "nickname" => nil })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "map with type key serialization roundtrip" do
+	original = { "$type": "user", name: "Joel" }
+	type = _Map("$type": String, name: String)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "user", "name" => "Joel" })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "tuple serialization roundtrip" do
+	original = ["Joel", 42, :admin]
+	type = _Tuple(String, Integer, Symbol)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["Joel", 42, "admin"])
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
@@ -137,6 +759,17 @@ test "structure serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "optional structure property serialization roundtrip" do
+	type = SerializationDraft
+	without_subtitle = SerializationDraft.new(title: "Draft")
+	with_subtitle = SerializationDraft.new(title: "Draft", subtitle: "Optional")
+
+	assert_equal(Example.serialize(without_subtitle, type:), { "title" => "Draft" })
+	assert_equal(Example.serialize(with_subtitle, type:), { "title" => "Draft", "subtitle" => "Optional" })
+	assert_equal(Example.deserialize({ "title" => "Draft" }, type:), without_subtitle)
+	assert_equal(Example.deserialize({ "title" => "Draft", "subtitle" => "Optional" }, type:), with_subtitle)
+end
+
 test "tagged union serialization roundtrip" do
 	type = _TaggedUnion(name: String, age: Integer)
 	name_original = "Joel"
@@ -145,86 +778,53 @@ test "tagged union serialization roundtrip" do
 	name_serialized = Example.serialize(name_original, type:)
 	age_serialized = Example.serialize(age_original, type:)
 
-	assert_equal(name_serialized, ["name", "Joel"])
-	assert_equal(age_serialized, ["age", 42])
+	assert_equal(name_serialized, { "$type" => "name", "value" => "Joel" })
+	assert_equal(age_serialized, { "$type" => "age", "value" => 42 })
 	assert_equal(Example.deserialize(name_serialized, type:), name_original)
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
 end
 
-test "implicit nil serialization" do
-	type = Example.type
-	assert_equal nil, Example.serialize(nil, type:)
+test "tagged union object with value property serialization roundtrip" do
+	type = _TaggedUnion(object: SerializationValueObject, note: String)
+	original = SerializationValueObject.new(value: "payload")
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "value" => "payload", "$type" => "object" })
+	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "implicit string serialization" do
-	type = Example.type
-	assert_equal ["string", "example"], Example.serialize("example", type:)
+test "tagged union hash with type key serialization roundtrip" do
+	type = _TaggedUnion(hash: _Hash(String, String), integer: Integer)
+	original = { "$type" => "user", "name" => "Joel" }
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "hash", "value" => { "$type" => "user", "name" => "Joel" } })
+	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "implicit symbol serialization" do
-	type = Example.type
-	assert_equal ["symbol", "example"], Example.serialize(:example, type:)
+test "tagged union map with type key serialization roundtrip" do
+	type = _TaggedUnion(map: _Map("$type": String, name: String), integer: Integer)
+	original = { "$type": "user", name: "Joel" }
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "$type" => "map", "value" => { "$type" => "user", "name" => "Joel" } })
+	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "implicit integer serialization" do
-	type = Example.type
-	assert_equal ["integer", 42], Example.serialize(42, type:)
-end
-
-test "implicit float serialization" do
-	type = Example.type
-	assert_equal ["float", 3.14], Example.serialize(3.14, type:)
-end
-
-test "implicit boolean serialization" do
-	type = Example.type
-	assert_equal ["boolean", true], Example.serialize(true, type:)
-end
-
-test "implicit date serialization" do
-	type = Example.type
-	assert_equal ["date", "2025-01-13"], Example.serialize(Date.new(2025, 1, 13), type:)
-end
-
-test "implicit array serialization" do
-	type = Example.type
-	value = [1, 2, 3]
-
-	assert_equal ["array", [["integer", 1], ["integer", 2], ["integer", 3]]], Example.serialize(value, type:)
-end
-
-test "implicit set serialization" do
-	type = Example.type
-	value = Set[1, 2, 3]
-
-	assert_equal ["set", [["integer", 1], ["integer", 2], ["integer", 3]]], Example.serialize(value, type:)
-end
-
-test "implicit hash serialization" do
-	type = Example.type
-	value = { a: 1, b: 2 }
-
-	assert_equal ["hash", [[["symbol", "a"], ["integer", 1]], [["symbol", "b"], ["integer", 2]]]], Example.serialize(value, type:)
-	assert_equal value, Example.deserialize(Example.serialize(value, type:), type:)
-end
-
-test "implicit branch precedence" do
-	tag, type = Example.type.resolve(nil)
-	assert_equal :nilable, tag
-	assert_equal "_Nilable(_Deferred)", type.inspect
-
-	tag, type = Example.type.resolve([1, 2, 3])
-	assert_equal :array, tag
-	assert_equal "_Array(_Deferred)", type.inspect
-
-	tag, type = Example.type.resolve(Set[1, 2, 3])
-	assert_equal :set, tag
-	assert_equal "_Set(_Deferred)", type.inspect
+test "serialization context type matches serializable values" do
+	assert Example.type === nil
+	assert Example.type === "example"
+	assert Example.type === :example
+	assert Example.type === 42
+	assert Example.type === 3.14
+	assert Example.type === true
+	assert Example.type === Date.new(2025, 1, 13)
+	assert Example.type === [1, 2, 3]
+	assert Example.type === Set[1, 2, 3]
+	assert Example.type === { a: 1, b: 2 }
 end
 
 test "recursive kind support" do
-	assert Example.kind === Example.type
-	assert Example.kind === _Union(Example.type, String)
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
 	assert Example.kind === _Set(Example.type)
@@ -238,10 +838,124 @@ test "union serialization roundtrip" do
 	name_serialized = Example.serialize(name_original, type:)
 	age_serialized = Example.serialize(age_original, type:)
 
-	assert_equal(name_serialized, ["string", "Joel"])
-	assert_equal(age_serialized, ["integer", 42])
+	assert_equal(name_serialized, "Joel")
+	assert_equal(age_serialized, 42)
 	assert_equal(Example.deserialize(name_serialized, type:), name_original)
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
+end
+
+test "natural union number deserialization accepts integers" do
+	type = _Union(_Float(finite?: true), String)
+
+	assert_equal(Example.deserialize(1, type:), 1.0)
+end
+
+test "string and date union is not naturally discriminated" do
+	type = _Union(String, Date)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "integer and finite float union serializes as number" do
+	type = _Union(Integer, _Float(finite?: true))
+
+	assert_equal(Example.json_schema(type), { "type" => "number" })
+	assert_equal(Example.json_schema(_Union(_Float(finite?: true), Integer)), { "type" => "number" })
+	assert_equal(Example.serialize(1, type:), 1)
+	assert_equal(Example.serialize(1.5, type:), 1.5)
+	assert_equal(Example.deserialize(1, type:), 1)
+	assert_equal(Example.deserialize(1.5, type:), 1.5)
+end
+
+test "integer and finite float union can be combined with other natural types" do
+	type = _Union(String, Integer, _Float(finite?: true))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"oneOf" => [
+				{ "type" => "string" },
+				{ "type" => "number" },
+			],
+		},
+	)
+
+	assert_equal(Example.serialize("Joel", type:), "Joel")
+	assert_equal(Example.serialize(1, type:), 1)
+	assert_equal(Example.serialize(1.5, type:), 1.5)
+	assert_equal(Example.deserialize("Joel", type:), "Joel")
+	assert_equal(Example.deserialize(1, type:), 1)
+	assert_equal(Example.deserialize(1.5, type:), 1.5)
+end
+
+test "range constrained integer and finite float union serializes as number" do
+	type = _Constraint(1..20, 3..10, _Union(Integer, _Float(finite?: true)))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "number",
+			"minimum" => 3,
+			"maximum" => 10,
+		},
+	)
+
+	assert_equal(Example.serialize(3, type:), 3)
+	assert_equal(Example.serialize(3.5, type:), 3.5)
+	assert_equal(Example.deserialize(3, type:), 3)
+	assert_equal(Example.deserialize(3.5, type:), 3.5)
+end
+
+test "exclusive range constrained integer and finite float union serializes as number" do
+	type = _Constraint(1...10, _Union(Integer, _Float(finite?: true)))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "number",
+			"minimum" => 1,
+			"exclusiveMaximum" => 10,
+		},
+	)
+end
+
+test "integer and plain float union is not serializable" do
+	type = _Union(Integer, Float)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "integer and constrained float union is not collapsed to number" do
+	type = _Union(Integer, _Float(1..10))
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "same-kind union serialization roundtrip" do
+	type = _Union(String, _String(length: 1..))
+	original = "Joel"
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, "Joel")
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "non-natural union object is not serializable" do
+	type = _Union(SerializationValueObject, String)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "non-natural union hash is not serializable" do
+	type = _Union(_Hash(String, String), Integer)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "non-natural union map is not serializable" do
+	type = _Union(_Map("$type": String, name: String), Integer)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
 test "big nested serialization roundtrip" do
@@ -269,13 +983,13 @@ test "big nested serialization roundtrip" do
 		},
 		"tags" => ["admin", "staff"],
 		"metadata" => {
-			"primary" => [["string", "active"], ["integer", 1], nil],
-			"secondary" => [["integer", 2], ["string", "backup"]],
-		},
+			"primary" => ["active", 1, nil],
+			"secondary" => [2, "backup"],
+			},
 		"schedule" => ["2025-01-13", "2025-01-20"],
-		"choice" => ["person", { "name" => "Jill", "age" => 40 }],
-		"payload" => ["hash", { "count" => 3, "total" => 9 }],
-	})
+		"choice" => { "$type" => "person", "name" => "Jill", "age" => 40 },
+		"payload" => { "$type" => "hash", "value" => { "count" => 3, "total" => 9 } },
+		})
 
 	assert_equal(Example.deserialize(serialized, type:), original)
 end

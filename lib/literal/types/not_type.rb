@@ -25,8 +25,6 @@ class Literal::Types::NotType
 			Literal.subtype?(other.type, @type, context:)
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
-		when Literal::Types::IntersectionType
-			other.types.any? { |type| Literal.subtype?(type, self, context:) }
 		else
 			false
 		end

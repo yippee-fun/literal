@@ -1,20 +1,52 @@
 # frozen_string_literal: true
 
-class Literal::NilableSerializer < Literal::Serializer
-	Tag = :nilable
+class Literal::Serializer::NilableType
+	include Literal::Type
 
 	def initialize(context)
 		@context = context
-		@type = _Nilable(@context.type)
-		@kind = _Kind(@type)
+		freeze
 	end
 
-	def tag
-		Tag
+	def inspect
+		"SerializableNilable"
+	end
+
+	def ===(value)
+		nil === value
+	end
+
+	def >=(other, context: nil)
+		case other
+		when Literal::Types::NilableType
+			Literal.subtype?(other.type, @context.type, context:)
+		when nil
+			true
+		else
+			false
+		end
+	end
+end
+
+class Literal::NilableSerializer < Literal::Serializer
+	def initialize(context)
+		@context = context
+		@type = Literal::Serializer::NilableType.new(@context)
 	end
 
 	attr_reader :type
-	attr_reader :kind
+
+	def json_schema(type)
+		return { "type" => "null" } if type.nil?
+		return { "type" => "null" } if Literal::Serializer::NilableType === type
+
+		{
+			"anyOf" => [
+				json_schema_for(type.type),
+				{ "type" => "null" },
+			],
+		}
+	end
 
 	def serialize(value, type:)
 		case value

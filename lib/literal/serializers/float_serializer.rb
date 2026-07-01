@@ -1,20 +1,23 @@
 # frozen_string_literal: true
 
 class Literal::FloatSerializer < Literal::Serializer
-	Tag = :float
-	Type = Float
-	Kind = _Kind(Type)
-
-	def tag
-		Tag
-	end
+	Type = _Float(finite?: true)
 
 	def type
 		Type
 	end
 
-	def kind
-		Kind
+	def json_schema(type)
+		case type
+		when Float
+			{ "type" => "number", "const" => type }
+		when Literal::Types::UnionType
+			union_json_schema(type)
+		when Literal::Types::ConstraintType
+			constraint_json_schema(type)
+		else
+			{ "type" => "number" }
+		end
 	end
 
 	def serialize(value, type:)
@@ -31,6 +34,20 @@ class Literal::FloatSerializer < Literal::Serializer
 			raw.to_f
 		else
 			raw
+		end
+	end
+
+	private def union_json_schema(type)
+		if type.types.empty?
+			{ "type" => "number", "enum" => type.primitives.to_a }
+		else
+			{ "anyOf" => type.map { |member| json_schema_for(member) }.to_a }
+		end
+	end
+
+	private def constraint_json_schema(type)
+		{ "type" => "number" }.tap do |schema|
+			apply_range_constraints(schema, type.object_constraints.select { |constraint| Range === constraint })
 		end
 	end
 end

@@ -97,6 +97,19 @@ class Literal::Types::UnionType
 		Literal::Types::UnionType.new([*@primitives.map(&), *@types.map(&)])
 	end
 
+	def reject(&)
+		members = to_a.reject(&)
+
+		case members.size
+		when 0
+			Literal::Types::NeverType::Instance
+		when 1
+			members.first
+		else
+			Literal::Types::UnionType.new(members)
+		end
+	end
+
 	def >=(other, context: nil)
 		types = @types
 		primitives = @primitives

@@ -16,6 +16,7 @@ test "hierarchy" do
 	assert_subtype _Constraint(_Array(Array)), _Constraint(_Array(Enumerable))
 	assert_subtype _Constraint(Array, size: 1..5), _Constraint(Array, size: 1..5)
 	assert_subtype _Constraint(Array, size: 1..2), _Constraint(Array, size: 1..3)
+	assert_subtype Array, _Constraint(Enumerable, Array)
 	assert_subtype _Intersection(Array), _Constraint(Enumerable, Array)
 	assert_subtype _Constraint(_Array(Enumerable), name: _String(size: 1..5)), _Constraint(_Array(Enumerable), name: _String(size: 1..5))
 	assert_subtype _Interface(:a, :b), _Constraint(_Interface(:a), _Interface(:b))
@@ -23,6 +24,11 @@ test "hierarchy" do
 
 	refute_subtype _Constraint(Array, size: 1..3), _Constraint(Array, size: 1..2)
 	refute_subtype _Constraint(String, size: 1), _Constraint(String, size: 4)
+	assert_subtype 3.14, _Float(finite?: true)
+	refute_subtype Float::INFINITY, _Float(finite?: true)
+	assert_subtype _Float(1..10), _Float(finite?: true)
+	refute_subtype _Float(1..), _Float(finite?: true)
+	refute_subtype _Float(..10), _Float(finite?: true)
 	refute_subtype _Interface(:a), _Constraint(_Interface(:a), _Interface(:b))
 	refute_subtype _Interface(:a, :c), _Constraint(_Interface(:a, :b), _Interface(:c))
 

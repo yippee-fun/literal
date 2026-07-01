@@ -52,6 +52,12 @@ test "#fetch" do
 	assert_raises(KeyError) { union.fetch(:d) }
 end
 
+test "#reject" do
+	assert_equal _Union(String, Literal::Undefined).reject { |type| type == Literal::Undefined }, String
+	assert_equal _Union(String, Integer, Literal::Undefined).reject { |type| type == Literal::Undefined }.inspect, "_Union(String, Integer)"
+	assert_equal _Union(Literal::Undefined).reject { |type| type == Literal::Undefined }, _Never
+end
+
 test "hierarchy" do
 	assert_subtype _Union(:a), _Union(:a)
 	assert_subtype _Union(:a, :b, :c), _Union(:a, :b, :c)

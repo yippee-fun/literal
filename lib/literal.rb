@@ -10,7 +10,9 @@ module Literal
 		loader.ignore("#{__dir__}/ruby_lsp")
 
 		loader.inflector.inflect(
-			"json_data_type" => "JSONDataType"
+			"json_data_type" => "JSONDataType",
+			"json_schema" => "JSONSchema",
+			"json_schema_number_serializer" => "JSONSchemaNumberSerializer"
 		)
 
 		loader.collapse("#{__dir__}/literal/flags")
@@ -168,15 +170,17 @@ module Literal
 				when Module
 					supertype >= subtype
 				when Numeric
-					Numeric >= supertype
+					supertype >= subtype.class
 				when String
-					String >= supertype
+					supertype >= String
 				when Symbol
-					Symbol >= supertype
+					supertype >= Symbol
 				when ::Array
-					::Array >= supertype
+					supertype >= ::Array
 				when ::Hash
-					::Hash >= supertype
+					supertype >= ::Hash
+				when Date
+					supertype >= Date
 				when Literal::Type
 					subtype.<=(supertype, context:)
 				else
