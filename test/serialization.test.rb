@@ -236,19 +236,19 @@ test "symbol json schema" do
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "symbol:0" },
+						"$type" => { "const" => "symbol:0" },
 						"value" => { "type" => "string" },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "symbol:1" },
+						"$type" => { "const" => "symbol:1" },
 						"value" => { "type" => "string", "minLength" => 5, "maxLength" => 10 },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 			],
@@ -414,27 +414,20 @@ test "tagged union json schema" do
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "person" },
-						"value" => {
-							"type" => "object",
-							"properties" => {
-								"name" => { "type" => "string" },
-								"age" => { "type" => "integer" },
-							},
-							"required" => ["name", "age"],
-							"additionalProperties" => false,
-						},
+						"$type" => { "const" => "person" },
+						"name" => { "type" => "string" },
+						"age" => { "type" => "integer" },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "name", "age"],
 					"additionalProperties" => false,
 				},
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "note" },
+						"$type" => { "const" => "note" },
 						"value" => { "type" => "string" },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 			],
@@ -478,19 +471,19 @@ test "union json schema" do
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "string:0" },
+						"$type" => { "const" => "string:0" },
 						"value" => { "type" => "string" },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "string:1" },
+						"$type" => { "const" => "string:1" },
 						"value" => { "type" => "string", "minLength" => 1 },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 			],
@@ -504,19 +497,19 @@ test "union json schema" do
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "string:0" },
+						"$type" => { "const" => "string:0" },
 						"value" => { "type" => "string", "const" => "small" },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "string:1" },
+						"$type" => { "const" => "string:1" },
 						"value" => { "type" => "string", "minLength" => 1 },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 			],
@@ -538,19 +531,19 @@ test "union json schema" do
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "integer:0" },
+						"$type" => { "const" => "integer:0" },
 						"value" => { "type" => "integer" },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 				{
 					"type" => "object",
 					"properties" => {
-						"type" => { "type" => "string", "const" => "integer:1" },
+						"$type" => { "const" => "integer:1" },
 						"value" => { "type" => "integer", "minimum" => 5, "maximum" => 10 },
 					},
-					"required" => ["type", "value"],
+					"required" => ["$type", "value"],
 					"additionalProperties" => false,
 				},
 			],
@@ -686,8 +679,8 @@ test "tagged union serialization roundtrip" do
 	name_serialized = Example.serialize(name_original, type:)
 	age_serialized = Example.serialize(age_original, type:)
 
-	assert_equal(name_serialized, { "type" => "name", "value" => "Joel" })
-	assert_equal(age_serialized, { "type" => "age", "value" => 42 })
+	assert_equal(name_serialized, { "$type" => "name", "value" => "Joel" })
+	assert_equal(age_serialized, { "$type" => "age", "value" => 42 })
 	assert_equal(Example.deserialize(name_serialized, type:), name_original)
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
 end
@@ -699,32 +692,32 @@ end
 
 test "implicit string serialization" do
 	type = Example.type
-	assert_equal({ "type" => "string", "value" => "example" }, Example.serialize("example", type:))
+	assert_equal({ "$type" => "string", "value" => "example" }, Example.serialize("example", type:))
 end
 
 test "implicit symbol serialization" do
 	type = Example.type
-	assert_equal({ "type" => "symbol", "value" => "example" }, Example.serialize(:example, type:))
+	assert_equal({ "$type" => "symbol", "value" => "example" }, Example.serialize(:example, type:))
 end
 
 test "implicit integer serialization" do
 	type = Example.type
-	assert_equal({ "type" => "integer", "value" => 42 }, Example.serialize(42, type:))
+	assert_equal({ "$type" => "integer", "value" => 42 }, Example.serialize(42, type:))
 end
 
 test "implicit float serialization" do
 	type = Example.type
-	assert_equal({ "type" => "float", "value" => 3.14 }, Example.serialize(3.14, type:))
+	assert_equal({ "$type" => "float", "value" => 3.14 }, Example.serialize(3.14, type:))
 end
 
 test "implicit boolean serialization" do
 	type = Example.type
-	assert_equal({ "type" => "boolean", "value" => true }, Example.serialize(true, type:))
+	assert_equal({ "$type" => "boolean", "value" => true }, Example.serialize(true, type:))
 end
 
 test "implicit date serialization" do
 	type = Example.type
-	assert_equal({ "type" => "date", "value" => "2025-01-13" }, Example.serialize(Date.new(2025, 1, 13), type:))
+	assert_equal({ "$type" => "date", "value" => "2025-01-13" }, Example.serialize(Date.new(2025, 1, 13), type:))
 end
 
 test "implicit array serialization" do
@@ -733,11 +726,11 @@ test "implicit array serialization" do
 
 	assert_equal(
 		{
-			"type" => "array",
+			"$type" => "array",
 			"value" => [
-				{ "type" => "integer", "value" => 1 },
-				{ "type" => "integer", "value" => 2 },
-				{ "type" => "integer", "value" => 3 },
+				{ "$type" => "integer", "value" => 1 },
+				{ "$type" => "integer", "value" => 2 },
+				{ "$type" => "integer", "value" => 3 },
 			],
 		},
 		Example.serialize(value, type:),
@@ -750,11 +743,11 @@ test "implicit set serialization" do
 
 	assert_equal(
 		{
-			"type" => "set",
+			"$type" => "set",
 			"value" => [
-				{ "type" => "integer", "value" => 1 },
-				{ "type" => "integer", "value" => 2 },
-				{ "type" => "integer", "value" => 3 },
+				{ "$type" => "integer", "value" => 1 },
+				{ "$type" => "integer", "value" => 2 },
+				{ "$type" => "integer", "value" => 3 },
 			],
 		},
 		Example.serialize(value, type:),
@@ -767,15 +760,15 @@ test "implicit hash serialization" do
 
 	assert_equal(
 		{
-			"type" => "hash",
+			"$type" => "hash",
 			"value" => [
 				[
-					{ "type" => "symbol", "value" => "a" },
-					{ "type" => "integer", "value" => 1 },
+					{ "$type" => "symbol", "value" => "a" },
+					{ "$type" => "integer", "value" => 1 },
 				],
 				[
-					{ "type" => "symbol", "value" => "b" },
-					{ "type" => "integer", "value" => 2 },
+					{ "$type" => "symbol", "value" => "b" },
+					{ "$type" => "integer", "value" => 2 },
 				],
 			],
 		},
@@ -832,7 +825,7 @@ test "discriminated union serialization roundtrip" do
 	original = "Joel"
 	serialized = Example.serialize(original, type:)
 
-	assert_equal(serialized, { "type" => "string:0", "value" => "Joel" })
+	assert_equal(serialized, { "$type" => "string:0", "value" => "Joel" })
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
@@ -865,8 +858,8 @@ test "big nested serialization roundtrip" do
 			"secondary" => [2, "backup"],
 		},
 		"schedule" => ["2025-01-13", "2025-01-20"],
-		"choice" => { "type" => "person", "value" => { "name" => "Jill", "age" => 40 } },
-		"payload" => { "type" => "hash", "value" => { "count" => 3, "total" => 9 } },
+		"choice" => { "$type" => "person", "name" => "Jill", "age" => 40 },
+		"payload" => { "$type" => "hash", "count" => 3, "total" => 9 },
 	})
 
 	assert_equal(Example.deserialize(serialized, type:), original)

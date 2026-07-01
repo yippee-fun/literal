@@ -60,9 +60,14 @@ class Literal::UnionSerializer < Literal::Serializer
 
 		if natural?(type)
 			serialized
+		elsif Hash === serialized
+			{
+				**serialized,
+				"$type" => label_for_member(type, member_type),
+			}
 		else
 			{
-				"type" => label_for_member(type, member_type),
+				"$type" => label_for_member(type, member_type),
 				"value" => serialized,
 			}
 		end
@@ -74,14 +79,18 @@ class Literal::UnionSerializer < Literal::Serializer
 			return deserialize_contents(raw_value, type: member_type)
 		end
 
-		tag_name = raw_value.fetch("type")
+		tag_name = raw_value.fetch("$type")
 		member_type = discriminated_members(type).assoc(tag_name)&.last
 
 		unless member_type
 			raise Literal::ArgumentError, "No union member type for tag #{tag_name.inspect} in #{type.inspect}"
 		end
 
-		deserialize_contents(raw_value.fetch("value"), type: member_type)
+		if raw_value.key?("value")
+			deserialize_contents(raw_value.fetch("value"), type: member_type)
+		else
+			deserialize_contents(raw_value.except("$type"), type: member_type)
+		end
 	end
 
 	SafeNaturalJSONTypes = Set["string", "integer", "number", "boolean", "null"].freeze
@@ -159,14 +168,34 @@ class Literal::UnionSerializer < Literal::Serializer
 	end
 
 	private def discriminated_json_schema(label, member)
+		member_schema = json_schema_for(member)
+
+		if object_schema?(member_schema)
+			return merge_discriminator_schema(label, member_schema)
+		end
+
 		{
 			"type" => "object",
 			"properties" => {
-				"type" => { "type" => "string", "const" => label },
-				"value" => json_schema_for(member),
+				"$type" => { "const" => label },
+				"value" => member_schema,
 			},
-			"required" => ["type", "value"],
+			"required" => ["$type", "value"],
 			"additionalProperties" => false,
 		}
+	end
+
+	private def object_schema?(schema)
+		schema["type"] == "object"
+	end
+
+	private def merge_discriminator_schema(label, schema)
+		schema.merge(
+			"properties" => {
+				"$type" => { "const" => label },
+				**schema.fetch("properties", {}),
+			},
+			"required" => ["$type", *schema.fetch("required", [])],
+		)
 	end
 end
