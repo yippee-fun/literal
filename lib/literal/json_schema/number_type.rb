@@ -27,6 +27,8 @@ class Literal::JSONSchema::NumberType < Literal::Data
 	end
 
 	def <=(other, context: nil)
+		return true if other == Literal::JSONSchema::NumberType
+
 		Literal.subtype?(::Numeric, other, context:)
 	end
 

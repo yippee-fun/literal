@@ -18,6 +18,9 @@ test "===" do
 
 	refute _JSONData === Object.new
 	refute _JSONData === Set.new
+	refute _JSONData === Float::INFINITY
+	refute _JSONData === -Float::INFINITY
+	refute _JSONData === Float::NAN
 	refute _JSONData === { key: "value" }
 	refute _JSONData === [1, :symbol, "three"]
 	refute _JSONData === { "nested_array" => [1, :symbol, { "key" => "value" }] }
@@ -36,7 +39,7 @@ test "hierarchy" do
 	assert_subtype nil, _JSONData
 	assert_subtype false, _JSONData
 	assert_subtype true, _JSONData
-	assert_subtype Float, _JSONData
+	assert_subtype _Float(finite?: true), _JSONData
 	assert_subtype String, _JSONData
 	assert_subtype Integer, _JSONData
 
@@ -44,7 +47,7 @@ test "hierarchy" do
 	assert_subtype _Array(nil), _JSONData
 	assert_subtype _Array(false), _JSONData
 	assert_subtype _Array(true), _JSONData
-	assert_subtype _Array(Float), _JSONData
+	assert_subtype _Array(_Float(finite?: true)), _JSONData
 	assert_subtype _Array(String), _JSONData
 	assert_subtype _Array(Integer), _JSONData
 
@@ -52,14 +55,14 @@ test "hierarchy" do
 	assert_subtype _Hash(nil, _JSONData), _JSONData
 	assert_subtype _Hash(false, _JSONData), _JSONData
 	assert_subtype _Hash(true, _JSONData), _JSONData
-	assert_subtype _Hash(Float, _JSONData), _JSONData
+	assert_subtype _Hash(_Float(finite?: true), _JSONData), _JSONData
 	assert_subtype _Hash(String, _JSONData), _JSONData
 	assert_subtype _Hash(Integer, _JSONData), _JSONData
 
 	assert_subtype _Hash(_JSONData, nil), _JSONData
 	assert_subtype _Hash(_JSONData, false), _JSONData
 	assert_subtype _Hash(_JSONData, true), _JSONData
-	assert_subtype _Hash(_JSONData, Float), _JSONData
+	assert_subtype _Hash(_JSONData, _Float(finite?: true)), _JSONData
 	assert_subtype _Hash(_JSONData, String), _JSONData
 	assert_subtype _Hash(_JSONData, Integer), _JSONData
 

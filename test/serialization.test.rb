@@ -43,6 +43,7 @@ Example = Literal::SerializationContext.new(
 	Literal::StringSerializer,
 	Literal::SymbolSerializer,
 	Literal::IntegerSerializer,
+	Literal::JSONSchemaNumberSerializer,
 	Literal::FloatSerializer,
 	Literal::BooleanSerializer,
 	Literal::DateSerializer,
@@ -204,7 +205,7 @@ end
 
 test "float json schema" do
 	assert_equal(
-		Example.json_schema(Float),
+		Example.json_schema(_Float(finite?: true)),
 		{ "type" => "number" },
 	)
 
@@ -701,7 +702,7 @@ end
 
 test "float serialization roundtrip" do
 	original = 3.14
-	type = Float
+	type = _Float(finite?: true)
 	serialized = Example.serialize(original, type:)
 
 	assert_equal(serialized, 3.14)
@@ -945,7 +946,7 @@ test "union serialization roundtrip" do
 end
 
 test "natural union number deserialization accepts integers" do
-	type = _Union(Float, String)
+	type = _Union(_Float(finite?: true), String)
 
 	assert_equal(Example.deserialize(1, type:), 1.0)
 end

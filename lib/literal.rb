@@ -11,7 +11,8 @@ module Literal
 
 		loader.inflector.inflect(
 			"json_data_type" => "JSONDataType",
-			"json_schema" => "JSONSchema"
+			"json_schema" => "JSONSchema",
+			"json_schema_number_serializer" => "JSONSchemaNumberSerializer"
 		)
 
 		loader.collapse("#{__dir__}/literal/flags")

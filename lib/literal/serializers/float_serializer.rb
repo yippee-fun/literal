@@ -1,31 +1,8 @@
 # frozen_string_literal: true
 
-class Literal::Serializer::NumberType
-	include Literal::Type
-
-	def inspect
-		"SerializableNumber"
-	end
-
-	def ===(value)
-		Float === value
-	end
-
-	def >=(other, context: nil)
-		case other
-		when Literal::Types::UnionType
-			other.types.empty? && other.primitives.all? { |primitive| Float === primitive }
-		else
-			other == Float || Float === other || Literal::JSONSchema::NumberType === other
-		end
-	end
-
-	freeze
-end
-
 class Literal::FloatSerializer < Literal::Serializer
 	Tag = :float
-	Type = Literal::Serializer::NumberType.new
+	Type = _Float(finite?: true)
 
 	def tag
 		Tag
@@ -37,8 +14,6 @@ class Literal::FloatSerializer < Literal::Serializer
 
 	def json_schema(type)
 		case type
-		when Literal::JSONSchema::NumberType
-			type.json_schema
 		when Float
 			{ "type" => "number", "const" => type }
 		when Literal::Types::UnionType
