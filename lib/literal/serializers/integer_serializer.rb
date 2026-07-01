@@ -51,20 +51,7 @@ class Literal::IntegerSerializer < Literal::Serializer
 
 	private def constraint_json_schema(type)
 		{ "type" => "integer" }.tap do |schema|
-			type.object_constraints.each do |constraint|
-				case constraint
-				when Range
-					schema["minimum"] = constraint.begin if constraint.begin
-
-					if constraint.end
-						if constraint.exclude_end?
-							schema["exclusiveMaximum"] = constraint.end
-						else
-							schema["maximum"] = constraint.end
-						end
-					end
-				end
-			end
+			apply_range_constraints(schema, type.object_constraints.select { |constraint| Range === constraint })
 		end
 	end
 end

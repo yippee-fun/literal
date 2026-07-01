@@ -17,6 +17,7 @@ class Literal::Serializer::UnionType
 	end
 
 	def >=(other, context: nil)
+		return natural_constraint?(other) if Literal::Types::ConstraintType === other
 		return false unless Literal::Types::UnionType === other
 
 		natural?(other)
@@ -44,7 +45,7 @@ class Literal::Serializer::UnionType
 			return false if seen.include?(json_type)
 
 			seen << json_type
-		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float?(number_member)))
+		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float_type?(number_member)))
 	end
 
 	private def natural_json_type(type)
@@ -54,12 +55,33 @@ class Literal::Serializer::UnionType
 		json_type if SafeNaturalJSONTypes.include?(json_type)
 	end
 
+	private def natural_constraint?(type)
+		object_constraints = type.object_constraints
+		union = object_constraints.find { |constraint| Literal::Types::UnionType === constraint }
+		return false unless union
+
+		object_constraints.all? { |constraint| Range === constraint || constraint == union } &&
+			integer_and_finite_float?(union) &&
+			natural?(union)
+	end
+
 	private def numeric_ambiguous?(seen)
 		seen.include?("integer") && seen.include?("number")
 	end
 
-	private def finite_float?(type)
-		Literal.subtype?(type, FiniteFloatType) && Literal.subtype?(FiniteFloatType, type)
+	private def integer_and_finite_float?(type)
+		members = type.to_a
+
+		members.any? { |member| member == Integer } &&
+			members.any? { |member| finite_float_type?(member) }
+	end
+
+	private def finite_float_type?(type)
+		equivalent_type?(type, FiniteFloatType)
+	end
+
+	private def equivalent_type?(subtype, supertype)
+		Literal.subtype?(subtype, supertype) && Literal.subtype?(supertype, subtype)
 	end
 end
 
@@ -72,6 +94,7 @@ class Literal::UnionSerializer < Literal::Serializer
 	attr_reader :type
 
 	def json_schema(type)
+		return constrained_union_json_schema(type) if constrained_union?(type)
 		return { "type" => "number" } if number_union?(type)
 
 		{
@@ -80,11 +103,14 @@ class Literal::UnionSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
+		type = constrained_union(type) || type
 		member_type = type.resolve(value)
 		serialize_contents(value, type: member_type)
 	end
 
 	def deserialize(raw_value, type:)
+		type = constrained_union(type) || type
+
 		member_type = if number_union?(type)
 			integer_and_finite_float_member_type(raw_value, type)
 		else
@@ -116,7 +142,7 @@ class Literal::UnionSerializer < Literal::Serializer
 			return false if seen.include?(json_type)
 
 			seen << json_type
-		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float?(number_member)))
+		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float_type?(number_member)))
 	end
 
 	private def natural_json_type(type)
@@ -124,6 +150,26 @@ class Literal::UnionSerializer < Literal::Serializer
 		json_type = schema["type"]
 
 		json_type if SafeNaturalJSONTypes.include?(json_type)
+	end
+
+	private def constrained_union_json_schema(type)
+		json_schema(constrained_union(type)).tap do |schema|
+			apply_range_constraints(schema, type.object_constraints.select { |constraint| Range === constraint })
+		end
+	end
+
+	private def constrained_union?(type)
+		union = constrained_union(type)
+		return false unless union
+
+		integer_and_finite_float?(union) &&
+			type.object_constraints.all? { |constraint| Range === constraint || constraint == union }
+	end
+
+	private def constrained_union(type)
+		return unless Literal::Types::ConstraintType === type
+
+		type.object_constraints.find { |constraint| Literal::Types::UnionType === constraint }
 	end
 
 	private def numeric_ambiguous?(seen)
@@ -135,12 +181,12 @@ class Literal::UnionSerializer < Literal::Serializer
 
 		members.length == 2 &&
 			members.any? { |member| member == Integer } &&
-			members.any? { |member| finite_float?(member) }
+			members.any? { |member| finite_float_type?(member) }
 	end
 
 	private def json_schema_members(type)
 		if integer_and_finite_float?(type)
-			type.each.reject { |member| member == Integer || finite_float?(member) }
+			type.each.reject { |member| member == Integer || finite_float_type?(member) }
 				.map { |member| json_schema_for(member) } << { "type" => "number" }
 		else
 			type.each.map { |member| json_schema_for(member) }
@@ -151,11 +197,15 @@ class Literal::UnionSerializer < Literal::Serializer
 		members = type.to_a
 
 		members.any? { |member| member == Integer } &&
-			members.any? { |member| finite_float?(member) }
+			members.any? { |member| finite_float_type?(member) }
 	end
 
-	private def finite_float?(type)
-		Literal.subtype?(type, FiniteFloatType) && Literal.subtype?(FiniteFloatType, type)
+	private def finite_float_type?(type)
+		equivalent_type?(type, FiniteFloatType)
+	end
+
+	private def equivalent_type?(subtype, supertype)
+		Literal.subtype?(subtype, supertype) && Literal.subtype?(supertype, subtype)
 	end
 
 	private def integer_and_finite_float_member_type(raw_value, type)
@@ -163,7 +213,7 @@ class Literal::UnionSerializer < Literal::Serializer
 		when Integer
 			type.each.find { |member| member == Integer }
 		when Float
-			type.each.find { |member| finite_float?(member) }
+			type.each.find { |member| finite_float_type?(member) }
 		end || raise(Literal::ArgumentError, "No union member type for JSON value #{raw_value.inspect} in #{type.inspect}")
 	end
 

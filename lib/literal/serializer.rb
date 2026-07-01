@@ -28,4 +28,39 @@ class Literal::Serializer
 	def coerce(raw)
 		raw
 	end
+
+	private def apply_range_constraints(schema, ranges)
+		minimum, maximum, exclusive_maximum = narrowed_range_bounds(ranges)
+
+		schema["minimum"] = minimum unless minimum.nil?
+
+		unless maximum.nil?
+			if exclusive_maximum
+				schema["exclusiveMaximum"] = maximum
+			else
+				schema["maximum"] = maximum
+			end
+		end
+	end
+
+	private def narrowed_range_bounds(ranges)
+		minimum = nil
+		maximum = nil
+		exclusive_maximum = false
+
+		ranges.each do |range|
+			minimum = range.begin if !range.begin.nil? && (minimum.nil? || range.begin > minimum)
+
+			next if range.end.nil?
+
+			if maximum.nil? || range.end < maximum
+				maximum = range.end
+				exclusive_maximum = range.exclude_end?
+			elsif range.end == maximum && range.exclude_end?
+				exclusive_maximum = true
+			end
+		end
+
+		[minimum, maximum, exclusive_maximum]
+	end
 end

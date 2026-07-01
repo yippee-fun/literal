@@ -215,6 +215,16 @@ test "integer json schema" do
 		Example.json_schema(_Integer(5..)),
 		{ "type" => "integer", "minimum" => 5 },
 	)
+
+	assert_equal(
+		Example.json_schema(_Integer(1..10, 3..6)),
+		{ "type" => "integer", "minimum" => 3, "maximum" => 6 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Integer(1..10, 3...6)),
+		{ "type" => "integer", "minimum" => 3, "exclusiveMaximum" => 6 },
+	)
 end
 
 test "float json schema" do
@@ -231,6 +241,11 @@ test "float json schema" do
 	assert_equal(
 		Example.json_schema(_Float(1.5..3.5)),
 		{ "type" => "number", "minimum" => 1.5, "maximum" => 3.5 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Float(1.5..10.5, 3.5..6.5)),
+		{ "type" => "number", "minimum" => 3.5, "maximum" => 6.5 },
 	)
 
 	assert_equal(
@@ -873,8 +888,45 @@ test "integer and finite float union can be combined with other natural types" d
 	assert_equal(Example.deserialize(1.5, type:), 1.5)
 end
 
+test "range constrained integer and finite float union serializes as number" do
+	type = _Constraint(1..20, 3..10, _Union(Integer, _Float(finite?: true)))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "number",
+			"minimum" => 3,
+			"maximum" => 10,
+		},
+	)
+
+	assert_equal(Example.serialize(3, type:), 3)
+	assert_equal(Example.serialize(3.5, type:), 3.5)
+	assert_equal(Example.deserialize(3, type:), 3)
+	assert_equal(Example.deserialize(3.5, type:), 3.5)
+end
+
+test "exclusive range constrained integer and finite float union serializes as number" do
+	type = _Constraint(1...10, _Union(Integer, _Float(finite?: true)))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "number",
+			"minimum" => 1,
+			"exclusiveMaximum" => 10,
+		},
+	)
+end
+
 test "integer and plain float union is not serializable" do
 	type = _Union(Integer, Float)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "integer and constrained float union is not collapsed to number" do
+	type = _Union(Integer, _Float(1..10))
 
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
