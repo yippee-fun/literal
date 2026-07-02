@@ -26,6 +26,8 @@ module Literal::ConstantTracker
 			return super
 		end
 
+		return super if object in BasicObject | Integer | Symbol | nil | true | false
+
 		begin
 			(CONSTANTS[object] ||= []) << Reference.new(self, const)
 		rescue ::ArgumentError
