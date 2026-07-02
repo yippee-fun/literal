@@ -23,6 +23,14 @@ module Literal
 		loader.setup
 	end
 
+	def self.const_name(object)
+		const_ref(object).first&.name
+	end
+
+	def self.const_ref(object)
+		ConstantTracker::CONSTANTS[object] || []
+	end
+
 	def self.Value(*args, **kwargs, &block)
 		value_class = Class.new(Literal::Value)
 
@@ -204,5 +212,7 @@ module Literal
 		end
 	end
 end
+
+Module.prepend(Literal::ConstantTracker)
 
 require_relative "literal/railtie" if defined?(Rails)
