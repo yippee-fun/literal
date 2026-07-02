@@ -16,8 +16,12 @@ class Literal::Serializer
 		@context.deserialize(value, type:, strict: false)
 	end
 
-	def json_schema_for(type)
-		@context.json_schema(type)
+	def json_schema_for(type, generator:, reference: true)
+		@context.json_schema(type, generator:, reference:)
+	end
+
+	def value_type(value)
+		type if type === value
 	end
 
 	def mergeable_object?(type)

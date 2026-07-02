@@ -11,6 +11,12 @@ class Literal::Types::EnumerableType
 
 	attr_reader :type
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @type
+	end
+
 	def inspect
 		"_Enumerable(#{@type.inspect})"
 	end

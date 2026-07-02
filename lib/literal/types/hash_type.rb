@@ -12,6 +12,13 @@ class Literal::Types::HashType
 
 	attr_reader :key_type, :value_type
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @key_type
+		yield @value_type
+	end
+
 	def inspect
 		"_Hash(#{@key_type.inspect}, #{@value_type.inspect})"
 	end

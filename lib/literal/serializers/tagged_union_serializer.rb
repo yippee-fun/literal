@@ -31,10 +31,13 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
+	def value_type(value)
+	end
+
+	def json_schema(type, generator: nil)
 		{
 			"oneOf" => type.members.map do |tag, member_type|
-				tagged_json_schema(tag.name, member_type)
+				tagged_json_schema(tag.name, member_type, generator:)
 			end,
 		}
 	end
@@ -67,8 +70,8 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 		end
 	end
 
-	private def tagged_json_schema(tag, member_type)
-		member_schema = json_schema_for(member_type)
+	private def tagged_json_schema(tag, member_type, generator:)
+		member_schema = json_schema_for(member_type, generator:, reference: false)
 
 		if mergeable_object_schema?(member_schema)
 			return merge_discriminator_schema(tag, member_schema)

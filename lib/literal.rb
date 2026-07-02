@@ -10,6 +10,7 @@ module Literal
 		loader.ignore("#{__dir__}/ruby_lsp")
 
 		loader.inflector.inflect(
+			"json_data_serializer" => "JSONDataSerializer",
 			"json_data_type" => "JSONDataType",
 			"json_schema" => "JSONSchema",
 			"json_schema_number_serializer" => "JSONSchemaNumberSerializer"

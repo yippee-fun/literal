@@ -36,13 +36,13 @@ class Literal::NilableSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		return { "type" => "null" } if type.nil?
 		return { "type" => "null" } if Literal::Serializer::NilableType === type
 
 		{
 			"anyOf" => [
-				json_schema_for(type.type),
+				json_schema_for(type.type, generator:),
 				{ "type" => "null" },
 			],
 		}

@@ -7,7 +7,7 @@ class Literal::DateSerializer < Literal::Serializer
 		Type
 	end
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		case type
 		when Date
 			{ "type" => "string", "format" => "date", "const" => serialize_date(type) }

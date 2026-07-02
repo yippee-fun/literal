@@ -33,6 +33,31 @@ class SerializationDraft < Literal::Data
 	prop? :subtitle, String
 end
 
+class SerializationOrder < Literal::Data
+	prop :id, Integer
+	prop :person, SerializationPerson
+end
+
+SerializationRecursiveAddress = Class.new(Literal::Data) do
+	prop :postcode, String
+end
+
+SerializationRecursiveOrder = Class.new(Literal::Data) do
+	prop :id, Integer
+	prop :address, SerializationRecursiveAddress
+end
+
+SerializationRecursiveAddress.prop :order, SerializationRecursiveOrder
+
+class SerializationRecursiveNode < Literal::Data
+	prop :children, _Array(_Deferred { SerializationRecursiveNode })
+end
+
+class SerializationUnsupportedRecursiveNode < Literal::Data
+	prop :children, _Array(_Deferred { SerializationUnsupportedRecursiveNode })
+	prop :object, Object
+end
+
 class SerializationEnvelope < Literal::Data
 	prop :id, Integer
 	prop :owner, SerializationPerson
@@ -43,24 +68,19 @@ class SerializationEnvelope < Literal::Data
 	prop :payload, _TaggedUnion(hash: _Hash(Symbol, Integer), array: _Array(String))
 end
 
-Example = Literal::SerializationContext.new(
-	Literal::StringSerializer,
-	Literal::SymbolSerializer,
-	Literal::IntegerSerializer,
-	Literal::JSONSchemaNumberSerializer,
-	Literal::FloatSerializer,
-	Literal::BooleanSerializer,
-	Literal::DateSerializer,
-	Literal::StructureSerializer,
-	Literal::TaggedUnionSerializer,
-	Literal::UnionSerializer,
-	Literal::HashSerializer,
-	Literal::MapSerializer,
-	Literal::TupleSerializer,
-	Literal::ArraySerializer,
-	Literal::SetSerializer,
-	Literal::NilableSerializer,
-)
+Example = Literal::SerializationContext.new
+
+test "serialization context includes default serializers" do
+	assert Example.kind === String
+	assert Example.kind === _Hash(Symbol, _JSONData)
+end
+
+test "serialization context defaults can be disabled" do
+	context = Literal::SerializationContext.new(Literal::StringSerializer, defaults: false)
+
+	assert context.kind === String
+	refute context.kind === Integer
+end
 
 test "string length range serialization" do
 	assert_equal(
@@ -105,6 +125,22 @@ test "json schema scalar type serialization" do
 	assert_equal(
 		Example.json_schema(Literal::JSONSchema::Number(exclusive_minimum: 0, maximum: 1.5)),
 		{ "type" => "number", "exclusiveMinimum" => 0, "maximum" => 1.5 },
+	)
+end
+
+test "json data json schema" do
+	assert_equal(
+		Example.json_schema(_JSONData),
+		true,
+	)
+
+	assert_equal(
+		Example.json_schema(_Hash(Symbol, _JSONData)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => true,
+		},
 	)
 end
 
@@ -513,6 +549,71 @@ test "structure json schema" do
 		},
 	)
 
+	person_definition_name = SerializationPerson.name
+	person_definition_ref = "#/$defs/#{person_definition_name.gsub('~', '~0').gsub('/', '~1')}"
+
+	assert_equal(
+		Example.json_schema(SerializationOrder),
+		{
+			"type" => "object",
+			"properties" => {
+				"id" => { "type" => "integer" },
+				"person" => { "$ref" => person_definition_ref },
+			},
+			"required" => ["id", "person"],
+			"additionalProperties" => false,
+			"$defs" => {
+				person_definition_name => {
+					"type" => "object",
+					"properties" => {
+						"name" => { "type" => "string" },
+						"age" => { "type" => "integer" },
+					},
+					"required" => ["name", "age"],
+					"additionalProperties" => false,
+				},
+			},
+		},
+	)
+
+	recursive_order_name = SerializationRecursiveOrder.name
+	recursive_address_name = SerializationRecursiveAddress.name
+	recursive_order_ref = "#/$defs/#{recursive_order_name.gsub('~', '~0').gsub('/', '~1')}"
+	recursive_address_ref = "#/$defs/#{recursive_address_name.gsub('~', '~0').gsub('/', '~1')}"
+
+	assert_equal(
+		Example.json_schema(SerializationRecursiveOrder),
+		{
+			"type" => "object",
+			"properties" => {
+				"id" => { "type" => "integer" },
+				"address" => { "$ref" => recursive_address_ref },
+			},
+			"required" => ["id", "address"],
+			"additionalProperties" => false,
+			"$defs" => {
+				recursive_address_name => {
+					"type" => "object",
+					"properties" => {
+						"postcode" => { "type" => "string" },
+						"order" => { "$ref" => recursive_order_ref },
+					},
+					"required" => ["postcode", "order"],
+					"additionalProperties" => false,
+				},
+				recursive_order_name => {
+					"type" => "object",
+					"properties" => {
+						"id" => { "type" => "integer" },
+						"address" => { "$ref" => recursive_address_ref },
+					},
+					"required" => ["id", "address"],
+					"additionalProperties" => false,
+				},
+			},
+		},
+	)
+
 	assert_equal(
 		Example.json_schema(SerializationBooleanConst),
 		{
@@ -741,6 +842,44 @@ test "nilable serialization roundtrip" do
 	assert_equal(Example.deserialize(nil_serialized, type:), nil)
 end
 
+test "json data serialization roundtrip" do
+	original = {
+		"message" => "ok",
+		"errors" => [
+			{ "prop" => "name", "message" => "is required" },
+		],
+		"count" => 1,
+		"active" => true,
+		"metadata" => nil,
+	}
+
+	serialized = Example.serialize(original, type: _JSONData)
+
+	assert_equal(serialized, original)
+	assert_equal(Example.deserialize(serialized, type: _JSONData), original)
+	assert_raises(Literal::ArgumentError) { Example.serialize({ prop: :name }, type: _JSONData) }
+end
+
+test "hash with json data values serialization roundtrip" do
+	original = {
+		name: "Joel",
+		errors: [{ "prop" => "name", "message" => "is required" }],
+		count: 1,
+	}
+	type = _Hash(Symbol, _JSONData)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(
+		serialized,
+		{
+			"name" => "Joel",
+			"errors" => [{ "prop" => "name", "message" => "is required" }],
+			"count" => 1,
+		},
+	)
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
 test "set serialization roundtrip" do
 	original = Set[1, 2, 3]
 	type = _Set(Integer)
@@ -822,12 +961,48 @@ test "serialization context type matches serializable values" do
 	assert Example.type === [1, 2, 3]
 	assert Example.type === Set[1, 2, 3]
 	assert Example.type === { a: 1, b: 2 }
+	assert Example.type === { "a" => [{ "b" => true }] }
+end
+
+test "serialization context type serializes serializable values" do
+	person = SerializationPerson.new(name: "Joel", age: 42)
+
+	assert_equal(Example.serialize(nil, type: Example.type), nil)
+	assert_equal(Example.serialize("example", type: Example.type), "example")
+	assert_equal(Example.serialize(:example, type: Example.type), "example")
+	assert_equal(Example.serialize(42, type: Example.type), 42)
+	assert_equal(Example.serialize(3.14, type: Example.type), 3.14)
+	assert_equal(Example.serialize(true, type: Example.type), true)
+	assert_equal(Example.serialize(Date.new(2025, 1, 13), type: Example.type), "2025-01-13")
+	assert_equal(Example.serialize([:a, 1, nil], type: Example.type), ["a", 1, nil])
+	assert_equal(Example.serialize({ a: 1, b: :two }, type: Example.type), [["a", 1], ["b", "two"]])
+	assert_equal(Example.serialize({ "a" => "b" }, type: Example.type), [["a", "b"]])
+	assert_equal(Example.serialize(Set[:a, :b], type: Example.type), ["a", "b"])
+	assert_equal(Example.serialize(person, type: Example.type), { "name" => "Joel", "age" => 42 })
 end
 
 test "recursive kind support" do
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
 	assert Example.kind === _Set(Example.type)
+	assert Example.kind === SerializationRecursiveOrder
+	assert Example.kind === SerializationRecursiveNode
+end
+
+test "recursive serializable types must loop through named structures" do
+	recursive_array = nil
+	recursive_array = _Deferred { _Array(recursive_array) }
+	anonymous_node = Class.new(Literal::Data)
+
+	anonymous_node.prop :child, anonymous_node
+
+	refute Example.kind === recursive_array
+	refute Example.kind === anonymous_node
+	refute Example.kind === SerializationUnsupportedRecursiveNode
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(recursive_array) }
+	assert_raises(Literal::ArgumentError) { Example.json_schema(anonymous_node) }
+	assert_raises(Literal::ArgumentError) { Example.json_schema(SerializationUnsupportedRecursiveNode) }
 end
 
 test "union serialization roundtrip" do

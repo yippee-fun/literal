@@ -7,12 +7,12 @@ class Literal::SymbolSerializer < Literal::Serializer
 		Type
 	end
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		case type
 		when Symbol
 			{ "type" => "string", "const" => type.name }
 		when Literal::Types::UnionType
-			union_json_schema(type)
+			union_json_schema(type, generator:)
 		when Literal::Types::ConstraintType
 			constraint_json_schema(type)
 		else
@@ -28,11 +28,11 @@ class Literal::SymbolSerializer < Literal::Serializer
 		raw.to_sym
 	end
 
-	private def union_json_schema(type)
+	private def union_json_schema(type, generator:)
 		if type.types.empty?
 			{ "type" => "string", "enum" => type.primitives.map(&:name) }
 		else
-			{ "anyOf" => type.map { |member| json_schema_for(member) }.to_a }
+			{ "anyOf" => type.map { |member| json_schema_for(member, generator:) }.to_a }
 		end
 	end
 

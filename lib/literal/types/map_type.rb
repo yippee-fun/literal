@@ -11,6 +11,12 @@ class Literal::Types::MapType
 
 	attr_reader :shape
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		@shape.each_value { |type| yield type }
+	end
+
 	def inspect
 		"_Map(#{@shape.inspect})"
 	end
