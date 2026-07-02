@@ -8,6 +8,35 @@ class Literal::Serializer
 		@context = context
 	end
 
+	# Shallow dispatch check: is this node structurally one of ours? This must
+	# not recurse into child types — the context's serializability walk owns all
+	# recursion. Serializers with structured kinds override this with a purely
+	# structural match; the default covers scalar serializers whose type is a
+	# plain Literal type.
+	def handles_type?(type)
+		Literal.subtype?(type, self.type)
+	end
+
+	# The child types this serializer would recurse into when serializing a
+	# value of the given type. These must be exactly the types serialize,
+	# deserialize and json_schema recurse into, so that the serializability walk
+	# agrees with what actually happens.
+	def child_types(type)
+		[]
+	end
+
+	# Whether a node of this type may be the target of a JSON Schema "$ref" —
+	# which is also what makes recursion through it legal.
+	def referenceable?(type)
+		false
+	end
+
+	# The top-level JSON type ("string", "integer", …) of the schema this
+	# serializer emits for the given type, or nil when there isn't a single one.
+	def json_type(type)
+		nil
+	end
+
 	def serialize_contents(value, type:)
 		@context.serialize(value, type:, strict: false)
 	end
@@ -17,7 +46,7 @@ class Literal::Serializer
 	end
 
 	def json_schema_for(type, generator:, reference: true)
-		@context.json_schema(type, generator:, reference:)
+		generator.schema(type, reference:)
 	end
 
 	def value_type(value)
@@ -31,6 +60,27 @@ class Literal::Serializer
 	# This gives you an opportunity to coerce raw values before type checking and deserialization.
 	def coerce(raw)
 		raw
+	end
+
+	private def json_type_for(type)
+		@context.json_type(type)
+	end
+
+	private def apply_length_constraints(schema, property_constraints, min_key:, max_key:)
+		property_constraints.each do |property, constraint|
+			case [property, constraint]
+			in [:length | :size, Range]
+				schema[max_key] = range_end(constraint) if constraint.end
+				schema[min_key] = constraint.begin if constraint.begin
+			in [:length | :size, Integer]
+				schema[max_key] = constraint
+				schema[min_key] = constraint
+			end
+		end
+	end
+
+	private def range_end(range)
+		range.exclude_end? ? range.end - 1 : range.end
 	end
 
 	private def apply_range_constraints(schema, ranges)

@@ -93,10 +93,10 @@ class Literal::Enum
 			end
 		end
 
-		def new(*args, **kwargs, &block)
+		def new(*, **, &block)
 			raise ArgumentError if frozen?
 
-			new_object = super(*args, **kwargs, &nil)
+			new_object = super(*, **, &nil)
 
 			if @values.key?(new_object.value)
 				raise ArgumentError.new("The value #{new_object.value} is already used by #{@values[new_object.value].name}.")

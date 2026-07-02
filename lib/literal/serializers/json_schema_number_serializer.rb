@@ -7,6 +7,10 @@ class Literal::JSONSchemaNumberSerializer < Literal::Serializer
 		Type
 	end
 
+	def json_type(type)
+		"number"
+	end
+
 	def json_schema(type, generator: nil)
 		type.json_schema
 	end

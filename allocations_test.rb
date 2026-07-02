@@ -4,7 +4,6 @@
 # NOTE: This is not a quickdraw test becuase it needs to be run in a single thread.
 
 require "literal"
-require "set"
 
 include Literal::Types
 

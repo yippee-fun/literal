@@ -7,6 +7,10 @@ class Literal::FloatSerializer < Literal::Serializer
 		Type
 	end
 
+	def json_type(type)
+		"number"
+	end
+
 	def json_schema(type, generator: nil)
 		case type
 		when Float

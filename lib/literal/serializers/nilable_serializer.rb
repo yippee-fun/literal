@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::Serializer::NilableType
-	include Literal::Type
+	include Literal::Serializer::Kind
 
 	def initialize(context)
 		@context = context
@@ -16,15 +16,8 @@ class Literal::Serializer::NilableType
 		nil === value
 	end
 
-	def >=(other, context: nil)
-		case other
-		when Literal::Types::NilableType
-			Literal.subtype?(other.type, @context.type, context:)
-		when nil
-			true
-		else
-			false
-		end
+	def matches?(other)
+		Literal::Types::NilableType === other || nil === other
 	end
 end
 
@@ -35,6 +28,23 @@ class Literal::NilableSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
+
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		case type
+		when Literal::Types::NilableType
+			[type.type]
+		else
+			[]
+		end
+	end
+
+	def json_type(type)
+		"null" unless Literal::Types::NilableType === type
+	end
 
 	def json_schema(type, generator: nil)
 		return { "type" => "null" } if type.nil?
