@@ -2,6 +2,7 @@
 
 class Literal::Serializer::MapType
 	include Literal::Type
+	include Literal::Serializer::RecursiveType
 
 	def initialize(context)
 		@context = context
@@ -13,7 +14,11 @@ class Literal::Serializer::MapType
 	end
 
 	def >=(other, context: nil)
-		Literal::Types::MapType === other && other.shape.each_value.all? { |type| @context.kind === type }
+		Literal::Types::MapType === other && serializable_map_type?(other)
+	end
+
+	private def serializable_map_type?(type)
+		serializable_children?(type, type.shape.values)
 	end
 end
 

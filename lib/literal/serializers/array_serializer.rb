@@ -1,12 +1,46 @@
 # frozen_string_literal: true
 
+class Literal::Serializer::ArrayType
+	include Literal::Type
+	include Literal::Serializer::RecursiveType
+
+	def initialize(context)
+		@context = context
+		freeze
+	end
+
+	def inspect
+		"SerializableArray"
+	end
+
+	def ===(value)
+		Array === value && value.all?(@context.type)
+	end
+
+	def >=(other, context: nil)
+		case other
+		when Literal::Types::ArrayType
+			serializable_children?(other, [other.type])
+		when Literal::Types::ConstraintType
+			array_type = other.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint }
+			array_type && serializable_children?(other, [array_type.type])
+		else
+			false
+		end
+	end
+end
+
 class Literal::ArraySerializer < Literal::Serializer
 	def initialize(context)
 		super
-		@type = _Array(@context.type)
+		@type = Literal::Serializer::ArrayType.new(@context)
 	end
 
 	attr_reader :type
+
+	def value_type(value)
+		_Array(@context.type) if type === value
+	end
 
 	def json_schema(type, generator: nil)
 		{ "type" => "array" }.tap do |schema|

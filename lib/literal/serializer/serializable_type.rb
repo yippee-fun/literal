@@ -49,6 +49,10 @@ class Literal::Serializer::SerializableType
 	end
 
 	private def dereferenceable_type?(type)
-		Class === type && type < Literal::DataStructure && type.name
+		(Class === type && type < Literal::DataStructure) ||
+			Literal::Types::MapType === type ||
+			Literal::Types::ArrayType === type ||
+			Literal::Types::HashType === type ||
+			Literal::Types::TupleType === type
 	end
 end

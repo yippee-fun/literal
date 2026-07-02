@@ -2,6 +2,7 @@
 
 class Literal::Serializer::TupleType
 	include Literal::Type
+	include Literal::Serializer::RecursiveType
 
 	def initialize(context)
 		@context = context
@@ -17,7 +18,7 @@ class Literal::Serializer::TupleType
 	end
 
 	def >=(other, context: nil)
-		Literal::Types::TupleType === other && other.types.all? { |type| @context.kind === type }
+		Literal::Types::TupleType === other && serializable_children?(other, other.types)
 	end
 end
 

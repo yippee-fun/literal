@@ -1,12 +1,48 @@
 # frozen_string_literal: true
 
+class Literal::Serializer::HashType
+	include Literal::Type
+	include Literal::Serializer::RecursiveType
+
+	def initialize(context)
+		@context = context
+		freeze
+	end
+
+	def inspect
+		"SerializableHash"
+	end
+
+	def ===(value)
+		Hash === value && value.all? do |key, item|
+			@context.type === key && @context.type === item
+		end
+	end
+
+	def >=(other, context: nil)
+		case other
+		when Literal::Types::HashType
+			serializable_children?(other, [other.key_type, other.value_type])
+		when Literal::Types::ConstraintType
+			hash_type = other.object_constraints.find { |constraint| Literal::Types::HashType === constraint }
+			hash_type && serializable_children?(other, [hash_type.key_type, hash_type.value_type])
+		else
+			false
+		end
+	end
+end
+
 class Literal::HashSerializer < Literal::Serializer
 	def initialize(context)
 		@context = context
-		@type = _Hash(@context.type, @context.type)
+		@type = Literal::Serializer::HashType.new(@context)
 	end
 
 	attr_reader :type
+
+	def value_type(value)
+		_Hash(@context.type, @context.type) if type === value
+	end
 
 	def json_schema(type, generator: nil)
 		hash_type = hash_type_for(type)

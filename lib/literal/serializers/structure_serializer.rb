@@ -57,7 +57,11 @@ class Literal::Serializer::StructureType
 	end
 
 	private def dereferenceable_structure_type?(type)
-		Class === type && type < Literal::DataStructure && type.name
+		(Class === type && type < Literal::DataStructure) ||
+			Literal::Types::MapType === type ||
+			Literal::Types::ArrayType === type ||
+			Literal::Types::HashType === type ||
+			Literal::Types::TupleType === type
 	end
 
 	private def property_schema_type(type)

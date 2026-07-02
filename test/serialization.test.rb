@@ -175,6 +175,25 @@ test "array length range serialization" do
 	)
 end
 
+test "recursive array json schema" do
+	type = nil
+	type = _Array(_Deferred { type })
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "array",
+			"items" => { "$ref" => "#/$defs/0" },
+			"$defs" => {
+				"0" => {
+					"type" => "array",
+					"items" => { "$ref" => "#/$defs/0" },
+				},
+			},
+		},
+	)
+end
+
 test "set length range serialization" do
 	assert_equal(
 		Example.json_schema(_Constraint(_Set(String), length: 5..10)),
@@ -435,6 +454,25 @@ test "hash json schema" do
 			"maxItems" => 2,
 		},
 	)
+
+	type = nil
+	type = _Hash(String, _Deferred { type })
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "$ref" => "#/$defs/0" },
+			"$defs" => {
+				"0" => {
+					"type" => "object",
+					"propertyNames" => { "type" => "string" },
+					"additionalProperties" => { "$ref" => "#/$defs/0" },
+				},
+			},
+		},
+	)
 end
 
 test "map json schema" do
@@ -456,6 +494,63 @@ test "map json schema" do
 			"additionalProperties" => false,
 		},
 	)
+
+	assert_equal(
+		Example.json_schema(_Map(name: String, profile: _Map(bio: String))),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"profile" => {
+					"type" => "object",
+					"properties" => {
+						"bio" => { "type" => "string" },
+					},
+					"required" => ["bio"],
+					"additionalProperties" => false,
+				},
+			},
+			"required" => ["name", "profile"],
+			"additionalProperties" => false,
+		},
+	)
+
+	recursive_map = nil
+	recursive_map = _Map(name: String, child: _Nilable(_Deferred { recursive_map }))
+
+	assert_equal(
+		Example.json_schema(recursive_map),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"child" => {
+					"anyOf" => [
+						{ "$ref" => "#/$defs/0" },
+						{ "type" => "null" },
+					],
+				},
+			},
+			"required" => ["name"],
+			"additionalProperties" => false,
+			"$defs" => {
+				"0" => {
+					"type" => "object",
+					"properties" => {
+						"name" => { "type" => "string" },
+						"child" => {
+							"anyOf" => [
+								{ "$ref" => "#/$defs/0" },
+								{ "type" => "null" },
+							],
+						},
+					},
+					"required" => ["name"],
+					"additionalProperties" => false,
+				},
+			},
+		},
+	)
 end
 
 test "tuple json schema" do
@@ -475,6 +570,43 @@ test "tuple json schema" do
 			],
 			"minItems" => 3,
 			"maxItems" => 3,
+		},
+	)
+
+	type = nil
+	type = _Tuple(String, _Nilable(_Deferred { type }))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "array",
+			"prefixItems" => [
+				{ "type" => "string" },
+				{
+					"anyOf" => [
+						{ "$ref" => "#/$defs/0" },
+						{ "type" => "null" },
+					],
+				},
+			],
+			"minItems" => 2,
+			"maxItems" => 2,
+			"$defs" => {
+				"0" => {
+					"type" => "array",
+					"prefixItems" => [
+						{ "type" => "string" },
+						{
+							"anyOf" => [
+								{ "$ref" => "#/$defs/0" },
+								{ "type" => "null" },
+							],
+						},
+					],
+					"minItems" => 2,
+					"maxItems" => 2,
+				},
+			},
 		},
 	)
 end
@@ -555,12 +687,7 @@ test "structure json schema" do
 			"type" => "object",
 			"properties" => {
 				"id" => { "type" => "integer" },
-				"person" => { "$ref" => "#/$defs/0" },
-			},
-			"required" => ["id", "person"],
-			"additionalProperties" => false,
-			"$defs" => {
-				"0" => {
+				"person" => {
 					"type" => "object",
 					"properties" => {
 						"name" => { "type" => "string" },
@@ -570,6 +697,8 @@ test "structure json schema" do
 					"additionalProperties" => false,
 				},
 			},
+			"required" => ["id", "person"],
+			"additionalProperties" => false,
 		},
 	)
 
@@ -588,18 +717,17 @@ test "structure json schema" do
 					"type" => "object",
 					"properties" => {
 						"postcode" => { "type" => "string" },
-						"order" => { "$ref" => "#/$defs/1" },
+						"order" => {
+							"type" => "object",
+							"properties" => {
+								"id" => { "type" => "integer" },
+								"address" => { "$ref" => "#/$defs/0" },
+							},
+							"required" => ["id", "address"],
+							"additionalProperties" => false,
+						},
 					},
 					"required" => ["postcode", "order"],
-					"additionalProperties" => false,
-				},
-				"1" => {
-					"type" => "object",
-					"properties" => {
-						"id" => { "type" => "integer" },
-						"address" => { "$ref" => "#/$defs/0" },
-					},
-					"required" => ["id", "address"],
 					"additionalProperties" => false,
 				},
 			},
@@ -981,19 +1109,51 @@ test "recursive kind support" do
 	assert Example.kind === SerializationRecursiveNode
 end
 
-test "recursive serializable types must loop through named structures" do
+test "recursive serializable types must loop through referenceable types" do
 	recursive_array = nil
 	recursive_array = _Deferred { _Array(recursive_array) }
 	anonymous_node = Class.new(Literal::Data)
 
 	anonymous_node.prop :child, anonymous_node
 
-	refute Example.kind === recursive_array
-	refute Example.kind === anonymous_node
+	assert Example.kind === recursive_array
+	assert Example.kind === anonymous_node
 	refute Example.kind === SerializationUnsupportedRecursiveNode
 
-	assert_raises(Literal::ArgumentError) { Example.json_schema(recursive_array) }
-	assert_raises(Literal::ArgumentError) { Example.json_schema(anonymous_node) }
+	assert_equal(
+		Example.json_schema(recursive_array),
+		{
+			"type" => "array",
+			"items" => { "$ref" => "#/$defs/0" },
+			"$defs" => {
+				"0" => {
+					"type" => "array",
+					"items" => { "$ref" => "#/$defs/0" },
+				},
+			},
+		},
+	)
+	assert_equal(
+		Example.json_schema(anonymous_node),
+		{
+			"type" => "object",
+			"properties" => {
+				"child" => { "$ref" => "#/$defs/0" },
+			},
+			"required" => ["child"],
+			"additionalProperties" => false,
+			"$defs" => {
+				"0" => {
+					"type" => "object",
+					"properties" => {
+						"child" => { "$ref" => "#/$defs/0" },
+					},
+					"required" => ["child"],
+					"additionalProperties" => false,
+				},
+			},
+		},
+	)
 	assert_raises(Literal::ArgumentError) { Example.json_schema(SerializationUnsupportedRecursiveNode) }
 end
 
