@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::Serializer::MapType
-	include Literal::Type
-	include Literal::Serializer::RecursiveType
+	include Literal::Serializer::Kind
 
 	def initialize(context)
 		@context = context
@@ -13,12 +12,8 @@ class Literal::Serializer::MapType
 		"SerializableMap"
 	end
 
-	def >=(other, context: nil)
-		Literal::Types::MapType === other && serializable_map_type?(other)
-	end
-
-	private def serializable_map_type?(type)
-		serializable_children?(type, type.shape.values)
+	def matches?(other)
+		Literal::Types::MapType === other
 	end
 end
 
@@ -29,6 +24,22 @@ class Literal::MapSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
+
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		type.shape.values
+	end
+
+	def referenceable?(type)
+		true
+	end
+
+	def json_type(type)
+		"object"
+	end
 
 	def json_schema(type, generator: nil)
 		{

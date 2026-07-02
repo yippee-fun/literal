@@ -7,6 +7,10 @@ class Literal::SymbolSerializer < Literal::Serializer
 		Type
 	end
 
+	def json_type(type)
+		"string"
+	end
+
 	def json_schema(type, generator: nil)
 		case type
 		when Symbol
@@ -38,20 +42,7 @@ class Literal::SymbolSerializer < Literal::Serializer
 
 	private def constraint_json_schema(type)
 		{ "type" => "string" }.tap do |schema|
-			type.property_constraints.each do |property, constraint|
-				case [property, constraint]
-				in [:length | :size, Range]
-					schema["maxLength"] = range_end(constraint) if constraint.end
-					schema["minLength"] = constraint.begin if constraint.begin
-				in [:length | :size, Integer]
-					schema["maxLength"] = constraint
-					schema["minLength"] = constraint
-				end
-			end
+			apply_length_constraints(schema, type.property_constraints, min_key: "minLength", max_key: "maxLength")
 		end
-	end
-
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
 	end
 end

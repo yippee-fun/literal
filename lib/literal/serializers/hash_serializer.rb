@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::Serializer::HashType
-	include Literal::Type
-	include Literal::Serializer::RecursiveType
+	include Literal::Serializer::Kind
 
 	def initialize(context)
 		@context = context
@@ -19,13 +18,12 @@ class Literal::Serializer::HashType
 		end
 	end
 
-	def >=(other, context: nil)
+	def matches?(other)
 		case other
 		when Literal::Types::HashType
-			serializable_children?(other, [other.key_type, other.value_type])
+			true
 		when Literal::Types::ConstraintType
-			hash_type = other.object_constraints.find { |constraint| Literal::Types::HashType === constraint }
-			hash_type && serializable_children?(other, [hash_type.key_type, hash_type.value_type])
+			other.object_constraints.any? { |constraint| Literal::Types::HashType === constraint }
 		else
 			false
 		end
@@ -40,6 +38,23 @@ class Literal::HashSerializer < Literal::Serializer
 
 	attr_reader :type
 
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		hash_type = hash_type_for(type)
+		[hash_type.key_type, hash_type.value_type]
+	end
+
+	def referenceable?(type)
+		true
+	end
+
+	def json_type(type)
+		string_keyed?(hash_type_for(type)) ? "object" : "array"
+	end
+
 	def value_type(value)
 		_Hash(@context.type, @context.type) if type === value
 	end
@@ -49,7 +64,7 @@ class Literal::HashSerializer < Literal::Serializer
 		key_schema = json_schema_for(hash_type.key_type, generator:)
 		value_schema = json_schema_for(hash_type.value_type, generator:)
 
-		schema = if string_key_schema?(key_schema)
+		schema = if string_keyed?(hash_type)
 			{
 				"type" => "object",
 				"propertyNames" => key_schema,
@@ -83,7 +98,7 @@ class Literal::HashSerializer < Literal::Serializer
 			]
 		end
 
-		if object_hash_type?(hash_type)
+		if string_keyed?(hash_type)
 			serialized_entries.to_h
 		else
 			serialized_entries
@@ -103,47 +118,23 @@ class Literal::HashSerializer < Literal::Serializer
 		end
 	end
 
-	private def string_key_schema?(schema)
-		schema["type"] == "string" || (schema["anyOf"] && schema["anyOf"].all? { |item| string_key_schema?(item) })
-	end
-
-	private def object_hash_type?(hash_type)
+	# Hashes serialize as JSON objects when their keys serialize as strings, and
+	# as arrays of entry pairs otherwise. Recursive key types can never settle
+	# on a string representation, so they use entries.
+	private def string_keyed?(hash_type)
 		return false if Literal::Types::DeferredType === hash_type.key_type
 
-		string_key_schema?(@context.json_schema(hash_type.key_type))
-	rescue Literal::ArgumentError
-		false
+		json_type_for(hash_type.key_type) == "string"
 	end
 
 	private def apply_size_constraints(schema, type)
 		return unless Literal::Types::ConstraintType === type
 
-		type.property_constraints.each do |property, constraint|
-			case [property, constraint]
-			in [:length | :size, Range]
-				apply_max_size_constraint(schema, range_end(constraint)) if constraint.end
-				apply_min_size_constraint(schema, constraint.begin) if constraint.begin
-			in [:length | :size, Integer]
-				apply_max_size_constraint(schema, constraint)
-				apply_min_size_constraint(schema, constraint)
-			end
+		if schema["type"] == "object"
+			apply_length_constraints(schema, type.property_constraints, min_key: "minProperties", max_key: "maxProperties")
+		else
+			apply_length_constraints(schema, type.property_constraints, min_key: "minItems", max_key: "maxItems")
 		end
-	end
-
-	private def apply_max_size_constraint(schema, value)
-		schema[object_schema?(schema) ? "maxProperties" : "maxItems"] = value
-	end
-
-	private def apply_min_size_constraint(schema, value)
-		schema[object_schema?(schema) ? "minProperties" : "minItems"] = value
-	end
-
-	private def object_schema?(schema)
-		schema["type"] == "object"
-	end
-
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
 	end
 
 	private def hash_type_for(type)

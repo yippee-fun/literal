@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
-require "set"
-
+# The aggregate type of everything a serialization context can serialize. As a
+# value type it matches any serializable value; as a supertype it accepts any
+# type the context can fully serialize, including recursive types.
 class Literal::Serializer::SerializableType
 	include Literal::Type
 
-	def initialize(type)
+	def initialize(context, type)
+		@context = context
 		@type = type
 		freeze
 	end
@@ -21,38 +23,6 @@ class Literal::Serializer::SerializableType
 	end
 
 	def >=(other, context: nil)
-		serializable?(other) && Literal.subtype?(other, @type, context:)
-	end
-
-	def serializable?(type)
-		serializable_type?(type)
-	end
-
-	private def serializable_type?(type, stack: Set[], seen: Set[])
-		type = type.materialize if type in Literal::Types::DeferredType
-		key = type.object_id
-
-		return dereferenceable_type?(type) if stack.include?(key)
-		return true if seen.include?(key)
-		return true unless type.respond_to?(:literal_child_types)
-
-		stack.add(key)
-
-		type.literal_child_types.all? do |child_type|
-			serializable_type?(child_type, stack:, seen:)
-		end
-	ensure
-		if key
-			stack.delete(key)
-			seen.add(key)
-		end
-	end
-
-	private def dereferenceable_type?(type)
-		(Class === type && type < Literal::DataStructure) ||
-			Literal::Types::MapType === type ||
-			Literal::Types::ArrayType === type ||
-			Literal::Types::HashType === type ||
-			Literal::Types::TupleType === type
+		@context.serializable_type?(other)
 	end
 end

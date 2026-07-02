@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
 require "js_regex"
 
 include Literal::Types
@@ -36,6 +35,11 @@ end
 class SerializationOrder < Literal::Data
 	prop :id, Integer
 	prop :person, SerializationPerson
+end
+
+class SerializationTeam < Literal::Data
+	prop :lead, SerializationPerson
+	prop :backup, SerializationPerson
 end
 
 SerializationRecursiveAddress = Class.new(Literal::Data) do
@@ -702,34 +706,30 @@ test "structure json schema" do
 		},
 	)
 
+	recursive_order_schema = {
+		"type" => "object",
+		"properties" => {
+			"id" => { "type" => "integer" },
+			"address" => {
+				"type" => "object",
+				"properties" => {
+					"postcode" => { "type" => "string" },
+					"order" => { "$ref" => "#/$defs/0" },
+				},
+				"required" => ["postcode", "order"],
+				"additionalProperties" => false,
+			},
+		},
+		"required" => ["id", "address"],
+		"additionalProperties" => false,
+	}
+
 	assert_equal(
 		Example.json_schema(SerializationRecursiveOrder),
 		{
-			"type" => "object",
-			"properties" => {
-				"id" => { "type" => "integer" },
-				"address" => { "$ref" => "#/$defs/0" },
-			},
-			"required" => ["id", "address"],
-			"additionalProperties" => false,
+			**recursive_order_schema,
 			"$defs" => {
-				"0" => {
-					"type" => "object",
-					"properties" => {
-						"postcode" => { "type" => "string" },
-						"order" => {
-							"type" => "object",
-							"properties" => {
-								"id" => { "type" => "integer" },
-								"address" => { "$ref" => "#/$defs/0" },
-							},
-							"required" => ["id", "address"],
-							"additionalProperties" => false,
-						},
-					},
-					"required" => ["postcode", "order"],
-					"additionalProperties" => false,
-				},
+				"0" => recursive_order_schema,
 			},
 		},
 	)
@@ -1155,6 +1155,167 @@ test "recursive serializable types must loop through referenceable types" do
 		},
 	)
 	assert_raises(Literal::ArgumentError) { Example.json_schema(SerializationUnsupportedRecursiveNode) }
+end
+
+test "unserializable type errors explain the failure with a path" do
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(SerializationUnsupportedRecursiveNode) }
+	assert error.message.include?("there is no serializer for Object")
+	assert error.message.include?("SerializationUnsupportedRecursiveNode → Object")
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(String, Date)) }
+	assert error.message.include?("no serializer matches it")
+end
+
+test "recursive set json schema" do
+	type = nil
+	type = _Set(_Deferred { type })
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "array",
+			"uniqueItems" => true,
+			"items" => { "$ref" => "#/$defs/0" },
+			"$defs" => {
+				"0" => {
+					"type" => "array",
+					"uniqueItems" => true,
+					"items" => { "$ref" => "#/$defs/0" },
+				},
+			},
+		},
+	)
+end
+
+test "recursive tagged union members serialize but cannot merge a discriminator into a $ref schema" do
+	tree = Class.new(Literal::Data)
+	tree.prop :children, _Array(_TaggedUnion(tree:, leaf: String))
+
+	assert Example.kind === tree
+
+	original = tree.new(children: [tree.new(children: ["leaf"]), "another leaf"])
+	serialized = Example.serialize(original, type: tree)
+
+	assert_equal(serialized, {
+		"children" => [
+			{ "children" => [{ "$type" => "leaf", "value" => "leaf" }], "$type" => "tree" },
+			{ "$type" => "leaf", "value" => "another leaf" },
+		],
+	})
+	assert_equal(Example.deserialize(serialized, type: tree), original)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(tree) }
+end
+
+test "mutually recursive container types" do
+	inner = nil
+	outer = _Array(_Array(_Deferred { outer })).tap { |it| inner = it.type }
+
+	assert Example.kind === outer
+	assert Example.kind === inner
+
+	assert_equal(
+		Example.json_schema(outer),
+		{
+			"type" => "array",
+			"items" => {
+				"type" => "array",
+				"items" => { "$ref" => "#/$defs/0" },
+			},
+			"$defs" => {
+				"0" => {
+					"type" => "array",
+					"items" => {
+						"type" => "array",
+						"items" => { "$ref" => "#/$defs/0" },
+					},
+				},
+			},
+		},
+	)
+end
+
+test "shared types with a site-specific description keep the described copy inline" do
+	pair = Class.new(Literal::Data)
+	pair.prop :primary, SerializationPerson, description: "The main person"
+	pair.prop :secondary, SerializationPerson
+
+	person_schema = {
+		"type" => "object",
+		"properties" => {
+			"name" => { "type" => "string" },
+			"age" => { "type" => "integer" },
+		},
+		"required" => ["name", "age"],
+		"additionalProperties" => false,
+	}
+
+	# The description is merged into a copy of the shared schema, so the
+	# described occurrence stays inline while later occurrences reference a
+	# definition. That definition can end up with a single reference.
+	assert_equal(
+		Example.json_schema(pair),
+		{
+			"type" => "object",
+			"properties" => {
+				"primary" => {
+					**person_schema,
+					"description" => "The main person",
+				},
+				"secondary" => { "$ref" => "#/$defs/0" },
+			},
+			"required" => ["primary", "secondary"],
+			"additionalProperties" => false,
+			"$defs" => {
+				"0" => person_schema,
+			},
+		},
+	)
+end
+
+test "later occurrences of a described shared type reference the definition with a description sibling" do
+	pair = Class.new(Literal::Data)
+	pair.prop :primary, SerializationPerson
+	pair.prop :secondary, SerializationPerson, description: "The backup person"
+	pair.prop :tertiary, SerializationPerson, description: "The other backup"
+
+	schema = Example.json_schema(pair)
+
+	assert_equal(schema.dig("properties", "primary"), { "$ref" => "#/$defs/0" })
+	assert_equal(
+		schema.dig("properties", "secondary"),
+		{ "$ref" => "#/$defs/0", "description" => "The backup person" },
+	)
+	assert_equal(
+		schema.dig("properties", "tertiary"),
+		{ "$ref" => "#/$defs/0", "description" => "The other backup" },
+	)
+end
+
+test "shared types are extracted into a single definition" do
+	assert_equal(
+		Example.json_schema(SerializationTeam),
+		{
+			"type" => "object",
+			"properties" => {
+				"lead" => { "$ref" => "#/$defs/0" },
+				"backup" => { "$ref" => "#/$defs/0" },
+			},
+			"required" => ["lead", "backup"],
+			"additionalProperties" => false,
+			"$defs" => {
+				"0" => {
+					"type" => "object",
+					"properties" => {
+						"name" => { "type" => "string" },
+						"age" => { "type" => "integer" },
+					},
+					"required" => ["name", "age"],
+					"additionalProperties" => false,
+				},
+			},
+		},
+	)
 end
 
 test "union serialization roundtrip" do

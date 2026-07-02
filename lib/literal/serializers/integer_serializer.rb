@@ -7,6 +7,10 @@ class Literal::IntegerSerializer < Literal::Serializer
 		Type
 	end
 
+	def json_type(type)
+		"integer"
+	end
+
 	def json_schema(type, generator: nil)
 		case type
 		when Literal::JSONSchema::IntegerType

@@ -1,140 +1,108 @@
 # frozen_string_literal: true
 
-require "set"
-
+# Generates a JSON Schema for a type, extracting shared and recursive schemas
+# into "$defs". Definitions are created lazily: every node is built inline
+# until the walk proves a definition is needed — either a back-edge to a node
+# still being built (recursion) or a second occurrence of a node that was
+# already built (sharing). Definitions are therefore referenced at least twice
+# or cyclically, with one exception: a serializer may copy a node to attach
+# site-specific keywords (such as a property description), in which case the
+# copy stays inline and a later promotion can leave a definition with a single
+# reference. The output is still correct, just not maximally compact.
 class Literal::JSONSchema::Generator
 	def initialize(context)
 		@context = context
 		@definitions = {}
-		@definition_names = {}
-		@reference_counts = Hash.new(0)
-		@depth = 0
+		@promoted = {}.compare_by_identity
+		@completed = {}.compare_by_identity
+		@in_progress = {}.compare_by_identity
+		@generated = false
 	end
 
+	# Single-shot entry point. A generator accumulates definitions for exactly
+	# one root type; reusing it would leak one schema's definitions into another.
+	def generate(type)
+		raise Literal::ArgumentError, "This generator has already been used. Create a new generator for each schema." if @generated
+		@generated = true
+
+		unless @context.serializable_type?(type)
+			raise @context.unserializable_type_error(type)
+		end
+
+		result = schema(type)
+		return result if @definitions.empty?
+
+		# A recursive root comes back as a bare reference to its own definition.
+		# Inline the definition body at the root as well, since many JSON Schema
+		# consumers reject a root-level "$ref".
+		if (name = own_reference_name(result))
+			result = @definitions.fetch(name)
+		end
+
+		result.merge("$defs" => @definitions)
+	end
+
+	# Called by serializers for child types. With reference: false the caller
+	# needs the schema body rather than a reference — for example to merge a
+	# discriminator into it — so nothing is memoized for reuse.
 	def schema(type, reference: true)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		root = @depth.zero?
-		@depth += 1
-
-		schema = if reference && !root && referenceable_type?(type)
-			reference_schema(type)
+		if @in_progress.key?(type)
+			reference_to(promote(type))
+		elsif !reference
+			build(type, memoize: false)
+		elsif (name = @promoted[type])
+			reference_to(name)
+		elsif @completed.key?(type)
+			reference_to(promote(type))
 		else
-			@context.build_json_schema(type, generator: self)
+			build(type, memoize: true)
 		end
+	end
 
-		root ? finalize_schema(schema) : schema
+	private def build(type, memoize:)
+		@in_progress[type] = true
+		node = @context.build_json_schema(type, generator: self)
+
+		if (name = @promoted[type])
+			# A descendant back-edged into this node while it was being built.
+			@definitions[name] = node if @definitions[name].nil?
+			memoize ? reference_to(name) : node
+		else
+			@completed[type] = node if memoize && Hash === node && @context.referenceable_type?(type)
+			node
+		end
 	ensure
-		@depth -= 1
+		@in_progress.delete(type)
 	end
 
-	private def reference_schema(type)
-		name = definition_name(type)
-		@reference_counts[name] += 1
+	# Assign the type a definition name. If its schema was already emitted
+	# inline, move the body into the definition and turn the original
+	# occurrence into a reference in place.
+	private def promote(type)
+		@promoted[type] ||= begin
+			name = @definitions.length.to_s(36)
 
-		unless @definitions.key?(name)
-			@definitions[name] = nil
-			@definitions[name] = schema(type, reference: false)
-		end
-
-		{ "$ref" => "#/$defs/#{json_pointer_escape(name)}" }
-	end
-
-	private def definition_name(type)
-		@definition_names[type] ||= @definition_names.length.to_s(36)
-	end
-
-	private def json_pointer_escape(value)
-		value.gsub("~", "~0").gsub("/", "~1")
-	end
-
-	private def json_pointer_unescape(value)
-		value.gsub("~1", "/").gsub("~0", "~")
-	end
-
-	private def finalize_schema(schema)
-		return schema unless @definitions.any?
-
-		definitions = @definitions.compact
-		definitions = definitions.to_h do |name, definition|
-			[name, inline_single_use_refs(definition, definitions, Set[name])]
-		end
-
-		schema = inline_single_use_refs(schema, definitions, Set[])
-		definitions = definitions.reject { |name, _| @reference_counts[name] == 1 }
-
-		if definitions.any?
-			schema.merge("$defs" => definitions)
-		else
-			schema
-		end
-	end
-
-	private def inline_single_use_refs(schema, definitions, stack)
-		case schema
-		when Hash
-			ref = definition_ref(schema)
-
-			if ref && @reference_counts[ref] == 1 && !stack.include?(ref)
-				return inline_single_use_refs(definitions.fetch(ref), definitions, stack | Set[ref])
+			if (node = @completed.delete(type))
+				@definitions[name] = node.dup
+				node.replace(reference_to(name))
+			else
+				@definitions[name] = nil
 			end
 
-			schema.to_h do |key, value|
-				[key, inline_single_use_refs(value, definitions, stack)]
-			end
-		when Array
-			schema.map { |value| inline_single_use_refs(value, definitions, stack) }
-		else
-			schema
+			name
 		end
 	end
 
-	private def definition_ref(schema)
-		return unless schema.keys == ["$ref"]
-
-		ref = schema.fetch("$ref")
-		prefix = "#/$defs/"
-
-		if ref.start_with?(prefix)
-			json_pointer_unescape(ref.delete_prefix(prefix))
-		end
+	private def reference_to(name)
+		{ "$ref" => "#/$defs/#{name}" }
 	end
 
-	private def structure_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+	private def own_reference_name(schema)
+		return unless Hash === schema && schema.keys == ["$ref"]
 
-		Class === type && type < Literal::DataStructure
-	end
-
-	private def map_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
-
-		Literal::Types::MapType === type
-	end
-
-	private def array_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
-
-		Literal::Types::ArrayType === type
-	end
-
-	private def hash_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
-
-		Literal::Types::HashType === type
-	end
-
-	private def tuple_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
-
-		Literal::Types::TupleType === type
-	end
-
-	private def referenceable_type?(type)
-		structure_type?(type) ||
-			map_type?(type) ||
-			array_type?(type) ||
-			hash_type?(type) ||
-			tuple_type?(type)
+		reference = schema.fetch("$ref")
+		reference.delete_prefix("#/$defs/") if reference.start_with?("#/$defs/")
 	end
 end

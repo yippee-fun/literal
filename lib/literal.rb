@@ -23,10 +23,10 @@ module Literal
 		loader.setup
 	end
 
-	def self.Value(*args, **kwargs, &block)
+	def self.Value(*, **, &block)
 		value_class = Class.new(Literal::Value)
 
-		type = Literal::Types._Constraint(*args, **kwargs)
+		type = Literal::Types._Constraint(*, **)
 		value_class.define_method(:__type__) { type }
 
 		if subtype?(type, Integer)
@@ -49,10 +49,10 @@ module Literal
 		value_class.freeze
 	end
 
-	def self.Delegator(*args, **kwargs, &block)
+	def self.Delegator(*, **, &block)
 		delegator_class = Class.new(Literal::Delegator)
 
-		type = Literal::Types._Constraint(*args, **kwargs)
+		type = Literal::Types._Constraint(*, **)
 		delegator_class.define_method(:__type__) { type }
 
 		delegator_class.class_eval(&block) if block

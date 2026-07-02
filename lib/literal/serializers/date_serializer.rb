@@ -7,6 +7,10 @@ class Literal::DateSerializer < Literal::Serializer
 		Type
 	end
 
+	def json_type(type)
+		"string"
+	end
+
 	def json_schema(type, generator: nil)
 		case type
 		when Date

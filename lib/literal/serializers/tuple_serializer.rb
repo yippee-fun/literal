@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::Serializer::TupleType
-	include Literal::Type
-	include Literal::Serializer::RecursiveType
+	include Literal::Serializer::Kind
 
 	def initialize(context)
 		@context = context
@@ -17,8 +16,8 @@ class Literal::Serializer::TupleType
 		false
 	end
 
-	def >=(other, context: nil)
-		Literal::Types::TupleType === other && serializable_children?(other, other.types)
+	def matches?(other)
+		Literal::Types::TupleType === other
 	end
 end
 
@@ -29,6 +28,22 @@ class Literal::TupleSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
+
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		type.types
+	end
+
+	def referenceable?(type)
+		true
+	end
+
+	def json_type(type)
+		"array"
+	end
 
 	def json_schema(type, generator: nil)
 		{

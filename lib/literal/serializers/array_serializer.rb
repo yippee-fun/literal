@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::Serializer::ArrayType
-	include Literal::Type
-	include Literal::Serializer::RecursiveType
+	include Literal::Serializer::Kind
 
 	def initialize(context)
 		@context = context
@@ -17,13 +16,12 @@ class Literal::Serializer::ArrayType
 		Array === value && value.all?(@context.type)
 	end
 
-	def >=(other, context: nil)
+	def matches?(other)
 		case other
 		when Literal::Types::ArrayType
-			serializable_children?(other, [other.type])
+			true
 		when Literal::Types::ConstraintType
-			array_type = other.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint }
-			array_type && serializable_children?(other, [array_type.type])
+			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint }
 		else
 			false
 		end
@@ -38,6 +36,22 @@ class Literal::ArraySerializer < Literal::Serializer
 
 	attr_reader :type
 
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		[array_type_for(type).type]
+	end
+
+	def referenceable?(type)
+		true
+	end
+
+	def json_type(type)
+		"array"
+	end
+
 	def value_type(value)
 		_Array(@context.type) if type === value
 	end
@@ -51,16 +65,7 @@ class Literal::ArraySerializer < Literal::Serializer
 				array_type = array_type_for(type)
 				schema["items"] = json_schema_for(array_type.type, generator:)
 
-				type.property_constraints.each do |property, constraint|
-					case [property, constraint]
-					in [:length | :size, Range]
-						schema["maxItems"] = range_end(constraint) if constraint.end
-						schema["minItems"] = constraint.begin if constraint.begin
-					in [:length | :size, Integer]
-						schema["maxItems"] = constraint
-						schema["minItems"] = constraint
-					end
-				end
+				apply_length_constraints(schema, type.property_constraints, min_key: "minItems", max_key: "maxItems")
 			end
 		end
 	end
@@ -79,10 +84,6 @@ class Literal::ArraySerializer < Literal::Serializer
 		raw.map do |item|
 			deserialize_contents(item, type: member_type)
 		end
-	end
-
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
 	end
 
 	private def array_type_for(type)

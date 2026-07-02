@@ -7,6 +7,10 @@ class Literal::BooleanSerializer < Literal::Serializer
 		Type
 	end
 
+	def json_type(type)
+		"boolean"
+	end
+
 	def json_schema(type, generator: nil)
 		case type
 		when true, false

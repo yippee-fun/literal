@@ -3,7 +3,6 @@
 require "active_record/railtie"
 require "literal"
 require "securerandom"
-require "set"
 
 module Fixtures
 	Objects = Set[
