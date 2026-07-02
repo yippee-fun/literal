@@ -29,10 +29,10 @@ class Literal::TupleSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		{
 			"type" => "array",
-			"prefixItems" => type.types.map { |member_type| json_schema_for(member_type) },
+			"prefixItems" => type.types.map { |member_type| json_schema_for(member_type, generator:) },
 			"minItems" => type.types.size,
 			"maxItems" => type.types.size,
 		}

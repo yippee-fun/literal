@@ -13,6 +13,13 @@ class Literal::Types::DeferredType
 
 	attr_reader :block
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		type = materialize
+		yield type unless type.equal?(self)
+	end
+
 	def inspect
 		"_Deferred"
 	end

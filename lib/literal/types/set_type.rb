@@ -11,6 +11,12 @@ class Literal::Types::SetType
 
 	attr_reader :type
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @type
+	end
+
 	def inspect
 		"_Set(#{@type.inspect})"
 	end

@@ -3,14 +3,36 @@
 class Literal::SerializationContext
 	include Literal::Types
 
-	def initialize(*serializers)
+	DefaultSerializers = [
+		Literal::StringSerializer,
+		Literal::SymbolSerializer,
+		Literal::IntegerSerializer,
+		Literal::JSONSchemaNumberSerializer,
+		Literal::FloatSerializer,
+		Literal::BooleanSerializer,
+		Literal::DateSerializer,
+		Literal::StructureSerializer,
+		Literal::TaggedUnionSerializer,
+		Literal::UnionSerializer,
+		Literal::HashSerializer,
+		Literal::MapSerializer,
+		Literal::TupleSerializer,
+		Literal::ArraySerializer,
+		Literal::SetSerializer,
+		Literal::NilableSerializer,
+		Literal::JSONDataSerializer,
+	].freeze
+
+	def initialize(*serializers, defaults: true)
+		serializers = [*serializers, *DefaultSerializers] if defaults
+
 		@type = _Deferred { @type }
 		@kind = _Deferred { @kind }
 
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 		@serializer_kinds = @serializers.to_h { |serializer| [serializer, _Kind(serializer.type)] }.freeze
 
-		@type = _Union(*@serializers.map(&:type))
+		@type = Literal::Serializer::SerializableType.new(_Union(*@serializers.map(&:type)))
 		@kind = _Union(*@serializer_kinds.values)
 
 		freeze
@@ -20,17 +42,19 @@ class Literal::SerializationContext
 	attr_reader :type
 	attr_reader :kind
 
-	def json_schema(type)
-		type = type.materialize if type in Literal::Types::DeferredType
-
-		serializer = serializer_for_type(type)
-		serializer.json_schema(type)
+	def json_schema(type, generator: nil, reference: true)
+		generator ||= Literal::JSONSchema::Generator.new(self)
+		generator.schema(type, reference:)
 	end
 
 	def serialize(value, type:, strict: true)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		serializer = serializer_for_type(type)
+		if aggregate_type?(type)
+			serializer, type = serializer_for_value(value)
+		else
+			serializer = serializer_for_type(type)
+		end
 
 		if strict && !(type === value)
 			raise Literal::ArgumentError, "Value #{value.inspect} cannot be serialized as #{type.inspect}"
@@ -76,7 +100,32 @@ class Literal::SerializationContext
 		@serializer_kinds.fetch(serializer)
 	end
 
+	def serializable_type?(type)
+		@type.serializable?(type)
+	end
+
+	def build_json_schema(type, generator:)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		serializer = serializer_for_type(type)
+		serializer.json_schema(type, generator:)
+	end
+
 	private def serializer_matching_type(type)
 		@serializers.find { |it| serializer_kind(it) === type }
+	end
+
+	private def serializer_for_value(value)
+		@serializers.each do |serializer|
+			if (type = serializer.value_type(value))
+				return [serializer, type]
+			end
+		end
+
+		raise Literal::ArgumentError, "Value #{value.inspect} cannot be serialized as #{@type.inspect}"
+	end
+
+	private def aggregate_type?(type)
+		Literal::Serializer::SerializableType === type
 	end
 end

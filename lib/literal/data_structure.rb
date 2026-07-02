@@ -4,6 +4,14 @@
 class Literal::DataStructure
 	extend Literal::Properties
 
+	class << self
+		def literal_child_types
+			return enum_for(__method__) unless block_given?
+
+			literal_properties.each { |property| yield property.type }
+		end
+	end
+
 	def self.from_pack(payload)
 		object = allocate
 		object.marshal_load(payload)

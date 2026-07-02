@@ -8,14 +8,14 @@ class Literal::SetSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		{ "type" => "array", "uniqueItems" => true }.tap do |schema|
 			case type
 			when Literal::Types::SetType
-				schema["items"] = json_schema_for(type.type)
+				schema["items"] = json_schema_for(type.type, generator:)
 			when Literal::Types::ConstraintType
 				set_type = set_type_for(type)
-				schema["items"] = json_schema_for(set_type.type)
+				schema["items"] = json_schema_for(set_type.type, generator:)
 
 				type.property_constraints.each do |property, constraint|
 					case [property, constraint]

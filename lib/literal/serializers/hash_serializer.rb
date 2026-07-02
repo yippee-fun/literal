@@ -8,10 +8,10 @@ class Literal::HashSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		hash_type = hash_type_for(type)
-		key_schema = json_schema_for(hash_type.key_type)
-		value_schema = json_schema_for(hash_type.value_type)
+		key_schema = json_schema_for(hash_type.key_type, generator:)
+		value_schema = json_schema_for(hash_type.value_type, generator:)
 
 		schema = if string_key_schema?(key_schema)
 			{
@@ -74,7 +74,7 @@ class Literal::HashSerializer < Literal::Serializer
 	private def object_hash_type?(hash_type)
 		return false if Literal::Types::DeferredType === hash_type.key_type
 
-		string_key_schema?(json_schema_for(hash_type.key_type))
+		string_key_schema?(@context.json_schema(hash_type.key_type))
 	rescue Literal::ArgumentError
 		false
 	end

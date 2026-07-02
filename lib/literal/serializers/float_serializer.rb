@@ -7,12 +7,12 @@ class Literal::FloatSerializer < Literal::Serializer
 		Type
 	end
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		case type
 		when Float
 			{ "type" => "number", "const" => type }
 		when Literal::Types::UnionType
-			union_json_schema(type)
+			union_json_schema(type, generator:)
 		when Literal::Types::ConstraintType
 			constraint_json_schema(type)
 		else
@@ -37,11 +37,11 @@ class Literal::FloatSerializer < Literal::Serializer
 		end
 	end
 
-	private def union_json_schema(type)
+	private def union_json_schema(type, generator:)
 		if type.types.empty?
 			{ "type" => "number", "enum" => type.primitives.to_a }
 		else
-			{ "anyOf" => type.map { |member| json_schema_for(member) }.to_a }
+			{ "anyOf" => type.map { |member| json_schema_for(member, generator:) }.to_a }
 		end
 	end
 

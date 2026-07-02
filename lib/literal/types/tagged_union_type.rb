@@ -25,6 +25,12 @@ class Literal::Types::TaggedUnionType
 
 	attr_reader :members
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		@members.each_value { |type| yield type }
+	end
+
 	def inspect
 		pairs = @members.map { |tag, type| "#{tag}: #{type.inspect}" }
 		"_TaggedUnion(#{pairs.join(', ')})"

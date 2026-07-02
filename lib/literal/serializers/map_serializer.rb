@@ -25,11 +25,11 @@ class Literal::MapSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		{
 			"type" => "object",
 			"properties" => type.shape.to_h do |key, value_type|
-				[key.name, json_schema_for(value_type)]
+				[key.name, json_schema_for(value_type, generator:)]
 			end,
 			"required" => type.shape.reject { |_key, value_type| value_type === nil }.keys.map(&:name),
 			"additionalProperties" => false,

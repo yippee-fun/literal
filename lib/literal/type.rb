@@ -13,4 +13,8 @@ module Literal::Type
 			false
 		end
 	end
+
+	def literal_child_types
+		enum_for(__method__) unless block_given?
+	end
 end

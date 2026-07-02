@@ -26,13 +26,13 @@ class Literal::Serializer::UnionType
 	SafeNaturalJSONTypes = Set["string", "integer", "number", "boolean", "null"].freeze
 	FiniteFloatType = Literal::Types._Float(finite?: true)
 
-	private def natural?(type)
+	private def natural?(type, generator: Literal::JSONSchema::Generator.new(@context))
 		seen = Set[]
 		has_integer = false
 		number_member = nil
 
 		type.each.all? do |member|
-			json_type = natural_json_type(member)
+			json_type = natural_json_type(member, generator:)
 			return false unless json_type
 
 			case json_type
@@ -48,8 +48,10 @@ class Literal::Serializer::UnionType
 		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float_type?(number_member)))
 	end
 
-	private def natural_json_type(type)
-		schema = @context.json_schema(type)
+	private def natural_json_type(type, generator:)
+		schema = @context.json_schema(type, generator:)
+		return unless Hash === schema
+
 		json_type = schema["type"]
 
 		json_type if SafeNaturalJSONTypes.include?(json_type)
@@ -93,12 +95,15 @@ class Literal::UnionSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	def json_schema(type)
-		return constrained_union_json_schema(type) if constrained_union?(type)
+	def value_type(value)
+	end
+
+	def json_schema(type, generator: nil)
+		return constrained_union_json_schema(type, generator:) if constrained_union?(type)
 		return { "type" => "number" } if number_union?(type)
 
 		{
-			"oneOf" => json_schema_members(type),
+			"oneOf" => json_schema_members(type, generator:),
 		}
 	end
 
@@ -145,15 +150,17 @@ class Literal::UnionSerializer < Literal::Serializer
 		end && (!numeric_ambiguous?(seen) || (has_integer && finite_float_type?(number_member)))
 	end
 
-	private def natural_json_type(type)
-		schema = json_schema_for(type)
+	private def natural_json_type(type, generator:)
+		schema = json_schema_for(type, generator:)
+		return unless Hash === schema
+
 		json_type = schema["type"]
 
 		json_type if SafeNaturalJSONTypes.include?(json_type)
 	end
 
-	private def constrained_union_json_schema(type)
-		json_schema(constrained_union(type)).tap do |schema|
+	private def constrained_union_json_schema(type, generator:)
+		json_schema_for(constrained_union(type), generator:).tap do |schema|
 			apply_range_constraints(schema, type.object_constraints.select { |constraint| Range === constraint })
 		end
 	end
@@ -184,12 +191,12 @@ class Literal::UnionSerializer < Literal::Serializer
 			members.any? { |member| finite_float_type?(member) }
 	end
 
-	private def json_schema_members(type)
+	private def json_schema_members(type, generator:)
 		if integer_and_finite_float?(type)
 			type.each.reject { |member| member == Integer || finite_float_type?(member) }
-				.map { |member| json_schema_for(member) } << { "type" => "number" }
+				.map { |member| json_schema_for(member, generator:) } << { "type" => "number" }
 		else
-			type.each.map { |member| json_schema_for(member) }
+			type.each.map { |member| json_schema_for(member, generator:) }
 		end
 	end
 
@@ -219,8 +226,9 @@ class Literal::UnionSerializer < Literal::Serializer
 
 	private def natural_member_type(raw_value, type)
 		json_type = raw_json_type(raw_value)
+		generator = Literal::JSONSchema::Generator.new(@context)
 
-		type.each.find { |member| natural_json_type(member) == json_type } ||
+		type.each.find { |member| natural_json_type(member, generator:) == json_type } ||
 			natural_number_member_type(json_type, type) ||
 			raise(Literal::ArgumentError, "No union member type for JSON type #{json_type.inspect} in #{type.inspect}")
 	end
@@ -228,7 +236,8 @@ class Literal::UnionSerializer < Literal::Serializer
 	private def natural_number_member_type(json_type, type)
 		return unless json_type == "integer"
 
-		type.each.find { |member| natural_json_type(member) == "number" }
+		generator = Literal::JSONSchema::Generator.new(@context)
+		type.each.find { |member| natural_json_type(member, generator:) == "number" }
 	end
 
 	private def raw_json_type(value)

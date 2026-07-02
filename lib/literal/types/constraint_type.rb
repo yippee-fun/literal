@@ -13,6 +13,13 @@ class Literal::Types::ConstraintType
 	attr_reader :object_constraints
 	attr_reader :property_constraints
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		@object_constraints.each { |type| yield type }
+		@property_constraints.each_value { |type| yield type }
+	end
+
 	def inspect
 		"_Constraint(#{inspect_constraints})"
 	end

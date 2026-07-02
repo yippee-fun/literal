@@ -13,6 +13,12 @@ class Literal::Types::TupleType
 
 	attr_reader :types
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		@types.each { |type| yield type }
+	end
+
 	def inspect
 		"_Tuple(#{@types.map(&:inspect).join(', ')})"
 	end

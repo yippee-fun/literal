@@ -10,6 +10,12 @@ class Literal::Types::KindType
 
 	attr_reader :type
 
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @type
+	end
+
 	def ===(object)
 		Literal.subtype?(object, @type)
 	end

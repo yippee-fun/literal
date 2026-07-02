@@ -7,14 +7,14 @@ class Literal::StringSerializer < Literal::Serializer
 		Type
 	end
 
-	def json_schema(type)
+	def json_schema(type, generator: nil)
 		case type
 		when Literal::JSONSchema::StringType
 			type.json_schema
 		when String
 			{ "type" => "string", "const" => type }
 		when Literal::Types::UnionType
-			union_json_schema(type)
+			union_json_schema(type, generator:)
 		when Literal::Types::ConstraintType
 			constraint_json_schema(type)
 		else
@@ -34,11 +34,11 @@ class Literal::StringSerializer < Literal::Serializer
 		range.exclude_end? ? range.end - 1 : range.end
 	end
 
-	private def union_json_schema(type)
+	private def union_json_schema(type, generator:)
 		if type.types.empty?
 			{ "type" => "string", "enum" => type.primitives.to_a }
 		else
-			{ "anyOf" => type.map { |member| json_schema_for(member) }.to_a }
+			{ "anyOf" => type.map { |member| json_schema_for(member, generator:) }.to_a }
 		end
 	end
 

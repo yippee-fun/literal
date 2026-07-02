@@ -1,19 +1,14 @@
 # frozen_string_literal: true
 
-class Literal::BooleanSerializer < Literal::Serializer
-	Type = _Boolean
+class Literal::JSONDataSerializer < Literal::Serializer
+	Type = _JSONData
 
 	def type
 		Type
 	end
 
 	def json_schema(type, generator: nil)
-		case type
-		when true, false
-			{ "type" => "boolean", "const" => type }
-		else
-			{ "type" => "boolean" }
-		end
+		true
 	end
 
 	def serialize(value, type:)
