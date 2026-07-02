@@ -549,21 +549,18 @@ test "structure json schema" do
 		},
 	)
 
-	person_definition_name = SerializationPerson.name
-	person_definition_ref = "#/$defs/#{person_definition_name.gsub('~', '~0').gsub('/', '~1')}"
-
 	assert_equal(
 		Example.json_schema(SerializationOrder),
 		{
 			"type" => "object",
 			"properties" => {
 				"id" => { "type" => "integer" },
-				"person" => { "$ref" => person_definition_ref },
+				"person" => { "$ref" => "#/$defs/0" },
 			},
 			"required" => ["id", "person"],
 			"additionalProperties" => false,
 			"$defs" => {
-				person_definition_name => {
+				"0" => {
 					"type" => "object",
 					"properties" => {
 						"name" => { "type" => "string" },
@@ -576,36 +573,31 @@ test "structure json schema" do
 		},
 	)
 
-	recursive_order_name = SerializationRecursiveOrder.name
-	recursive_address_name = SerializationRecursiveAddress.name
-	recursive_order_ref = "#/$defs/#{recursive_order_name.gsub('~', '~0').gsub('/', '~1')}"
-	recursive_address_ref = "#/$defs/#{recursive_address_name.gsub('~', '~0').gsub('/', '~1')}"
-
 	assert_equal(
 		Example.json_schema(SerializationRecursiveOrder),
 		{
 			"type" => "object",
 			"properties" => {
 				"id" => { "type" => "integer" },
-				"address" => { "$ref" => recursive_address_ref },
+				"address" => { "$ref" => "#/$defs/0" },
 			},
 			"required" => ["id", "address"],
 			"additionalProperties" => false,
 			"$defs" => {
-				recursive_address_name => {
+				"0" => {
 					"type" => "object",
 					"properties" => {
 						"postcode" => { "type" => "string" },
-						"order" => { "$ref" => recursive_order_ref },
+						"order" => { "$ref" => "#/$defs/1" },
 					},
 					"required" => ["postcode", "order"],
 					"additionalProperties" => false,
 				},
-				recursive_order_name => {
+				"1" => {
 					"type" => "object",
 					"properties" => {
 						"id" => { "type" => "integer" },
-						"address" => { "$ref" => recursive_address_ref },
+						"address" => { "$ref" => "#/$defs/0" },
 					},
 					"required" => ["id", "address"],
 					"additionalProperties" => false,

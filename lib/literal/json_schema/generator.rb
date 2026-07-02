@@ -4,6 +4,7 @@ class Literal::JSONSchema::Generator
 	def initialize(context)
 		@context = context
 		@definitions = {}
+		@definition_names = {}
 		@depth = 0
 	end
 
@@ -40,7 +41,7 @@ class Literal::JSONSchema::Generator
 	end
 
 	private def definition_name(type)
-		type.name
+		@definition_names[type] ||= @definition_names.length.to_s(36)
 	end
 
 	private def json_pointer_escape(value)
