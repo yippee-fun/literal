@@ -19,6 +19,10 @@ class Literal::Success < Literal::Result
 			"Literal::Success(#{@type.inspect})"
 		end
 
+		def name
+			Literal.const_name(self)
+		end
+
 		freeze
 	end
 
