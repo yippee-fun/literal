@@ -21,6 +21,10 @@ class Literal::Result::Generic
 		end
 	end
 
+	def name
+		Literal.const_name(self)
+	end
+
 	def try
 		raise ArgumentError unless block_given?
 

@@ -19,6 +19,10 @@ class Literal::Failure < Literal::Result
 			"Literal::Failure(#{@type.inspect})"
 		end
 
+		def name
+			Literal.const_name(self)
+		end
+
 		freeze
 	end
 
