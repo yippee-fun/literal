@@ -21,6 +21,10 @@ class ValidationNode < Literal::Data
 	prop :children, _Array(_Deferred { ValidationNode })
 end
 
+class ValidationTree < Literal::Data
+	prop :children, _Array(_TaggedUnion(tree: _Deferred { ValidationTree }, leaf: String))
+end
+
 ValidationContext = Literal::SerializationContext.new
 
 # For every case, the serialized value must round-trip through
@@ -80,6 +84,13 @@ test "serialized values validate against their generated JSON Schemas" do
 			]),
 		],
 		[recursive_hash, { "a" => { "b" => nil }, "c" => nil }],
+		[
+			ValidationTree,
+			ValidationTree.new(children: [
+				ValidationTree.new(children: ["nested leaf"]),
+				"top leaf",
+			]),
+		],
 	]
 
 	cases.each do |type, value|

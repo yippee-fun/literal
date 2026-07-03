@@ -1213,7 +1213,7 @@ test "recursive set json schema" do
 	)
 end
 
-test "recursive tagged union members serialize but cannot merge a discriminator into a $ref schema" do
+test "recursive tagged union members merge the discriminator into a fresh schema body" do
 	tree = Class.new(Literal::Data)
 	tree.prop :children, _Array(_TaggedUnion(tree:, leaf: String))
 
@@ -1230,7 +1230,52 @@ test "recursive tagged union members serialize but cannot merge a discriminator 
 	})
 	assert_equal(Example.deserialize(serialized, type: tree), original)
 
-	assert_raises(Literal::ArgumentError) { Example.json_schema(tree) }
+	assert_equal(
+		Example.json_schema(tree),
+		{
+			"type" => "object",
+			"properties" => {
+				"children" => { "$ref" => "#/$defs/0" },
+			},
+			"required" => ["children"],
+			"additionalProperties" => false,
+			"$defs" => {
+				"0" => {
+					"type" => "array",
+					"items" => {
+						"oneOf" => [
+							{
+								"type" => "object",
+								"properties" => {
+									"children" => { "$ref" => "#/$defs/0" },
+									"$type" => { "const" => "tree" },
+								},
+								"required" => ["$type", "children"],
+								"additionalProperties" => false,
+							},
+							{
+								"type" => "object",
+								"properties" => {
+									"$type" => { "const" => "leaf" },
+									"value" => { "type" => "string" },
+								},
+								"required" => ["$type", "value"],
+								"additionalProperties" => false,
+							},
+						],
+					},
+				},
+			},
+		},
+	)
+end
+
+test "self-referential tagged unions are not serializable" do
+	type = nil
+	type = _TaggedUnion(a: _Deferred { type }, b: String)
+
+	refute Example.kind === type
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
 test "mutually recursive container types" do

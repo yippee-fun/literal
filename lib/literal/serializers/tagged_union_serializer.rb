@@ -77,12 +77,13 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	private def tagged_json_schema(tag, member_type, generator:)
-		member_schema = json_schema_for(member_type, generator:, reference: false)
-
 		if object_member?(member_type)
 			# Serialization merges the discriminator into the member object, so the
-			# schema must too. A member that recurses back into this tagged union
-			# only has a "$ref" schema, which a discriminator cannot be merged into.
+			# schema must too. Since a discriminator cannot be merged into a
+			# "$ref", we ask for a fresh schema body (reference: false), which
+			# works even for members that recurse back into this tagged union.
+			member_schema = json_schema_for(member_type, generator:, reference: false)
+
 			unless mergeable_object_schema?(member_schema)
 				raise Literal::ArgumentError, "Cannot generate a JSON Schema for tagged union member #{member_type.inspect} because its schema cannot be merged with the $type discriminator."
 			end
@@ -94,7 +95,7 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 			"type" => "object",
 			"properties" => {
 				"$type" => { "const" => tag },
-				"value" => member_schema,
+				"value" => json_schema_for(member_type, generator:),
 			},
 			"required" => ["$type", "value"],
 			"additionalProperties" => false,

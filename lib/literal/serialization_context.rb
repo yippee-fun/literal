@@ -114,10 +114,7 @@ class Literal::SerializationContext
 	# the shallow questions (handles_type?, child_types, referenceable?) and this
 	# walk owns cycle detection. A cycle is legal if it passes back through a
 	# referenceable type, since values of such types are still finite and the
-	# JSON Schema generator can usually express the cycle as a "$ref". One
-	# exception: a mergeable tagged union member that recurses back into its
-	# tagged union serializes fine but is rejected at schema generation time,
-	# because the "$type" discriminator cannot be merged into a "$ref".
+	# JSON Schema generator can express the cycle as a "$ref".
 	def serializable_type?(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 

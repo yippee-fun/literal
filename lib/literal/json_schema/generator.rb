@@ -43,34 +43,38 @@ class Literal::JSONSchema::Generator
 	end
 
 	# Called by serializers for child types. With reference: false the caller
-	# needs the schema body rather than a reference — for example to merge a
-	# discriminator into it — so nothing is memoized for reuse.
+	# always gets a schema body it can extend — for example to merge a
+	# discriminator into it — never a reference. The body is built fresh and
+	# untracked, even for a type that is currently being built elsewhere:
+	# recursion still terminates because every cycle back into the type passes
+	# through a tracked schema call for one of its containers, which resolves
+	# to a reference.
 	def schema(type, reference: true)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		if @in_progress.key?(type)
+		if !reference
+			@context.build_json_schema(type, generator: self)
+		elsif @in_progress.key?(type)
 			reference_to(promote(type))
-		elsif !reference
-			build(type, memoize: false)
 		elsif (name = @promoted[type])
 			reference_to(name)
 		elsif @completed.key?(type)
 			reference_to(promote(type))
 		else
-			build(type, memoize: true)
+			build(type)
 		end
 	end
 
-	private def build(type, memoize:)
+	private def build(type)
 		@in_progress[type] = true
 		node = @context.build_json_schema(type, generator: self)
 
 		if (name = @promoted[type])
 			# A descendant back-edged into this node while it was being built.
 			@definitions[name] = node if @definitions[name].nil?
-			memoize ? reference_to(name) : node
+			reference_to(name)
 		else
-			@completed[type] = node if memoize && Hash === node && @context.referenceable_type?(type)
+			@completed[type] = node if Hash === node && @context.referenceable_type?(type)
 			node
 		end
 	ensure
