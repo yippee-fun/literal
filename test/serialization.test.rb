@@ -1101,6 +1101,21 @@ test "serialization context type serializes serializable values" do
 	assert_equal(Example.serialize(person, type: Example.type), { "name" => "Joel", "age" => 42 })
 end
 
+test "property constraints that json schema cannot express are ignored" do
+	assert_equal(
+		Example.json_schema(_String(reverse: "oof", length: 3..)),
+		{ "type" => "string", "minLength" => 3 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(_Array(String), first: "a")),
+		{ "type" => "array", "items" => { "type" => "string" } },
+	)
+
+	assert_equal(Example.serialize("foo", type: _String(reverse: "oof")), "foo")
+	assert_equal(Example.deserialize("foo", type: _String(reverse: "oof")), "foo")
+end
+
 test "context type rejects values whose structure type is not serializable" do
 	unsupported = SerializationUnsupportedRecursiveNode.new(children: [], object: Object.new)
 

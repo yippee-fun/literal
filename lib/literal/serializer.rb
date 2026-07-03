@@ -75,6 +75,10 @@ class Literal::Serializer
 			in [:length | :size, Integer]
 				schema[max_key] = constraint
 				schema[min_key] = constraint
+			else
+				# Constraints JSON Schema cannot express are ignored. The schema is
+				# looser than the type, but still accepts everything serialization
+				# produces, since serialized values are checked against the type.
 			end
 		end
 	end
