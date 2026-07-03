@@ -12,8 +12,10 @@ class Literal::Serializer::StructureType
 		"SerializableStructure"
 	end
 
+	# Values only match if their whole structure type is serializable, so that
+	# matching context.type agrees with what serialization will accept.
 	def ===(object)
-		Literal::DataStructure === object
+		Literal::DataStructure === object && @context.serializable_type?(object.class)
 	end
 
 	def matches?(other)

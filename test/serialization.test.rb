@@ -1101,6 +1101,17 @@ test "serialization context type serializes serializable values" do
 	assert_equal(Example.serialize(person, type: Example.type), { "name" => "Joel", "age" => 42 })
 end
 
+test "context type rejects values whose structure type is not serializable" do
+	unsupported = SerializationUnsupportedRecursiveNode.new(children: [], object: Object.new)
+
+	refute Example.type === unsupported
+	refute Example.type === [unsupported]
+	refute Example.type === { key: unsupported }
+
+	assert_raises(Literal::ArgumentError) { Example.serialize(unsupported, type: Example.type) }
+	assert_raises(Literal::ArgumentError) { Example.serialize([unsupported], type: Example.type) }
+end
+
 test "recursive kind support" do
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
