@@ -2,7 +2,6 @@
 
 require "date"
 require "ipaddr"
-require "set"
 require "time"
 require "uri"
 

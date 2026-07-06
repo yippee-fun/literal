@@ -1,12 +1,60 @@
 # frozen_string_literal: true
 
+class Literal::Serializer::ArrayType
+	include Literal::Serializer::Kind
+
+	def initialize(context)
+		@context = context
+		freeze
+	end
+
+	def inspect
+		"SerializableArray"
+	end
+
+	def ===(value)
+		Array === value && value.all?(@context.type)
+	end
+
+	def matches?(other)
+		case other
+		when Literal::Types::ArrayType
+			true
+		when Literal::Types::ConstraintType
+			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint }
+		else
+			false
+		end
+	end
+end
+
 class Literal::ArraySerializer < Literal::Serializer
 	def initialize(context)
 		super
-		@type = _Array(@context.type)
+		@type = Literal::Serializer::ArrayType.new(@context)
 	end
 
 	attr_reader :type
+
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		[array_type_for(type).type]
+	end
+
+	def referenceable?(type)
+		true
+	end
+
+	def json_type(type)
+		"array"
+	end
+
+	def value_type(value)
+		_Array(@context.type) if type === value
+	end
 
 	def json_schema(type, generator: nil)
 		{ "type" => "array" }.tap do |schema|
@@ -17,16 +65,7 @@ class Literal::ArraySerializer < Literal::Serializer
 				array_type = array_type_for(type)
 				schema["items"] = json_schema_for(array_type.type, generator:)
 
-				type.property_constraints.each do |property, constraint|
-					case [property, constraint]
-					in [:length | :size, Range]
-						schema["maxItems"] = range_end(constraint) if constraint.end
-						schema["minItems"] = constraint.begin if constraint.begin
-					in [:length | :size, Integer]
-						schema["maxItems"] = constraint
-						schema["minItems"] = constraint
-					end
-				end
+				apply_length_constraints(schema, type.property_constraints, min_key: "minItems", max_key: "maxItems")
 			end
 		end
 	end
@@ -45,10 +84,6 @@ class Literal::ArraySerializer < Literal::Serializer
 		raw.map do |item|
 			deserialize_contents(item, type: member_type)
 		end
-	end
-
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
 	end
 
 	private def array_type_for(type)

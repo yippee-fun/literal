@@ -23,6 +23,12 @@ class Literal::SerializationContext
 		Literal::JSONDataSerializer,
 	].freeze
 
+	# Bound for the fallback type caches on engines without a weak-keyed map.
+	# Types can be constructed ad hoc, so an unbounded cache would grow with
+	# every fresh type object; when a fallback cache fills up it is simply
+	# cleared, and long-lived types repopulate it immediately.
+	CacheLimit = 2048
+
 	def initialize(*serializers, defaults: true)
 		serializers = [*serializers, *DefaultSerializers] if defaults
 
@@ -32,8 +38,12 @@ class Literal::SerializationContext
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 		@serializer_kinds = @serializers.to_h { |serializer| [serializer, _Kind(serializer.type)] }.freeze
 
-		@type = Literal::Serializer::SerializableType.new(_Union(*@serializers.map(&:type)))
+		@type = Literal::Serializer::SerializableType.new(self, _Union(*@serializers.map(&:type)))
 		@kind = _Union(*@serializer_kinds.values)
+
+		@cache_mutex = Mutex.new
+		@serializer_cache = new_type_cache
+		@serializable_cache = new_type_cache
 
 		freeze
 	end
@@ -42,9 +52,8 @@ class Literal::SerializationContext
 	attr_reader :type
 	attr_reader :kind
 
-	def json_schema(type, generator: nil, reference: true)
-		generator ||= Literal::JSONSchema::Generator.new(self)
-		generator.schema(type, reference:)
+	def json_schema(type)
+		Literal::JSONSchema::Generator.new(self).generate(type)
 	end
 
 	def serialize(value, type:, strict: true)
@@ -92,7 +101,7 @@ class Literal::SerializationContext
 		if (serializer = serializer_matching_type(type))
 			serializer
 		else
-			raise Literal::ArgumentError, "No serializer type #{type.inspect}"
+			raise Literal::ArgumentError, "No serializer for type #{type.inspect}"
 		end
 	end
 
@@ -100,19 +109,146 @@ class Literal::SerializationContext
 		@serializer_kinds.fetch(serializer)
 	end
 
+	# Whether this context can round-trip values of the given type. This is the
+	# only place that recurses through a type's children: serializers answer
+	# the shallow questions (handles_type?, child_types, referenceable?) and this
+	# walk owns cycle detection. A cycle is legal if it passes back through a
+	# referenceable type, since values of such types are still finite and the
+	# JSON Schema generator can express the cycle as a "$ref".
 	def serializable_type?(type)
-		@type.serializable?(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		cached = @serializable_cache[type]
+		return cached unless cached.nil?
+
+		result = serializable_type_within?(type, {}.compare_by_identity, @serializable_cache)
+		cache_store(@serializable_cache, type, false) unless result
+		result
+	end
+
+	# Builds a descriptive error for a type that failed serializable_type?, by
+	# re-walking the type to find a path to the failure. This is only called on
+	# the error path, so it doesn't need to be fast.
+	def unserializable_type_error(type)
+		path = unserializable_type_path(type, {}.compare_by_identity)
+
+		unless path
+			return Literal::ArgumentError.new("No serializer for type #{type.inspect}")
+		end
+
+		failed = path.last
+
+		reason = if serializer_matching_type(failed)
+			"it recurses through #{failed.inspect}, which cannot be referenced from a JSON Schema"
+		elsif path.length == 1
+			"no serializer matches it"
+		else
+			"there is no serializer for #{failed.inspect}"
+		end
+
+		trail = (path.length > 1) ? " (#{path.map(&:inspect).join(' → ')})" : ""
+
+		Literal::ArgumentError.new("Type #{type.inspect} cannot be serialized because #{reason}#{trail}.")
+	end
+
+	def referenceable_type?(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		serializer = serializer_matching_type(type)
+		serializer ? serializer.referenceable?(type) : false
+	end
+
+	def json_type(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		serializer_matching_type(type)&.json_type(type)
 	end
 
 	def build_json_schema(type, generator:)
+		serializer_for_type(type).json_schema(type, generator:)
+	end
+
+	private def serializable_type_within?(type, stack, seen)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		serializer = serializer_for_type(type)
-		serializer.json_schema(type, generator:)
+		return true if Literal::Serializer::SerializableType === type
+		return referenceable_type?(type) if stack.key?(type)
+
+		cached = seen[type]
+		return cached unless cached.nil?
+
+		serializer = serializer_matching_type(type)
+		return false unless serializer
+
+		stack[type] = true
+		result = serializer.child_types(type).all? { |child| serializable_type_within?(child, stack, seen) }
+		stack.delete(type)
+
+		# Only positive results are safe to remember from mid-walk: a negative
+		# may depend on the current stack, but success never does.
+		cache_store(seen, type, true) if result
+		result
+	end
+
+	private def unserializable_type_path(type, stack)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		return nil if Literal::Serializer::SerializableType === type
+
+		if stack.key?(type)
+			return referenceable_type?(type) ? nil : [type]
+		end
+
+		serializer = serializer_matching_type(type)
+		return [type] unless serializer
+
+		stack[type] = true
+
+		begin
+			serializer.child_types(type).each do |child|
+				if (failure = unserializable_type_path(child, stack))
+					return [type, *failure]
+				end
+			end
+		ensure
+			stack.delete(type)
+		end
+
+		nil
 	end
 
 	private def serializer_matching_type(type)
-		@serializers.find { |it| serializer_kind(it) === type }
+		cached = @serializer_cache[type]
+
+		if cached.nil?
+			cached = @serializers.find { |it| it.handles_type?(type) } || false
+			cache_store(@serializer_cache, type, cached)
+		end
+
+		cached || nil
+	end
+
+	# Weakly keyed where the engine supports it, so ad-hoc types can be
+	# garbage collected; otherwise a bounded hash cleared when full.
+	private def new_type_cache
+		if defined?(ObjectSpace::WeakKeyMap)
+			ObjectSpace::WeakKeyMap.new
+		else
+			{}.compare_by_identity
+		end
+	end
+
+	private def cache_store(cache, key, value)
+		@cache_mutex.synchronize do
+			cache.clear if Hash === cache && cache.size >= CacheLimit
+			cache[key] = value
+		end
+
+		value
+	rescue ArgumentError
+		# Immediate values (nil, true, 42, :sym) cannot be weak map keys.
+		# They're cheap to re-dispatch, so they are simply not cached.
+		value
 	end
 
 	private def serializer_for_value(value)

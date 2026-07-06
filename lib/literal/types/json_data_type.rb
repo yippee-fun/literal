@@ -25,11 +25,15 @@ class Literal::Types::JSONDataType
 		when Float
 			value.finite?
 		when Hash
-			value.each do |k, v|
-				return false unless String === k && self === v
+			# The match guard answers false on re-entry, so self-referential
+			# values are rejected rather than recursing forever.
+			Literal.with_match_guard(self, value) do
+				value.all? { |k, v| String === k && self === v }
 			end
 		when Array
-			value.all?(self)
+			Literal.with_match_guard(self, value) do
+				value.all?(self)
+			end
 		else
 			false
 		end

@@ -1,12 +1,10 @@
 # frozen_string_literal: true
 
 class Literal::Serializer::TaggedUnionType
-	include Literal::Type
-	include Literal::Types
+	include Literal::Serializer::Kind
 
 	def initialize(context)
 		@context = context
-		@type = _Union(@context.type)
 		freeze
 	end
 
@@ -15,11 +13,11 @@ class Literal::Serializer::TaggedUnionType
 	end
 
 	def ===(value)
-		@type === value
+		@context.type === value
 	end
 
-	def >=(other, context: nil)
-		Literal::Types::TaggedUnionType === other && other.members.each_value.all? { |member_type| Literal.subtype?(member_type, @context.type, context:) }
+	def matches?(other)
+		Literal::Types::TaggedUnionType === other
 	end
 end
 
@@ -30,6 +28,14 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	attr_reader :type
+
+	def handles_type?(type)
+		@type.matches?(type)
+	end
+
+	def child_types(type)
+		type.members.values
+	end
 
 	def value_type(value)
 	end
@@ -71,9 +77,17 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	private def tagged_json_schema(tag, member_type, generator:)
-		member_schema = json_schema_for(member_type, generator:, reference: false)
+		if object_member?(member_type)
+			# Serialization merges the discriminator into the member object, so the
+			# schema must too. Since a discriminator cannot be merged into a
+			# "$ref", we ask for a fresh schema body (reference: false), which
+			# works even for members that recurse back into this tagged union.
+			member_schema = json_schema_for(member_type, generator:, reference: false)
 
-		if mergeable_object_schema?(member_schema)
+			unless mergeable_object_schema?(member_schema)
+				raise Literal::ArgumentError, "Cannot generate a JSON Schema for tagged union member #{member_type.inspect} because its schema cannot be merged with the $type discriminator."
+			end
+
 			return merge_discriminator_schema(tag, member_schema)
 		end
 
@@ -81,7 +95,7 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 			"type" => "object",
 			"properties" => {
 				"$type" => { "const" => tag },
-				"value" => member_schema,
+				"value" => json_schema_for(member_type, generator:),
 			},
 			"required" => ["$type", "value"],
 			"additionalProperties" => false,
@@ -89,7 +103,8 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	private def mergeable_object_schema?(schema)
-		schema["type"] == "object" &&
+		Hash === schema &&
+			schema["type"] == "object" &&
 			schema.fetch("additionalProperties", nil) == false &&
 			!schema.fetch("properties", {}).key?("$type")
 	end

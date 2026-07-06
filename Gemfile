@@ -12,5 +12,6 @@ group :development do
 	gem "rubocop", platform: :ruby
 	gem "ruby-lsp", platform: :ruby
 	gem "simplecov", platform: :ruby
+	gem "json_schemer", platform: :ruby
 	gem "js_regex", platform: :ruby
 end

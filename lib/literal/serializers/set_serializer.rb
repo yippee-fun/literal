@@ -8,6 +8,22 @@ class Literal::SetSerializer < Literal::Serializer
 
 	attr_reader :type
 
+	def handles_type?(type)
+		!set_type_for(type).nil?
+	end
+
+	def child_types(type)
+		[set_type_for(type).type]
+	end
+
+	def referenceable?(type)
+		true
+	end
+
+	def json_type(type)
+		"array"
+	end
+
 	def json_schema(type, generator: nil)
 		{ "type" => "array", "uniqueItems" => true }.tap do |schema|
 			case type
@@ -17,16 +33,7 @@ class Literal::SetSerializer < Literal::Serializer
 				set_type = set_type_for(type)
 				schema["items"] = json_schema_for(set_type.type, generator:)
 
-				type.property_constraints.each do |property, constraint|
-					case [property, constraint]
-					in [:length | :size, Range]
-						schema["maxItems"] = range_end(constraint) if constraint.end
-						schema["minItems"] = constraint.begin if constraint.begin
-					in [:length | :size, Integer]
-						schema["maxItems"] = constraint
-						schema["minItems"] = constraint
-					end
-				end
+				apply_length_constraints(schema, type.property_constraints, min_key: "minItems", max_key: "maxItems")
 			end
 		end
 	end
@@ -45,10 +52,6 @@ class Literal::SetSerializer < Literal::Serializer
 		raw.to_set do |item|
 			deserialize_contents(item, type: member_type)
 		end
-	end
-
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
 	end
 
 	private def set_type_for(type)

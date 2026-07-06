@@ -107,3 +107,15 @@ test "error message" do
 		        Actual (Symbol): :symbol
 	MSG
 end
+
+test "self-referential values do not match" do
+	array = []
+	array << array
+
+	hash = {}
+	hash["self"] = hash
+
+	refute _JSONData === array
+	refute _JSONData === hash
+	refute _JSONData === { "wrapped" => [array] }
+end

@@ -36,8 +36,8 @@ class Literal::TypeError < TypeError
 			@label = label
 		end
 
-		def add_child(expected: nil, **kwargs)
-			child = self.class.new(expected:, **kwargs)
+		def add_child(expected: nil, **)
+			child = self.class.new(expected:, **)
 			expected.record_literal_type_errors(child) if expected.respond_to?(:record_literal_type_errors)
 			@children << child
 		end
