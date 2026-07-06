@@ -52,15 +52,33 @@ class Literal::StructureSerializer < Literal::Serializer
 		value.class if type === value
 	end
 
+	def object_shape(type)
+		required = Set[]
+		allowed = Set[]
+		const_domains = {}
+
+		type.literal_properties.each do |property|
+			name = property.name.name
+			allowed << name
+			required << name if property.required?
+
+			if (domain = const_domain(property_schema_type(property.type)))
+				const_domains[name] = domain
+			end
+		end
+
+		Literal::Serializer::ObjectShape.new(required:, allowed:, const_domains:)
+	end
+
 	def json_schema(type, generator: nil)
 		properties = type.literal_properties.to_h do |property|
-			[property.name.to_s, property_json_schema(property, generator:)]
+			[property.name.name, property_json_schema(property, generator:)]
 		end
 
 		{
 			"type" => "object",
 			"properties" => properties,
-			"required" => type.literal_properties.filter(&:required?).map { |property| property.name.to_s },
+			"required" => object_shape(type).required.to_a,
 			"additionalProperties" => false,
 		}
 	end
@@ -75,7 +93,7 @@ class Literal::StructureSerializer < Literal::Serializer
 			next if property_value == Literal::Undefined
 
 			[
-				property.name.to_s,
+				property.name.name,
 				serialize_contents(property_value, type: property_schema_type(property.type)),
 			]
 		end.to_h
@@ -84,11 +102,11 @@ class Literal::StructureSerializer < Literal::Serializer
 	def deserialize(raw, type:)
 		type.new(
 			**type.literal_properties.filter_map do |property|
-				next if undefined_optional?(property.type) && !raw.key?(property.name.to_s)
+				next if undefined_optional?(property.type) && !raw.key?(property.name.name)
 
 				[
 					property.name,
-					deserialize_contents(raw[property.name.to_s], type: property_schema_type(property.type)),
+					deserialize_contents(raw[property.name.name], type: property_schema_type(property.type)),
 				]
 			end.to_h
 		)

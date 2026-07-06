@@ -44,6 +44,7 @@ class Literal::SerializationContext
 		@cache_mutex = Mutex.new
 		@serializer_cache = new_type_cache
 		@serializable_cache = new_type_cache
+		@object_shape_cache = new_type_cache
 
 		freeze
 	end
@@ -140,6 +141,8 @@ class Literal::SerializationContext
 
 		reason = if serializer_matching_type(failed)
 			"it recurses through #{failed.inspect}, which cannot be referenced from a JSON Schema"
+		elsif (rejection = rejection_reason(failed))
+			(path.length == 1) ? rejection : "there is no serializer for #{failed.inspect}: #{rejection}"
 		elsif path.length == 1
 			"no serializer matches it"
 		else
@@ -149,6 +152,14 @@ class Literal::SerializationContext
 		trail = (path.length > 1) ? " (#{path.map(&:inspect).join(' → ')})" : ""
 
 		Literal::ArgumentError.new("Type #{type.inspect} cannot be serialized because #{reason}#{trail}.")
+	end
+
+	# Whether any serializer in this context matches the type, without the
+	# recursive serializability walk.
+	def serializer_for?(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		!serializer_matching_type(type).nil?
 	end
 
 	def referenceable_type?(type)
@@ -162,6 +173,21 @@ class Literal::SerializationContext
 		type = type.materialize if type in Literal::Types::DeferredType
 
 		serializer_matching_type(type)&.json_type(type)
+	end
+
+	# Cached, unlike json_type: building a shape allocates and serializes
+	# constant values, and union member dispatch consults shapes per value.
+	def object_shape(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		cached = @object_shape_cache[type]
+
+		if cached.nil?
+			cached = serializer_matching_type(type)&.object_shape(type) || false
+			cache_store(@object_shape_cache, type, cached)
+		end
+
+		cached || nil
 	end
 
 	def build_json_schema(type, generator:)
@@ -212,6 +238,16 @@ class Literal::SerializationContext
 			end
 		ensure
 			stack.delete(type)
+		end
+
+		nil
+	end
+
+	private def rejection_reason(type)
+		@serializers.each do |serializer|
+			if (reason = serializer.rejection_reason(type))
+				return reason
+			end
 		end
 
 		nil

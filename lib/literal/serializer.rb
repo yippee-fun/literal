@@ -37,6 +37,20 @@ class Literal::Serializer
 		nil
 	end
 
+	# The key shape of the closed JSON object schema this serializer emits for
+	# the given type, or nil when its schema is not a closed object — open
+	# hashes included, since an unbounded key set proves nothing.
+	def object_shape(type)
+		nil
+	end
+
+	# A sentence explaining why this serializer refuses the given type, or nil
+	# when it handles the type or has nothing specific to say. Only consulted
+	# on the error path, to enrich unserializable type messages.
+	def rejection_reason(type)
+		nil
+	end
+
 	def serialize_contents(value, type:)
 		@context.serialize(value, type:, strict: false)
 	end
@@ -64,6 +78,21 @@ class Literal::Serializer
 
 	private def json_type_for(type)
 		@context.json_type(type)
+	end
+
+	# The finite set of raw JSON values the given type can serialize to, or nil
+	# when the domain is unbounded or unknown. Constants have singleton domains;
+	# a union of constants has the union of theirs. Domains are compared as
+	# serialized values, so a Symbol and a String constant that write the same
+	# JSON share a domain.
+	private def const_domain(type)
+		case type
+		when Literal::Types::UnionType
+			domains = type.each.map { |member| const_domain(member) }
+			domains.reduce(Set[], :|) if domains.all?
+		when String, Symbol, Integer, Float, true, false
+			Set[@context.serialize(type, type:)]
+		end
 	end
 
 	private def apply_length_constraints(schema, property_constraints, min_key:, max_key:)

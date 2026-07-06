@@ -2,9 +2,7 @@
 
 class Literal::Serializer::UnionType
 	include Literal::Serializer::Kind
-
-	SafeNaturalJSONTypes = Set["string", "integer", "number", "boolean", "null"].freeze
-	FiniteFloatType = Literal::Types._Float(finite?: true)
+	include Literal::Serializer::UnionNumerics
 
 	def initialize(context)
 		@context = context
@@ -34,30 +32,83 @@ class Literal::Serializer::UnionType
 		end
 	end
 
-	# A union is natural when each member maps to a distinct JSON type, so a
-	# deserializer can resolve the member from the raw value alone. Integer and
-	# number are only allowed together when the number member is a finite float,
-	# in which case the pair collapses to "number".
+	# A sentence naming the members that keep the union from being natural, or
+	# nil when it is natural. This is the same walk matches? answers with, so
+	# the explanation can never drift from the check.
+	def ambiguity(type)
+		case (reason = Literal.with_match_guard(self, type) { diagnose(type) })
+		when false
+			"#{type.inspect} refers back into itself, so its members cannot be classified"
+		else
+			reason
+		end
+	end
+
+	# A union is natural when a deserializer can resolve the member from the
+	# raw value alone. Each member must map to its own JSON type, with two
+	# exceptions: integer and number may pair when the number member is a
+	# finite float (the pair collapses to "number"), and several object
+	# members may share a union when their key shapes are pairwise
+	# distinguishable.
 	private def natural?(type)
-		seen = Set[]
-		has_integer = false
-		number_is_finite_float = false
+		diagnose(type).nil?
+	end
 
-		distinct = type.each.all? do |member|
-			json_type = @context.json_type(member)
-			next false unless SafeNaturalJSONTypes.include?(json_type)
+	private def diagnose(type)
+		members_by_json_type = type.each.group_by { |member| @context.json_type(member) }
 
-			case json_type
-			when "integer"
-				has_integer = true
-			when "number"
-				number_is_finite_float = finite_float_type?(member)
-			end
-
-			seen.add?(json_type)
+		if (untyped = members_by_json_type[nil])
+			return untyped_member_ambiguity(untyped.first)
 		end
 
-		distinct && (!numeric_ambiguous?(seen) || (has_integer && number_is_finite_float))
+		members_by_json_type.each do |json_type, members|
+			next if members.length == 1
+
+			if json_type == "object"
+				if (reason = object_ambiguity(members))
+					return reason
+				end
+			else
+				a, b = members
+				return "#{a.inspect} and #{b.inspect} both serialize to JSON #{json_type} values, so raw values cannot be resolved to a member; use _TaggedUnion to discriminate them explicitly"
+			end
+		end
+
+		numeric_ambiguity(members_by_json_type)
+	end
+
+	private def untyped_member_ambiguity(member)
+		if @context.serializer_for?(member)
+			"#{member.inspect} does not serialize to a single JSON type, so raw values cannot be resolved to a member"
+		else
+			"there is no serializer for #{member.inspect}"
+		end
+	end
+
+	private def object_ambiguity(members)
+		shapes = members.to_h { |member| [member, @context.object_shape(member)] }
+
+		open_member, _shape = shapes.find { |_member, shape| shape.nil? }
+		if open_member
+			return "#{open_member.inspect} accepts arbitrary keys, so it cannot share an untagged union with another object member"
+		end
+
+		shapes.keys.combination(2) do |a, b|
+			next if shapes.fetch(a).distinguishable_from?(shapes.fetch(b))
+
+			return "#{a.inspect} and #{b.inspect} can match the same JSON objects; give one a required key the other does not allow, give a shared required key distinct constant values, or use _TaggedUnion"
+		end
+
+		nil
+	end
+
+	private def numeric_ambiguity(members_by_json_type)
+		return unless members_by_json_type.key?("integer") && members_by_json_type.key?("number")
+
+		number_member = members_by_json_type.fetch("number").find { |member| !finite_float_type?(member) }
+		return unless number_member
+
+		"Integer and #{number_member.inspect} both serialize to JSON number values, so raw values cannot be resolved to a member; only exactly _Float(finite?: true) can pair with Integer, collapsing the pair to a plain number"
 	end
 
 	private def natural_constraint?(type)
@@ -69,25 +120,10 @@ class Literal::Serializer::UnionType
 			integer_and_finite_float?(union) &&
 			natural?(union)
 	end
-
-	private def numeric_ambiguous?(seen)
-		seen.include?("integer") && seen.include?("number")
-	end
-
-	private def integer_and_finite_float?(type)
-		members = type.to_a
-
-		members.any? { |member| member == Integer } &&
-			members.any? { |member| finite_float_type?(member) }
-	end
-
-	private def finite_float_type?(type)
-		Literal.subtype?(type, FiniteFloatType) && Literal.subtype?(FiniteFloatType, type)
-	end
 end
 
 class Literal::UnionSerializer < Literal::Serializer
-	FiniteFloatType = Literal::Types._Float(finite?: true)
+	include Literal::Serializer::UnionNumerics
 
 	def initialize(context)
 		@context = context
@@ -98,6 +134,12 @@ class Literal::UnionSerializer < Literal::Serializer
 
 	def handles_type?(type)
 		@type.matches?(type)
+	end
+
+	def rejection_reason(type)
+		return unless Literal::Types::UnionType === type
+
+		@type.ambiguity(type)
 	end
 
 	def child_types(type)
@@ -151,14 +193,6 @@ class Literal::UnionSerializer < Literal::Serializer
 		type.object_constraints.find { |constraint| Literal::Types::UnionType === constraint }
 	end
 
-	private def number_union?(type)
-		members = type.to_a
-
-		members.length == 2 &&
-			members.any? { |member| member == Integer } &&
-			members.any? { |member| finite_float_type?(member) }
-	end
-
 	private def json_schema_members(type, generator:)
 		if integer_and_finite_float?(type)
 			type.each.reject { |member| member == Integer || finite_float_type?(member) }
@@ -166,17 +200,6 @@ class Literal::UnionSerializer < Literal::Serializer
 		else
 			type.each.map { |member| json_schema_for(member, generator:) }
 		end
-	end
-
-	private def integer_and_finite_float?(type)
-		members = type.to_a
-
-		members.any? { |member| member == Integer } &&
-			members.any? { |member| finite_float_type?(member) }
-	end
-
-	private def finite_float_type?(type)
-		Literal.subtype?(type, FiniteFloatType) && Literal.subtype?(FiniteFloatType, type)
 	end
 
 	private def integer_and_finite_float_member_type(raw_value, type)
@@ -190,10 +213,20 @@ class Literal::UnionSerializer < Literal::Serializer
 
 	private def natural_member_type(raw_value, type)
 		json_type = raw_json_type(raw_value)
+		members = type.each.select { |member| json_type_for(member) == json_type }
 
-		type.each.find { |member| json_type_for(member) == json_type } ||
+		case members.length
+		when 0
 			natural_number_member_type(json_type, type) ||
-			raise(Literal::ArgumentError, "No union member type for JSON type #{json_type.inspect} in #{type.inspect}")
+				raise(Literal::ArgumentError, "No union member type for JSON type #{json_type.inspect} in #{type.inspect}")
+		when 1
+			members.first
+		else
+			# Only object members can share a JSON type in a natural union, and
+			# their shapes are pairwise distinguishable, so at most one accepts.
+			members.find { |member| @context.object_shape(member).accepts?(raw_value) } ||
+				raise(Literal::ArgumentError, "No union member type for JSON object with keys #{raw_value.keys.inspect} in #{type.inspect}")
+		end
 	end
 
 	private def natural_number_member_type(json_type, type)
@@ -214,6 +247,10 @@ class Literal::UnionSerializer < Literal::Serializer
 			"boolean"
 		when nil
 			"null"
+		when Hash
+			"object"
+		when Array
+			"array"
 		end
 	end
 end

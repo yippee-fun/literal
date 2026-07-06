@@ -41,13 +41,31 @@ class Literal::MapSerializer < Literal::Serializer
 		"object"
 	end
 
+	def object_shape(type)
+		required = Set[]
+		allowed = Set[]
+		const_domains = {}
+
+		type.shape.each do |key, value_type|
+			name = key.name
+			allowed << name
+			required << name unless value_type === nil
+
+			if (domain = const_domain(value_type))
+				const_domains[name] = domain
+			end
+		end
+
+		Literal::Serializer::ObjectShape.new(required:, allowed:, const_domains:)
+	end
+
 	def json_schema(type, generator: nil)
 		{
 			"type" => "object",
 			"properties" => type.shape.to_h do |key, value_type|
 				[key.name, json_schema_for(value_type, generator:)]
 			end,
-			"required" => type.shape.reject { |_key, value_type| value_type === nil }.keys.map(&:name),
+			"required" => object_shape(type).required.to_a,
 			"additionalProperties" => false,
 		}
 	end

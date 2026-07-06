@@ -23,6 +23,28 @@ class SerializationValueObject < Literal::Data
 	prop :value, String
 end
 
+class SerializationLabel < Literal::Data
+	prop :value, String
+end
+
+class SerializationNamed < Literal::Data
+	prop :name, String
+end
+
+class SerializationTitled < Literal::Data
+	prop :title, String
+end
+
+class SerializationUserEvent < Literal::Data
+	prop :kind, "user"
+	prop :name, String
+end
+
+class SerializationAdminEvent < Literal::Data
+	prop :kind, "admin"
+	prop :name, String
+end
+
 class SerializationBooleanConst < Literal::Data
 	prop :foo, true
 end
@@ -1189,7 +1211,53 @@ test "unserializable type errors explain the failure with a path" do
 	assert error.message.include?("SerializationUnsupportedRecursiveNode → Object")
 
 	error = assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(String, Date)) }
-	assert error.message.include?("no serializer matches it")
+	assert error.message.include?("String and Date both serialize to JSON string values")
+	assert error.message.include?("use _TaggedUnion")
+end
+
+test "ambiguous union errors name the members that collide" do
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(SerializationValueObject, SerializationLabel))
+	end
+	assert error.message.include?("SerializationValueObject")
+	assert error.message.include?("SerializationLabel")
+	assert error.message.include?("can match the same JSON objects")
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(_Hash(String, String), SerializationValueObject))
+	end
+	assert error.message.include?("accepts arbitrary keys")
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(Integer, Float))
+	end
+	assert error.message.include?("there is no serializer for Float")
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(Integer, _Float(1..10)))
+	end
+	assert error.message.include?("both serialize to JSON number values")
+	assert error.message.include?("_Float(finite?: true)")
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(_Nilable(String), Integer))
+	end
+	assert error.message.include?("does not serialize to a single JSON type")
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(String, Object))
+	end
+	assert error.message.include?("there is no serializer for Object")
+end
+
+test "ambiguous unions nested in structures explain the collision with a path" do
+	nested = Class.new(Literal::Data)
+	nested.prop :value, _Union(SerializationValueObject, SerializationLabel)
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(nested) }
+	assert error.message.include?("there is no serializer for _Union")
+	assert error.message.include?("can match the same JSON objects")
+	assert error.message.include?(" → ")
 end
 
 test "recursive set json schema" do
@@ -1499,20 +1567,290 @@ test "same-kind union serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
-test "non-natural union object is not serializable" do
+test "natural union with an object member serialization roundtrip" do
 	type = _Union(SerializationValueObject, String)
+	object_original = SerializationValueObject.new(value: "Joel")
+	string_original = "Joel"
 
-	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	object_serialized = Example.serialize(object_original, type:)
+	string_serialized = Example.serialize(string_original, type:)
+
+	assert_equal(object_serialized, { "value" => "Joel" })
+	assert_equal(string_serialized, "Joel")
+	assert_equal(Example.deserialize(object_serialized, type:), object_original)
+	assert_equal(Example.deserialize(string_serialized, type:), string_original)
 end
 
-test "non-natural union hash is not serializable" do
+test "natural union with a hash member serialization roundtrip" do
 	type = _Union(_Hash(String, String), Integer)
+	hash_original = { "name" => "Joel" }
+
+	hash_serialized = Example.serialize(hash_original, type:)
+
+	assert_equal(hash_serialized, { "name" => "Joel" })
+	assert_equal(Example.deserialize(hash_serialized, type:), hash_original)
+	assert_equal(Example.deserialize(Example.serialize(42, type:), type:), 42)
+end
+
+test "natural union with a map member serialization roundtrip" do
+	type = _Union(_Map("$type": String, name: String), Integer)
+	map_original = { "$type": "person", name: "Joel" }
+
+	map_serialized = Example.serialize(map_original, type:)
+
+	assert_equal(map_serialized, { "$type" => "person", "name" => "Joel" })
+	assert_equal(Example.deserialize(map_serialized, type:), map_original)
+end
+
+test "natural union with an array member serialization roundtrip" do
+	type = _Union(_Array(String), String)
+	array_original = ["Joel", "Jill"]
+
+	array_serialized = Example.serialize(array_original, type:)
+
+	assert_equal(array_serialized, ["Joel", "Jill"])
+	assert_equal(Example.deserialize(array_serialized, type:), array_original)
+	assert_equal(Example.deserialize(Example.serialize("Joel", type:), type:), "Joel")
+end
+
+test "date and structure union serialization roundtrip" do
+	type = _Union(Date, SerializationValueObject)
+	date_original = Date.new(2025, 1, 13)
+	object_original = SerializationValueObject.new(value: "Joel")
+
+	date_serialized = Example.serialize(date_original, type:)
+	object_serialized = Example.serialize(object_original, type:)
+
+	assert_equal(date_serialized, "2025-01-13")
+	assert_equal(object_serialized, { "value" => "Joel" })
+	assert_equal(Example.deserialize(date_serialized, type:), date_original)
+	assert_equal(Example.deserialize(object_serialized, type:), object_original)
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"oneOf" => [
+				{ "type" => "string", "format" => "date" },
+				{
+					"type" => "object",
+					"properties" => {
+						"value" => { "type" => "string" },
+					},
+					"required" => ["value"],
+					"additionalProperties" => false,
+				},
+			],
+		},
+	)
+end
+
+test "union of object members with identical shapes is not naturally discriminated" do
+	type = _Union(SerializationValueObject, SerializationLabel)
 
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
-test "non-natural union map is not serializable" do
-	type = _Union(_Map("$type": String, name: String), Integer)
+test "union with two array members is not naturally discriminated" do
+	type = _Union(_Array(String), _Set(Integer))
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "union of object members with distinct required keys serialization roundtrip" do
+	type = _Union(SerializationValueObject, SerializationPerson)
+	value_original = SerializationValueObject.new(value: "Joel")
+	person_original = SerializationPerson.new(name: "Joel", age: 42)
+
+	value_serialized = Example.serialize(value_original, type:)
+	person_serialized = Example.serialize(person_original, type:)
+
+	assert_equal(value_serialized, { "value" => "Joel" })
+	assert_equal(person_serialized, { "name" => "Joel", "age" => 42 })
+	assert_equal(Example.deserialize(value_serialized, type:), value_original)
+	assert_equal(Example.deserialize(person_serialized, type:), person_original)
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"oneOf" => [
+				{
+					"type" => "object",
+					"properties" => {
+						"value" => { "type" => "string" },
+					},
+					"required" => ["value"],
+					"additionalProperties" => false,
+				},
+				{
+					"type" => "object",
+					"properties" => {
+						"name" => { "type" => "string" },
+						"age" => { "type" => "integer" },
+					},
+					"required" => ["name", "age"],
+					"additionalProperties" => false,
+				},
+			],
+		},
+	)
+end
+
+test "union of object members where one requires a key the other forbids" do
+	type = _Union(SerializationNamed, SerializationPerson)
+	named_original = SerializationNamed.new(name: "Joel")
+	person_original = SerializationPerson.new(name: "Joel", age: 42)
+
+	named_serialized = Example.serialize(named_original, type:)
+	person_serialized = Example.serialize(person_original, type:)
+
+	assert_equal(named_serialized, { "name" => "Joel" })
+	assert_equal(person_serialized, { "name" => "Joel", "age" => 42 })
+	assert_equal(Example.deserialize(named_serialized, type:), named_original)
+	assert_equal(Example.deserialize(person_serialized, type:), person_original)
+end
+
+test "union of object members whose extra keys are all optional is not naturally discriminated" do
+	type = _Union(SerializationTitled, SerializationDraft)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "union of a structure and a map with distinct required keys serialization roundtrip" do
+	type = _Union(SerializationValueObject, _Map(name: String))
+	value_original = SerializationValueObject.new(value: "Joel")
+	map_original = { name: "Joel" }
+
+	value_serialized = Example.serialize(value_original, type:)
+	map_serialized = Example.serialize(map_original, type:)
+
+	assert_equal(Example.deserialize(value_serialized, type:), value_original)
+	assert_equal(Example.deserialize(map_serialized, type:), map_original)
+end
+
+test "union of a hash member and another object member is not naturally discriminated" do
+	type = _Union(_Hash(String, String), SerializationValueObject)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "const discriminated structure union serialization roundtrip" do
+	type = _Union(SerializationUserEvent, SerializationAdminEvent)
+	user_original = SerializationUserEvent.new(kind: "user", name: "Joel")
+	admin_original = SerializationAdminEvent.new(kind: "admin", name: "Jill")
+
+	user_serialized = Example.serialize(user_original, type:)
+	admin_serialized = Example.serialize(admin_original, type:)
+
+	assert_equal(user_serialized, { "kind" => "user", "name" => "Joel" })
+	assert_equal(admin_serialized, { "kind" => "admin", "name" => "Jill" })
+	assert_equal(Example.deserialize(user_serialized, type:), user_original)
+	assert_equal(Example.deserialize(admin_serialized, type:), admin_original)
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.deserialize({ "kind" => "other", "name" => "Joel" }, type:)
+	end
+	assert error.message.include?("No union member type for JSON object")
+end
+
+test "const discriminated map union serialization roundtrip" do
+	type = _Union(
+		_Map(kind: "circle", size: Integer),
+		_Map(kind: "square", size: Integer),
+	)
+
+	circle_serialized = Example.serialize({ kind: "circle", size: 3 }, type:)
+	square_serialized = Example.serialize({ kind: "square", size: 4 }, type:)
+
+	assert_equal(circle_serialized, { "kind" => "circle", "size" => 3 })
+	assert_equal(square_serialized, { "kind" => "square", "size" => 4 })
+	assert_equal(Example.deserialize(circle_serialized, type:), { kind: "circle", size: 3 })
+	assert_equal(Example.deserialize(square_serialized, type:), { kind: "square", size: 4 })
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"oneOf" => [
+				{
+					"type" => "object",
+					"properties" => {
+						"kind" => { "type" => "string", "const" => "circle" },
+						"size" => { "type" => "integer" },
+					},
+					"required" => ["kind", "size"],
+					"additionalProperties" => false,
+				},
+				{
+					"type" => "object",
+					"properties" => {
+						"kind" => { "type" => "string", "const" => "square" },
+						"size" => { "type" => "integer" },
+					},
+					"required" => ["kind", "size"],
+					"additionalProperties" => false,
+				},
+			],
+		},
+	)
+end
+
+test "symbol const discriminants roundtrip through their serialized form" do
+	type = _Union(
+		_Map(kind: :circle, size: Integer),
+		_Map(kind: :square, size: Integer),
+	)
+
+	circle_serialized = Example.serialize({ kind: :circle, size: 3 }, type:)
+
+	assert_equal(circle_serialized, { "kind" => "circle", "size" => 3 })
+	assert_equal(Example.deserialize(circle_serialized, type:), { kind: :circle, size: 3 })
+end
+
+test "const discriminants that serialize identically do not discriminate" do
+	type = _Union(
+		_Map(kind: :user, name: String),
+		_Map(kind: "user", name: String),
+	)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+end
+
+test "unions of consts as discriminant domains" do
+	type = _Union(
+		_Map(kind: _Union("circle", "ellipse"), size: Integer),
+		_Map(kind: "square", size: Integer),
+	)
+
+	ellipse_serialized = Example.serialize({ kind: "ellipse", size: 3 }, type:)
+
+	assert_equal(ellipse_serialized, { "kind" => "ellipse", "size" => 3 })
+	assert_equal(Example.deserialize(ellipse_serialized, type:), { kind: "ellipse", size: 3 })
+
+	overlapping = _Union(
+		_Map(kind: _Union("circle", "ellipse"), size: Integer),
+		_Map(kind: _Union("ellipse", "square"), size: Integer),
+	)
+
+	assert_raises(Literal::ArgumentError) { Example.json_schema(overlapping) }
+end
+
+test "integer const discriminants" do
+	type = _Union(
+		_Map(version: 1, payload: String),
+		_Map(version: 2, payload: String),
+	)
+
+	v1_serialized = Example.serialize({ version: 1, payload: "a" }, type:)
+	v2_serialized = Example.serialize({ version: 2, payload: "b" }, type:)
+
+	assert_equal(Example.deserialize(v1_serialized, type:), { version: 1, payload: "a" })
+	assert_equal(Example.deserialize(v2_serialized, type:), { version: 2, payload: "b" })
+end
+
+test "optional const keys do not discriminate object members" do
+	type = _Union(
+		_Map(kind: _Nilable("circle"), size: Integer),
+		_Map(kind: _Nilable("square"), size: Integer),
+	)
 
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
