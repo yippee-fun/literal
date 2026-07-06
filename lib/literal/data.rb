@@ -4,9 +4,13 @@ class Literal::Data < Literal::DataStructure
 	class << self
 		def [](...) = new(...)
 
-		def define(**properties)
+		def define(**properties, &body)
 			Class.new(self) do
 				properties.each { |name, type| prop(name, type) }
+
+				if block_given?
+					class_exec(&body)
+				end
 			end
 		end
 

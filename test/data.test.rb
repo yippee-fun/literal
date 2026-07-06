@@ -90,6 +90,19 @@ test "define" do
 	assert_equal(person_with_define.to_h, person.to_h)
 end
 
+test "define block" do
+	Rect = Literal::Data.define(w: Integer, h: Integer) do
+		prop :filled, _Boolean, default: false, predicate: :public
+
+		def area = @w * @h
+	end
+
+	rect = Rect[w: 5, h: 4, filled: true]
+
+	assert_equal(rect.area, 20)
+	assert rect.filled?
+end
+
 test "initialize with [] method" do
 	person_a = Person.new(name: "John")
 	person_b = Person[name: "John"]
