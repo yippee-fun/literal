@@ -49,6 +49,23 @@ class SerializationBooleanConst < Literal::Data
 	prop :foo, true
 end
 
+class SerializationPoint < Literal::Data
+	prop :x, Integer, :positional
+	prop :y, Integer, :positional
+	prop :label, String
+end
+
+class SerializationLeveled < Literal::Data
+	prop :name, String
+	prop :level, Integer, default: 3
+end
+
+class SerializationCoerced < Literal::Data
+	prop :date, Date do |value|
+		Date.parse(value)
+	end
+end
+
 class SerializationDraft < Literal::Data
 	prop :title, String
 	prop? :subtitle, String
@@ -1642,6 +1659,34 @@ test "date and structure union serialization roundtrip" do
 			],
 		},
 	)
+end
+
+test "structures with positional properties roundtrip" do
+	original = SerializationPoint.new(1, 2, label: "home")
+	serialized = Example.serialize(original, type: SerializationPoint)
+
+	assert_equal(serialized, { "x" => 1, "y" => 2, "label" => "home" })
+	assert_equal(Example.deserialize(serialized, type: SerializationPoint), original)
+end
+
+test "omitted defaulted properties get their defaults when deserializing" do
+	refute Example.json_schema(SerializationLeveled).fetch("required").include?("level")
+
+	deserialized = Example.deserialize({ "name" => "Joel" }, type: SerializationLeveled)
+
+	assert_equal(deserialized, SerializationLeveled.new(name: "Joel"))
+	assert_equal(deserialized.level, 3)
+end
+
+test "coerced properties deserialize without re-running the coercion" do
+	original = SerializationCoerced.new(date: "2025-01-13")
+
+	assert_equal(original.date, Date.new(2025, 1, 13))
+
+	serialized = Example.serialize(original, type: SerializationCoerced)
+
+	assert_equal(serialized, { "date" => "2025-01-13" })
+	assert_equal(Example.deserialize(serialized, type: SerializationCoerced), original)
 end
 
 test "union of object members with identical shapes is not naturally discriminated" do

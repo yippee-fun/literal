@@ -11,6 +11,105 @@ class ReaderlessExample < Literal::Data
 	prop :name, String, reader: false
 end
 
+class FromPropsExample < Literal::Data
+	prop :x, Integer, :positional
+	prop :y, Integer, :positional, default: 0
+	prop :label, String
+	prop :note, _Nilable(String)
+end
+
+class FromPropsSplats < Literal::Data
+	prop :head, String, :positional
+	prop :rest, _Array(String), :*
+	prop :name, String
+	prop :extras, _Hash(Symbol, String), :**
+end
+
+test "from_props builds instances regardless of property kind" do
+	example = FromPropsExample.from_props(x: 1, y: 2, label: "home", note: "hi")
+
+	assert_equal(example, FromPropsExample.new(1, 2, label: "home", note: "hi"))
+end
+
+test "from_props is the inverse of to_h" do
+	example = FromPropsExample.new(1, 2, label: "home", note: nil)
+
+	assert_equal(FromPropsExample.from_props(example.to_h), example)
+
+	splats = FromPropsSplats.new("a", "b", "c", name: "x", other: "y")
+
+	assert_equal(FromPropsSplats.from_props(splats.to_h), splats)
+end
+
+test "from_props applies defaults for omitted properties" do
+	example = FromPropsExample.from_props(x: 1, label: "home")
+
+	assert_equal(example.y, 0)
+	assert_equal(example.note, nil)
+end
+
+test "from_props resolves omitted nilable, splat and double splat properties" do
+	gap = Class.new(Literal::Data) do
+		prop :a, _Nilable(String), :positional
+		prop :b, String, :positional
+	end
+
+	instance = gap.from_props(b: "second")
+
+	assert_equal(instance.a, nil)
+	assert_equal(instance.b, "second")
+
+	splats = FromPropsSplats.from_props(head: "a", name: "x")
+
+	assert_equal(splats.rest, [])
+	assert_equal(splats.extras, {})
+end
+
+test "from_props assigns block properties" do
+	klass = Class.new(Literal::Data) do
+		prop :name, String
+		prop :callback, Proc, :&
+	end
+
+	callback = proc { 1 }
+	instance = klass.from_props(name: "x", callback:)
+
+	assert_equal(instance.callback, callback)
+end
+
+test "from_props raises NameError for unknown properties" do
+	error = assert_raises(NameError) { FromPropsExample.from_props(x: 1, label: "home", wrong: true) }
+
+	assert error.message.include?("unknown attribute: :wrong")
+end
+
+test "from_props type checks every value" do
+	assert_raises(Literal::TypeError) { FromPropsExample.from_props(x: "one", label: "home") }
+end
+
+test "from_props raises for missing required properties" do
+	error = assert_raises(Literal::ArgumentError) { FromPropsExample.from_props(label: "home") }
+
+	assert error.message.include?("Missing property :x")
+end
+
+test "from_props takes property values without applying coercion" do
+	klass = Class.new(Literal::Data) do
+		prop :name, String do |value|
+			"#{value}!"
+		end
+	end
+
+	instance = klass.new(name: "Joel")
+
+	assert_equal(instance.name, "Joel!")
+	assert_equal(klass.from_props(instance.to_h).name, "Joel!")
+end
+
+test "from_props data objects are frozen" do
+	assert_equal(FromPropsExample.from_props(x: 1, label: "home").frozen?, true)
+end
+
 test "== comparison with readerless properties" do
 	a = ReaderlessExample.new(name: "John")
 	b = ReaderlessExample.new(name: "John")

@@ -4,6 +4,10 @@ class Literal::Data < Literal::DataStructure
 	class << self
 		def [](...) = new(...)
 
+		def from_props(props)
+			super.freeze
+		end
+
 		def define(**properties)
 			Class.new(self) do
 				properties.each { |name, type| prop(name, type) }

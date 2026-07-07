@@ -100,9 +100,9 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		type.new(
-			**type.literal_properties.filter_map do |property|
-				next if undefined_optional?(property.type) && !raw.key?(property.name.name)
+		type.from_props(
+			type.literal_properties.filter_map do |property|
+				next unless raw.key?(property.name.name)
 
 				[
 					property.name,
