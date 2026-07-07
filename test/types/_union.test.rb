@@ -22,6 +22,13 @@ test "#deconstruct" do
 	assert_equal union.deconstruct, [:a, :b, :c, 1, 2, 3, String, Integer]
 end
 
+test "#==" do
+	assert_equal _Union(:a, String), _Union(:a, String)
+
+	refute_equal _Union(:a, String), _Union(:a, Integer)
+	refute_equal _Union(:a, String), String
+end
+
 test "#[]" do
 	union = _Union(:a, :b, :c, 1, 2, 3, String, Integer)
 

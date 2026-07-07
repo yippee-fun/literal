@@ -89,6 +89,15 @@ class Literal::Types::UnionType
 		to_a
 	end
 
+	def ==(other)
+		case other
+		when Literal::Types::UnionType
+			@types == other.types && @primitives == other.primitives
+		else
+			false
+		end
+	end
+
 	def [](key)
 		if @primitives.include?(key) || @types.include?(key)
 			key
