@@ -3,7 +3,7 @@
 module Literal::Types
 	extend self
 
-	# Matches any value except `nil`. Use `_Any?` or `_Void` to match any value including `nil`.
+	# Matches any value except `nil`. Use `_Any?` to also match `nil`.
 	# ```ruby
 	# _Any
 	# ```
@@ -11,12 +11,14 @@ module Literal::Types
 		AnyType::Instance
 	end
 
-	# Matches any value including `nil`. This is the same as `_Void` and the opposite of `_Never`.
+	# Matches any value including `nil` — the nilable counterpart of `_Any`,
+	# and the opposite of `_Never`. Unlike `_Void`, which signals that the
+	# value must not be depended on, `_Any?` positively accepts any value.
 	# ```ruby
 	# _Any?
 	# ```
 	def _Any?
-		VoidType::Instance
+		NilableAnyType
 	end
 
 	# Matches if the value is an `Array` and all the elements of the array match the given type.
@@ -472,9 +474,23 @@ module Literal::Types
 		)
 	end
 
-	# Matches if *any* given type is matched.
+	# Matches if *any* given type is matched. Unions simplify at construction:
+	# `_Never` members hold no values and are dropped, a union of only
+	# `_Never` members is `_Never`, a union containing `_Any?` can hold
+	# anything and is just `_Any?`, and a union left with a single member is
+	# that member. `_Void` is deliberately not absorbed: it signals that the
+	# value must not be depended on, which is not a claim a union can make on
+	# its behalf.
 	def _Union(*types)
-		UnionType.new(types)
+		union = UnionType.new(types)
+		members = union.to_a
+		inhabited = members.reject { |member| NeverType === member }
+
+		return NeverType::Instance if inhabited.empty?
+		return NilableAnyType if inhabited.any? { |member| NilableType === member && AnyType === member.type }
+		return inhabited.first if inhabited.length == 1
+
+		(inhabited.length == members.length) ? union : UnionType.new(inhabited)
 	end
 
 	# Nilable version of `_Union`
@@ -496,6 +512,8 @@ module Literal::Types
 		)
 	end
 
+	# Matches any value, but signals that the value must not be depended on —
+	# unlike `_Any?`, which positively accepts any value.
 	def _Void
 		VoidType::Instance
 	end
@@ -504,6 +522,7 @@ module Literal::Types
 	CallableType = _Interface(:call)
 	LambdaType = _Constraint(Proc, lambda?: true)
 
+	NilableAnyType = _Nilable(AnyType::Instance)
 	NilableBooleanType = _Nilable(BooleanType::Instance)
 	NilableCallableType = _Nilable(CallableType)
 	NilableJSONDataType = _Nilable(JSONDataType)

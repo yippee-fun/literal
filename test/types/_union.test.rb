@@ -55,7 +55,39 @@ end
 test "#reject" do
 	assert_equal _Union(String, Literal::Undefined).reject { |type| type == Literal::Undefined }, String
 	assert_equal _Union(String, Integer, Literal::Undefined).reject { |type| type == Literal::Undefined }.inspect, "_Union(String, Integer)"
-	assert_equal _Union(Literal::Undefined).reject { |type| type == Literal::Undefined }, _Never
+	assert_equal _Union(String, Literal::Undefined).reject { |_type| true }, _Never
+end
+
+test "never members are removed" do
+	assert_equal _Union(String, Integer, _Never).to_a, [String, Integer]
+	assert_equal _Union(String, Integer, _Never).inspect, "_Union(String, Integer)"
+	assert_equal _Union(String, _Union(Integer, _Never)).to_a, [String, Integer]
+
+	assert_subtype _Never, _Union(String, Integer, _Never)
+	refute _Union(String, Integer, _Never) === nil
+end
+
+test "a union of only never members is never" do
+	assert_equal _Union(_Never), _Never
+	assert_equal _Union(_Never, _Never), _Never
+	assert_equal _Union(_Never, _Union(_Never)), _Never
+end
+
+test "a union containing any-nilable is any-nilable" do
+	assert_equal _Union(String, _Any?), _Any?
+	assert_equal _Union(String, _Nilable(_Any)), _Any?
+	assert_equal _Union(_Any?, _Never), _Any?
+end
+
+test "a union does not absorb void" do
+	assert_equal _Union(String, _Void).to_a, [String, _Void]
+end
+
+test "a union with a single member is that member" do
+	assert_equal _Union(String), String
+	assert_equal _Union(String, String), String
+	assert_equal _Union(String, _Never), String
+	assert_equal _Union(:a, _Union(:a)), :a
 end
 
 test "hierarchy" do
