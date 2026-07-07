@@ -63,6 +63,32 @@ class Literal::Serializer
 		generator.schema(type, reference:)
 	end
 
+	# The serializer that would handle the type if this one were not
+	# registered: the next matching serializer in the context's chain. This
+	# lets a custom serializer transform a value and delegate the remaining
+	# work, like calling super. Any protocol method can be forwarded to it —
+	# child_types, referenceable? and object_shape included, which delegating
+	# serializers should usually forward so the serializability walk and union
+	# discrimination see through them.
+	def super_serializer(type)
+		@context.serializer_for_type(type, after: self)
+	end
+
+	def super_serialize(value, type:)
+		super_serializer(type).serialize(value, type:)
+	end
+
+	# Applies the next serializer's raw value coercion before deserializing,
+	# just as the context would if that serializer had handled the type.
+	def super_deserialize(raw, type:)
+		serializer = super_serializer(type)
+		serializer.deserialize(serializer.coerce(raw), type:)
+	end
+
+	def super_json_schema(type, generator: nil)
+		super_serializer(type).json_schema(type, generator:)
+	end
+
 	def value_type(value)
 		type if type === value
 	end

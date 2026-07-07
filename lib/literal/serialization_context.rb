@@ -98,9 +98,20 @@ class Literal::SerializationContext
 		deserialized
 	end
 
-	def serializer_for_type(type)
-		if (serializer = serializer_matching_type(type))
-			serializer
+	# The serializer handling the given type. With after, the search resumes
+	# from the serializer following it in the chain, giving a custom serializer
+	# super-like access to the serializer it shadowed.
+	def serializer_for_type(type, after: nil)
+		serializer = if after
+			serializer_matching_type_after(type, after)
+		else
+			serializer_matching_type(type)
+		end
+
+		return serializer if serializer
+
+		if after
+			raise Literal::ArgumentError, "No serializer for type #{type.inspect} after #{after.class}"
 		else
 			raise Literal::ArgumentError, "No serializer for type #{type.inspect}"
 		end
@@ -248,6 +259,27 @@ class Literal::SerializationContext
 			if (reason = serializer.rejection_reason(type))
 				return reason
 			end
+		end
+
+		nil
+	end
+
+	# Uncached, unlike serializer_matching_type: super calls are rare and the
+	# chain is short, so a second cache dimension isn't worth carrying.
+	private def serializer_matching_type_after(type, after)
+		serializers = @serializers
+		index = serializers.index(after)
+
+		unless index
+			raise Literal::ArgumentError, "#{after.class} is not one of this context's serializers"
+		end
+
+		i, length = index + 1, serializers.length
+
+		while i < length
+			serializer = serializers[i]
+			return serializer if serializer.handles_type?(type)
+			i += 1
 		end
 
 		nil

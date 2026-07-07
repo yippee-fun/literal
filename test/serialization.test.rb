@@ -111,6 +111,56 @@ class SerializationEnvelope < Literal::Data
 	prop :payload, _TaggedUnion(hash: _Hash(Symbol, Integer), array: _Array(String))
 end
 
+class SerializationSecret < Literal::Data
+	prop :name, String
+	prop :secret, String
+end
+
+class SerializationRedactingSerializer < Literal::Serializer
+	def type
+		SerializationSecret
+	end
+
+	def child_types(type)
+		super_serializer(type).child_types(type)
+	end
+
+	def object_shape(type)
+		super_serializer(type).object_shape(type)
+	end
+
+	def json_schema(type, generator: nil)
+		super_json_schema(type, generator:)
+	end
+
+	def serialize(value, type:)
+		super_serialize(value, type:).merge("secret" => "[redacted]")
+	end
+
+	def deserialize(raw, type:)
+		super_deserialize(raw, type:)
+	end
+end
+
+class SerializationUpcasingSerializer < SerializationRedactingSerializer
+	def serialize(value, type:)
+		serialized = super_serialize(value, type:)
+		serialized.merge("name" => serialized.fetch("name").upcase)
+	end
+end
+
+SerializationOpaque = Class.new
+
+class SerializationOpaqueSerializer < Literal::Serializer
+	def type
+		SerializationOpaque
+	end
+
+	def serialize(value, type:)
+		super_serialize(value, type:)
+	end
+end
+
 Example = Literal::SerializationContext.new
 
 test "serialization context includes default serializers" do
@@ -1676,6 +1726,54 @@ test "omitted defaulted properties get their defaults when deserializing" do
 
 	assert_equal(deserialized, SerializationLeveled.new(name: "Joel"))
 	assert_equal(deserialized.level, 3)
+end
+
+test "custom serializers can super to the serializer they shadow" do
+	context = Literal::SerializationContext.new(SerializationRedactingSerializer)
+	original = SerializationSecret.new(name: "Joel", secret: "hunter2")
+
+	assert context.kind === SerializationSecret
+
+	serialized = context.serialize(original, type: SerializationSecret)
+
+	assert_equal(serialized, { "name" => "Joel", "secret" => "[redacted]" })
+
+	deserialized = context.deserialize(serialized, type: SerializationSecret)
+
+	assert_equal(deserialized, SerializationSecret.new(name: "Joel", secret: "[redacted]"))
+
+	assert_equal(
+		context.json_schema(SerializationSecret),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"secret" => { "type" => "string" },
+			},
+			"required" => ["name", "secret"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "custom serializers super through each other in registration order" do
+	context = Literal::SerializationContext.new(SerializationUpcasingSerializer, SerializationRedactingSerializer)
+	original = SerializationSecret.new(name: "Joel", secret: "hunter2")
+
+	serialized = context.serialize(original, type: SerializationSecret)
+
+	assert_equal(serialized, { "name" => "JOEL", "secret" => "[redacted]" })
+end
+
+test "supering with no matching serializer later in the chain raises" do
+	context = Literal::SerializationContext.new(SerializationOpaqueSerializer)
+
+	error = assert_raises(Literal::ArgumentError) do
+		context.serialize(SerializationOpaque.new, type: SerializationOpaque)
+	end
+
+	assert error.message.include?("No serializer for type")
+	assert error.message.match?(/SerializationOpaque after .*SerializationOpaqueSerializer/)
 end
 
 test "coerced properties deserialize without re-running the coercion" do
