@@ -1728,6 +1728,50 @@ test "omitted defaulted properties get their defaults when deserializing" do
 	assert_equal(deserialized.level, 3)
 end
 
+test "never serializes to a schema that matches nothing" do
+	assert Example.kind === _Never
+	assert_equal(Example.json_schema(_Never), { "not" => {} })
+end
+
+test "never cannot serialize or deserialize values" do
+	assert_raises(Literal::ArgumentError) { Example.serialize("Joel", type: _Never) }
+	assert_raises(Literal::ArgumentError) { Example.deserialize("Joel", type: _Never) }
+end
+
+test "never union members are ignored" do
+	type = _Union(String, SerializationValueObject, _Never)
+	value_original = SerializationValueObject.new(value: "Joel")
+
+	assert Example.kind === type
+	assert_equal(Example.deserialize(Example.serialize("Joel", type:), type:), "Joel")
+	assert_equal(Example.deserialize(Example.serialize(value_original, type:), type:), value_original)
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"oneOf" => [
+				{ "type" => "string" },
+				{
+					"type" => "object",
+					"properties" => {
+						"value" => { "type" => "string" },
+					},
+					"required" => ["value"],
+					"additionalProperties" => false,
+				},
+			],
+		},
+	)
+end
+
+test "arrays of never hold nothing but serialize" do
+	type = _Array(_Never)
+
+	assert_equal(Example.json_schema(type), { "type" => "array", "items" => { "not" => {} } })
+	assert_equal(Example.serialize([], type:), [])
+	assert_equal(Example.deserialize([], type:), [])
+end
+
 test "custom serializers can super to the serializer they shadow" do
 	context = Literal::SerializationContext.new(SerializationRedactingSerializer)
 	original = SerializationSecret.new(name: "Joel", secret: "hunter2")

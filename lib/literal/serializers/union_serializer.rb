@@ -2,7 +2,7 @@
 
 class Literal::Serializer::UnionType
 	include Literal::Serializer::Kind
-	include Literal::Serializer::UnionNumerics
+	include Literal::Serializer::UnionClassification
 
 	def initialize(context)
 		@context = context
@@ -55,7 +55,7 @@ class Literal::Serializer::UnionType
 	end
 
 	private def diagnose(type)
-		members_by_json_type = type.each.group_by { |member| @context.json_type(member) }
+		members_by_json_type = inhabited_members(type).group_by { |member| @context.json_type(member) }
 
 		if (untyped = members_by_json_type[nil])
 			return untyped_member_ambiguity(untyped.first)
@@ -123,7 +123,7 @@ class Literal::Serializer::UnionType
 end
 
 class Literal::UnionSerializer < Literal::Serializer
-	include Literal::Serializer::UnionNumerics
+	include Literal::Serializer::UnionClassification
 
 	def initialize(context)
 		@context = context
@@ -158,8 +158,11 @@ class Literal::UnionSerializer < Literal::Serializer
 		return constrained_union_json_schema(type, generator:) if Literal::Types::ConstraintType === type
 		return { "type" => "number" } if number_union?(type)
 
+		members = json_schema_members(type, generator:)
+		return { "not" => {} } if members.empty?
+
 		{
-			"oneOf" => json_schema_members(type, generator:),
+			"oneOf" => members,
 		}
 	end
 
@@ -194,11 +197,13 @@ class Literal::UnionSerializer < Literal::Serializer
 	end
 
 	private def json_schema_members(type, generator:)
-		if integer_and_finite_float?(type)
-			type.each.reject { |member| member == Integer || finite_float_type?(member) }
+		members = inhabited_members(type)
+
+		if integer_and_finite_float_members?(members)
+			members.reject { |member| member == Integer || finite_float_type?(member) }
 				.map { |member| json_schema_for(member, generator:) } << { "type" => "number" }
 		else
-			type.each.map { |member| json_schema_for(member, generator:) }
+			members.map { |member| json_schema_for(member, generator:) }
 		end
 	end
 

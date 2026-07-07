@@ -4,6 +4,7 @@ class Literal::SerializationContext
 	include Literal::Types
 
 	DefaultSerializers = [
+		Literal::NeverSerializer,
 		Literal::StringSerializer,
 		Literal::SymbolSerializer,
 		Literal::IntegerSerializer,
