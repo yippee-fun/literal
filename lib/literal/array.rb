@@ -1,20 +1,46 @@
 # frozen_string_literal: true
 
+# A typed array. Unlike a Ruby `Array`, a `Literal::Array` knows the type of its
+# elements and enforces it on every mutation, so the validity established at
+# construction holds for the lifetime of the object.
+#
+# `Literal::Array` and Ruby `Array` are deliberately distinct — neither is a
+# subtype of the other. Plain arrays are welcome at the boundary, but they are
+# always type-checked on the way in: through `new` and `coerce`, or as arguments
+# to the binary operations. They leave through `to_a` and `to_ary` (which also
+# enables splatting and destructuring), always as detached copies.
+#
+# The element type is fixed at construction and never changes in place — it can
+# neither be widened nor narrowed. `narrow` and `widen` return new instances.
 class Literal::Array
 	class Generic
 		include Literal::Type
 
 		def initialize(type)
 			@type = type
+			freeze
 		end
 
 		attr_reader :type
 
-		def new(*value)
-			Literal::Array.new(value, type: @type)
+		def new(*values)
+			Literal::Array.new(values, type: @type)
 		end
 
 		alias_method :[], :new
+
+		def coerce(value)
+			case value
+			when self
+				value
+			when ::Array
+				Literal::Array.new(value, type: @type)
+			end
+		end
+
+		def ==(other)
+			Generic === other && @type == other.type
+		end
 
 		def ===(value)
 			Literal::Array === value && Literal.subtype?(value.__type__, @type)
@@ -22,24 +48,21 @@ class Literal::Array
 
 		def >=(other, context: nil)
 			case other
-			when Literal::Array::Generic
+			when Generic
 				Literal.subtype?(other.type, @type, context:)
 			else
 				false
 			end
 		end
 
-		def inspect
-			"Literal::Array(#{@type.inspect})"
+		def literal_child_types
+			return enum_for(__method__) unless block_given?
+
+			yield @type
 		end
 
-		def coerce(value)
-			case value
-			when self
-				value
-			when Array
-				Literal::Array.new(value, type: @type)
-			end
+		def inspect
+			"Literal::Array(#{@type.inspect})"
 		end
 
 		def to_proc
@@ -48,84 +71,46 @@ class Literal::Array
 	end
 
 	include Enumerable
-	include Literal::Types
 
 	def initialize(value, type:)
-		Literal.check(value, _Array(type)) do |c|
+		collection_type = Literal::Types._Array(type)
+
+		Literal.check(value, collection_type) do |c|
 			c.fill_receiver(receiver: self, method: "#initialize")
 		end
 
 		@__type__ = type
-		@__value__ = value
+		@__value__ = value.dup
+		@__collection_type__ = collection_type
 	end
 
-	def __initialize_without_check__(value, type:)
+	def __initialize_without_check__(value, type:, collection_type: nil)
 		@__type__ = type
 		@__value__ = value
+		@__collection_type__ = collection_type || Literal::Types._Array(type)
 		self
-	end
-
-	# Used to create a new Literal::Array with the same type and collection type but a new value. The value is not checked.
-	def __with__(value)
-		Literal::Array.allocate.__initialize_without_check__(
-			value,
-			type: @__type__,
-		)
 	end
 
 	attr_reader :__type__, :__value__
 
 	def &(other)
-		case other
-		when ::Array
-			__with__(@__value__ & other)
-		when Literal::Array
-			__with__(@__value__ & other.__value__)
-		else
-			raise ArgumentError.new("Cannot perform bitwise AND with #{other.class.name}.")
-		end
+		__with__(@__value__ & __other_value__(other, "#&"))
 	end
 
 	def *(times)
-		case times
-		when String
-			@__value__ * times
-		else
-			__with__(@__value__ * times)
+		unless Integer === times
+			raise ArgumentError.new("Cannot multiply a Literal::Array by #{times.inspect}. To join the elements into a String, use #join.")
 		end
+
+		__with__(@__value__ * times)
 	end
 
 	def +(other)
-		case other
-		when ::Array
-			Literal.check(other, _Array(@__type__)) do |c|
-				c.fill_receiver(receiver: self, method: "#+")
-			end
-
-			__with__(@__value__ + other)
-		when Literal::Array(@__type__)
-			__with__(@__value__ + other.__value__)
-		when Literal::Array
-			raise Literal::TypeError.new(
-				context: Literal::TypeError::Context.new(
-					expected: Literal::Array(@__type__),
-					actual: other
-				)
-			)
-		else
-			raise ArgumentError.new("Cannot perform `+` with #{other.class.name}.")
-		end
+		__with__(@__value__ + __compatible_value__(other, "#+"))
 	end
 
 	def -(other)
-		case other
-		when ::Array
-			__with__(@__value__ - other)
-		when Literal::Array
-			__with__(@__value__ - other.__value__)
-		else
-			raise ArgumentError.new("Cannot perform `-` with #{other.class.name}.")
-		end
+		__with__(@__value__ - __other_value__(other, "#-"))
 	end
 
 	def <<(value)
@@ -139,12 +124,12 @@ class Literal::Array
 
 	def <=>(other)
 		case other
-		when ::Array
-			@__value__ <=> other
 		when Literal::Array
 			@__value__ <=> other.__value__
+		when ::Array
+			@__value__ <=> other
 		else
-			raise ArgumentError.new("Cannot perform `<=>` with #{other.class.name}.")
+			nil
 		end
 	end
 
@@ -152,8 +137,19 @@ class Literal::Array
 		Literal::Array === other && @__value__ == other.__value__
 	end
 
-	def [](index)
-		@__value__[index]
+	def [](index, length = nil)
+		if length
+			slice = @__value__[index, length]
+			slice && __with__(slice)
+		else
+			case index
+			when Range
+				slice = @__value__[index]
+				slice && __with__(slice)
+			else
+				@__value__[index]
+			end
+		end
 	end
 
 	def []=(index, value)
@@ -161,47 +157,44 @@ class Literal::Array
 			c.fill_receiver(receiver: self, method: "#[]=")
 		end
 
+		__check_padding__(index)
+
 		@__value__[index] = value
 	end
 
-	def all?(...)
-		@__value__.all?(...)
-	end
-
-	def any?(...)
-		@__value__.any?(...)
-	end
-
-	def assoc(...)
-		@__value__.assoc(...)
-	end
-
-	def at(...)
-		@__value__.at(...)
-	end
-
-	def bsearch(...)
-		@__value__.bsearch(...)
-	end
-
-	def clear(...)
-		@__value__.clear(...)
-		self
-	end
-
-	def combination(...)
-		@__value__.combination(...)
+	def clear
+		@__value__.clear
 		self
 	end
 
 	def compact
-		# @TODO if this is an array of nils, we should return an emtpy array
-		__with__(@__value__)
+		case (type = @__type__)
+		when Literal::Types::NilableType
+			Literal::Array.allocate.__initialize_without_check__(
+				@__value__.compact,
+				type: type.type,
+			)
+		when Literal::Types::UnionType
+			narrowed = type.reject { |member| nil == member || NilClass == member }
+
+			Literal::Array.allocate.__initialize_without_check__(
+				@__value__.compact,
+				type: narrowed,
+			)
+		else
+			__with__(@__value__.compact)
+		end
 	end
 
 	def compact!
-		# @TODO if this is an array of nils, we should set @__value__ = [] and return self
-		nil
+		@__value__.compact!
+		self
+	end
+
+	def concat(*others)
+		values = others.map { |other| __compatible_value__(other, "#concat") }
+		@__value__.concat(*values)
+		self
 	end
 
 	def count(...)
@@ -216,56 +209,68 @@ class Literal::Array
 		@__value__.delete_at(...)
 	end
 
-	def delete_if(...)
-		@__value__.delete_if(...)
-		self
-	end
-
 	def dig(...)
 		@__value__.dig(...)
 	end
 
-	def drop(...)
-		__with__(@__value__.drop(...))
+	def drop(n)
+		__with__(@__value__.drop(n))
 	end
 
-	def drop_while(...)
-		__with__(@__value__.drop_while(...))
+	def drop_while(&block)
+		raise ArgumentError.new("#drop_while requires a block.") unless block
+
+		__with__(@__value__.drop_while(&block))
 	end
 
-	def each(...)
-		@__value__.each(...)
-	end
+	def each(&block)
+		return @__value__.each unless block
 
-	def each_index(...)
-		@__value__.each_index(...)
+		@__value__.each(&block)
+		self
 	end
 
 	def empty?
 		@__value__.empty?
 	end
 
-	alias_method :eql?, :==
-
-	def filter(...)
-		__with__(@__value__.filter(...))
+	def eql?(other)
+		Literal::Array === other && @__type__ == other.__type__ && @__value__.eql?(other.__value__)
 	end
 
-	def filter!(...)
-		@__value__.filter!(...)
-		self
+	def fetch(...)
+		@__value__.fetch(...)
 	end
 
-	def flatten(...)
-		__with__(@__value__.flatten(...))
+	def filter_map(type, &block)
+		raise ArgumentError.new("#filter_map requires a block.") unless block
+
+		Literal::Array.new(@__value__.filter_map(&block), type:)
 	end
 
-	def first(...)
-		@__value__.first(...)
+	def first(n = nil)
+		n ? __with__(@__value__.first(n)) : @__value__.first
 	end
 
-	def flatten!(...)
-		@__value__.flatten!(...) ? self : nil
+	def flat_map(type, &block)
+		raise ArgumentError.new("#flat_map requires a block.") unless block
+
+		result = []
+
+		@__value__.each do |element|
+			mapped = block.call(element)
+
+			case mapped
+			when Literal::Array
+				result.concat(mapped.__value__)
+			when ::Array
+				result.concat(mapped)
+			else
+				result << mapped
+			end
+		end
+
+		Literal::Array.new(result, type:)
 	end
 
 	def freeze
@@ -274,21 +279,27 @@ class Literal::Array
 	end
 
 	def hash
-		[self.class, @__value__].hash
+		[Literal::Array, @__value__].hash
 	end
 
 	def include?(...)
 		@__value__.include?(...)
 	end
 
-	alias_method :index, :find_index
+	def index(...)
+		@__value__.index(...)
+	end
 
-	def insert(index, *value)
-		Literal.check(value, _Array(@__type__)) do |c|
-			c.fill_receiver(receiver: self, method: "#insert")
+	def insert(index, *values)
+		values.each do |value|
+			Literal.check(value, @__type__) do |c|
+				c.fill_receiver(receiver: self, method: "#insert")
+			end
 		end
 
-		@__value__.insert(index, *value)
+		__check_padding__(index)
+
+		@__value__.insert(index, *values)
 		self
 	end
 
@@ -296,57 +307,22 @@ class Literal::Array
 		"Literal::Array(#{@__type__.inspect})#{@__value__.inspect}"
 	end
 
-	def intersect?(other)
-		case other
-		when ::Array
-			@__value__.intersect?(other)
-		when Literal::Array
-			@__value__.intersect?(other.__value__)
-		else
-			raise ArgumentError.new("Cannot perform `intersect?` with #{other.class.name}.")
-		end
-	end
+	alias_method :to_s, :inspect
 
-	def intersection(*values)
-		values.map! do |value|
-			case value
-			when Literal::Array
-				value.__value__
-			else
-				value
-			end
-		end
-
-		__with__(@__value__.intersection(*values))
-	end
-
-	def	join(...)
+	def join(...)
 		@__value__.join(...)
 	end
 
-	def keep_if(...)
-		return_value = @__value__.keep_if(...)
-		case return_value
-		when Array
-			self
-		else
-			return_value
-		end
-	end
-
-	def last(...)
-		@__value__.last(...)
-	end
-
-	def length(...)
-		@__value__.length(...)
+	def last(n = nil)
+		n ? __with__(@__value__.last(n)) : @__value__.last
 	end
 
 	def map(type, &block)
-		my_type = @__type__
-		transform_type = Literal::Transforms.dig(my_type, block)
+		raise ArgumentError.new("#map requires a block.") unless block
 
-		if transform_type && Literal.subtype?(transform_type, my_type)
+		transform_type = Literal::Transforms.dig(@__type__, block)
+
+		if transform_type && Literal.subtype?(transform_type, type)
 			Literal::Array.allocate.__initialize_without_check__(
 				@__value__.map(&block),
 				type:,
@@ -356,235 +332,245 @@ class Literal::Array
 		end
 	end
 
-	alias_method :collect, :map
+	def map!(&block)
+		raise ArgumentError.new("#map! requires a block.") unless block
 
-	# TODO: we can make this faster
-	def map!(&)
-		new_array = map(@__type__, &)
-		@__value__ = new_array.__value__
+		transform_type = Literal::Transforms.dig(@__type__, block)
+		mapped = @__value__.map(&block)
+
+		unless transform_type && Literal.subtype?(transform_type, @__type__)
+			Literal.check(mapped, @__collection_type__) do |c|
+				c.fill_receiver(receiver: self, method: "#map!")
+			end
+		end
+
+		@__value__ = mapped
 		self
 	end
 
-	alias_method :collect!, :map!
-
-	def sum(...)
-		@__value__.sum(...)
+	def max(n = nil, &)
+		n ? __with__(@__value__.max(n, &)) : @__value__.max(&)
 	end
 
-	def max(n = nil, &)
-		if n
-			__with__(@__value__.max(n, &))
-		else
-			@__value__.max(&)
-		end
+	def max_by(n = nil, &block)
+		raise ArgumentError.new("#max_by requires a block.") unless block
+
+		n ? __with__(@__value__.max_by(n, &block)) : @__value__.max_by(&block)
 	end
 
 	def min(n = nil, &)
-		if n
-			__with__(@__value__.min(n, &))
-		else
-			@__value__.min(&)
-		end
+		n ? __with__(@__value__.min(n, &)) : @__value__.min(&)
 	end
 
-	def minmax(...)
-		__with__(@__value__.minmax(...))
+	def min_by(n = nil, &block)
+		raise ArgumentError.new("#min_by requires a block.") unless block
+
+		n ? __with__(@__value__.min_by(n, &block)) : @__value__.min_by(&block)
+	end
+
+	def minmax(&)
+		if @__value__.empty? && !(@__type__ === nil)
+			raise ArgumentError.new("Cannot take the minmax of an empty Literal::Array unless its type is nilable.")
+		end
+
+		Literal::Tuple.allocate.__initialize_without_check__(
+			@__value__.minmax(&),
+			types: [@__type__, @__type__],
+		)
+	end
+
+	def minmax_by(&block)
+		raise ArgumentError.new("#minmax_by requires a block.") unless block
+
+		if @__value__.empty? && !(@__type__ === nil)
+			raise ArgumentError.new("Cannot take the minmax of an empty Literal::Array unless its type is nilable.")
+		end
+
+		Literal::Tuple.allocate.__initialize_without_check__(
+			@__value__.minmax_by(&block),
+			types: [@__type__, @__type__],
+		)
 	end
 
 	def narrow(type)
 		unless Literal.subtype?(type, @__type__)
-			raise ArgumentError.new("Cannot narrow #{@__type__} to #{type}")
+			raise ArgumentError.new("Cannot narrow #{@__type__.inspect} to #{type.inspect} because it is not a subtype.")
 		end
 
-		if __type__ != type
-			@__value__.each do |item|
-				Literal.check(item, type) do |c|
+		unless type == @__type__
+			@__value__.each do |value|
+				Literal.check(value, type) do |c|
 					c.fill_receiver(receiver: self, method: "#narrow")
 				end
 			end
 		end
 
 		Literal::Array.allocate.__initialize_without_check__(
-			@__value__,
+			@__value__.dup,
 			type:,
 		)
 	end
 
-	def one?(...)
-		@__value__.one?(...)
+	# Returns a Literal::Tuple of two typed arrays: the elements the block
+	# selected, and the elements it rejected.
+	def partition(&block)
+		raise ArgumentError.new("#partition requires a block.") unless block
+
+		selected, rejected = @__value__.partition(&block)
+		array_type = Literal::Array(@__type__)
+
+		Literal::Tuple.allocate.__initialize_without_check__(
+			[__with__(selected), __with__(rejected)],
+			types: [array_type, array_type],
+		)
 	end
 
-	def pack(...)
-		@__value__.pack(...)
+	def pop(n = nil)
+		n ? __with__(@__value__.pop(n)) : @__value__.pop
 	end
 
-	def pop(...)
-		@__value__.pop(...)
-	end
+	# Returns a Literal::Array of Literal::Tuples with every combination of our
+	# elements and the others'. With a block, yields each tuple and returns self.
+	def product(*others, &block)
+		other_types = others.map { |other| __other_type__(other, "#product") }
+		other_values = others.map { |other| (Literal::Array === other) ? other.__value__ : other }
 
-	def product(*others, &)
-		if block_given?
-			@__value__.product(
-				*others.map do |other|
-					case other
-					when Array
-						other
-					when Literal::Array
-						other.__value__
-					end
-				end, &
-			)
+		tuple_type = Literal::Tuple(@__type__, *other_types)
+		tuple_types = tuple_type.types
+		collection_type = Literal::Types._Tuple(@__type__, *other_types)
+
+		rows = @__value__.product(*other_values)
+
+		if block
+			rows.each do |row|
+				yield Literal::Tuple.allocate.__initialize_without_check__(row, types: tuple_types, collection_type:)
+			end
 
 			self
-		elsif others.all?(Literal::Array)
-			tuple_type = Literal::Tuple(
-				@__type__,
-				*others.map(&:__type__)
-			)
-
-			values = @__value__.product(*others.map(&:__value__)).map do |tuple_values|
-				tuple_type.new(*tuple_values)
+		else
+			rows.map! do |row|
+				Literal::Tuple.allocate.__initialize_without_check__(row, types: tuple_types, collection_type:)
 			end
 
-			Literal::Array(tuple_type).new(*values)
-		else
-			@__value__.product(*others)
+			Literal::Array.allocate.__initialize_without_check__(rows, type: tuple_type)
 		end
 	end
 
-	def push(*value)
-		Literal.check(value, _Array(@__type__)) do |c|
-			c.fill_receiver(receiver: self, method: "#push")
-		end
-
-		@__value__.push(*value)
-		self
-	end
-
-	alias_method :append, :push
-
-	def reject(...)
-		__with__(@__value__.reject(...))
-	end
-
-	def reject!(...)
-		@__value__.reject!(...)
-		self
-	end
-
-	def replace(value)
-		case value
-		when Array
-			Literal.check(value, _Array(@__type__)) do |c|
-				c.fill_receiver(receiver: self, method: "#replace")
+	def push(*values)
+		values.each do |value|
+			Literal.check(value, @__type__) do |c|
+				c.fill_receiver(receiver: self, method: "#push")
 			end
-
-			@__value__.replace(value)
-		when Literal::Array(@__type__)
-			@__value__.replace(value.__value__)
-		when Literal::Array
-			raise Literal::TypeError.new(
-				context: Literal::TypeError::Context.new(expected: @__type__, actual: value.__type__)
-			)
-		else
-			raise ArgumentError.new("#replace expects Array argument")
 		end
 
+		@__value__.push(*values)
 		self
 	end
 
-	def reverse(...)
-		__with__(@__value__.reverse(...))
+	def reject(&block)
+		raise ArgumentError.new("#reject requires a block.") unless block
+
+		__with__(@__value__.reject(&block))
 	end
 
-	alias_method :initialize_copy, :replace
+	def reject!(&block)
+		raise ArgumentError.new("#reject! requires a block.") unless block
+
+		@__value__.reject!(&block)
+		self
+	end
+
+	def replace(other)
+		@__value__.replace(__compatible_value__(other, "#replace"))
+		self
+	end
+
+	def reverse
+		__with__(@__value__.reverse)
+	end
 
 	def reverse!
 		@__value__.reverse!
 		self
 	end
 
-	def rotate(...)
-		__with__(@__value__.rotate(...))
+	def rotate(count = 1)
+		__with__(@__value__.rotate(count))
 	end
 
-	def rotate!(...)
-		@__value__.rotate!(...)
+	def rotate!(count = 1)
+		@__value__.rotate!(count)
 		self
 	end
 
-	def sample(...)
-		@__value__.sample(...)
+	def sample(n = nil, random: Random)
+		n ? __with__(@__value__.sample(n, random:)) : @__value__.sample(random:)
 	end
 
-	def select(...)
-		__with__(@__value__.select(...))
+	def select(&block)
+		raise ArgumentError.new("#select requires a block.") unless block
+
+		__with__(@__value__.select(&block))
 	end
 
-	def select!(...)
-		@__value__.select!(...)
+	def select!(&block)
+		raise ArgumentError.new("#select! requires a block.") unless block
+
+		@__value__.select!(&block)
 		self
 	end
 
-	def shift(...)
-		@__value__.shift(...)
+	def shift(n = nil)
+		n ? __with__(@__value__.shift(n)) : @__value__.shift
 	end
 
-	def shuffle(...)
-		__with__(@__value__.shuffle(...))
+	def shuffle(random: Random)
+		__with__(@__value__.shuffle(random:))
 	end
 
-	def shuffle!(...)
-		@__value__.shuffle!(...)
+	def shuffle!(random: Random)
+		@__value__.shuffle!(random:)
 		self
 	end
 
-	def size(...)
-		@__value__.size(...)
+	def size
+		@__value__.size
 	end
 
-	def sort(...)
-		__with__(@__value__.sort(...))
+	def sort(&)
+		__with__(@__value__.sort(&))
 	end
 
-	def sort!(...)
-		@__value__.sort!(...)
+	def sort!(&)
+		@__value__.sort!(&)
 		self
 	end
 
-	def sort_by!(...)
-		@__value__.sort_by!(...)
+	def sort_by(&block)
+		raise ArgumentError.new("#sort_by requires a block.") unless block
+
+		__with__(@__value__.sort_by(&block))
+	end
+
+	def sort_by!(&block)
+		raise ArgumentError.new("#sort_by! requires a block.") unless block
+
+		@__value__.sort_by!(&block)
 		self
 	end
 
-	def take(...)
-		__with__(@__value__.take(...))
+	def sum(...)
+		@__value__.sum(...)
 	end
 
-	def take_while(...)
-		__with__(@__value__.take_while(...))
+	def take(n)
+		__with__(@__value__.take(n))
 	end
 
-	def transpose
-		case @__type__
-		when Literal::Tuple::Generic
-			tuple_types = @__type__.types
-			new_array_types = tuple_types.map { |t| Literal::Array(t) }
+	def take_while(&block)
+		raise ArgumentError.new("#take_while requires a block.") unless block
 
-			Literal::Tuple(*new_array_types).new(
-				*new_array_types.each_with_index.map do |t, i|
-					t.new(
-						*@__value__.map { |it| it[i] }
-					)
-				end
-			)
-		when Literal::Array::Generic
-			__with__(
-				@__value__.map(&:to_a).transpose.map! { |it| @__type__.new(*it) }
-			)
-		else
-			@__value__.transpose
-		end
+		__with__(@__value__.take_while(&block))
 	end
 
 	def to_a
@@ -593,149 +579,233 @@ class Literal::Array
 
 	alias_method :to_ary, :to_a
 
-	def to_s
-		@__value__.to_s
-	end
+	# An array of Literal::Tuples transposes to a Literal::Tuple of typed
+	# arrays (one per position), and an array of Literal::Arrays transposes to
+	# its rows and columns swapped.
+	def transpose
+		case (type = @__type__)
+		when Literal::Tuple::Generic
+			types = type.types
+			columns = ::Array.new(types.size) { [] }
 
-	def uniq
-		__with__(@__value__.uniq)
-	end
+			@__value__.each do |tuple|
+				row = tuple.__value__
 
-	def uniq!(...)
-		@__value__.uniq!(...) ? self : nil
-	end
+				i, len = 0, types.size
+				while i < len
+					columns[i] << row[i]
+					i += 1
+				end
+			end
 
-	def unshift(value)
-		Literal.check(value, @__type__) do |c|
-			c.fill_receiver(receiver: self, method: "#unshift")
+			Literal::Tuple.allocate.__initialize_without_check__(
+				columns.each_with_index.map do |column, i|
+					Literal::Array.allocate.__initialize_without_check__(column, type: types[i])
+				end,
+				types: types.map { |t| Literal::Array(t) },
+			)
+		when Literal::Array::Generic
+			element_type = type.type
+			transposed = @__value__.map(&:__value__).transpose
+
+			transposed.map! do |row|
+				Literal::Array.allocate.__initialize_without_check__(row, type: element_type)
+			end
+
+			Literal::Array.allocate.__initialize_without_check__(transposed, type:)
+		else
+			raise ArgumentError.new("Cannot transpose #{inspect} because its element type is not a Literal::Tuple or Literal::Array.")
 		end
+	end
 
-		@__value__.unshift(value)
+	def uniq(&)
+		__with__(@__value__.uniq(&))
+	end
+
+	def uniq!(&)
+		@__value__.uniq!(&)
 		self
 	end
 
-	alias_method :prepend, :unshift
-
-	def values_at(*indexes)
-		unless @__type__ === nil
-			max_value = length - 1
-			min_value = -length
-
-			indexes.each do |index|
-				case index
-				when Integer
-					if index < min_value || index > max_value
-						raise IndexError.new("index #{index} out of range")
-					end
-				when Range
-					if index.begin < min_value || index.end > max_value
-						raise IndexError.new("index #{index} out of range")
-					end
-				else
-					raise ArgumentError.new("Invalid index: #{index.inspect}")
-				end
+	def unshift(*values)
+		values.each do |value|
+			Literal.check(value, @__type__) do |c|
+				c.fill_receiver(receiver: self, method: "#unshift")
 			end
 		end
 
-		__with__(
-			@__value__.values_at(*indexes)
+		@__value__.unshift(*values)
+		self
+	end
+
+	def widen(type)
+		unless Literal.subtype?(@__type__, type)
+			raise ArgumentError.new("Cannot widen #{@__type__.inspect} to #{type.inspect} because it is not a supertype.")
+		end
+
+		Literal::Array.allocate.__initialize_without_check__(
+			@__value__.dup,
+			type:,
 		)
 	end
 
-	def |(other)
-		case other
-		when ::Array
-			Literal.check(other, _Array(@__type__)) do |c|
-				c.fill_receiver(receiver: self, method: "#|")
-			end
+	# Returns a Literal::Array of Literal::Tuples pairing our elements with the
+	# others' elements at the same index. The result has our length: longer
+	# arrays are truncated, and shorter arrays pad with nil — which is only
+	# allowed if their type is nilable. With a block, yields each tuple and
+	# returns nil.
+	def zip(*others, &block)
+		other_types = others.map { |other| __other_type__(other, "#zip") }
+		other_values = others.map { |other| (Literal::Array === other) ? other.__value__ : other }
 
-			__with__(@__value__ | other)
-		when Literal::Array(@__type__)
-			__with__(@__value__ | other.__value__)
-		when Literal::Array
-			raise Literal::TypeError.new(
-				context: Literal::TypeError::Context.new(
-					expected: Literal::Array(@__type__),
-					actual: other
-				)
-			)
-		else
-			raise ArgumentError.new("Cannot perform `|` with #{other.class.name}.")
-		end
-	end
+		my_length = @__value__.length
 
-	def fetch(...)
-		@__value__.fetch(...)
-	end
+		others.each_with_index do |other, index|
+			next if other.size >= my_length || other_types[index] === nil
 
-	def zip(*others)
-		other_types = others.map do |other|
-			case other
-			when Literal::Array
-				other.__type__
-			when Array
-				_Any?
-			else
-				raise ArgumentError
-			end
-		end
-
-		tuple = Literal::Tuple(
-			@__type__,
-			*other_types
-		)
-
-		my_length = length
-		max_length = [my_length, *others.map(&:length)].max
-
-		# Check we match the max length or our type is nilable
-		unless my_length == max_length || @__type__ === nil
 			raise ArgumentError.new(<<~MESSAGE)
-				The literal array could not be zipped becuase its type is not nilable and it has fewer items than the maximum number of items in the other arrays.
+				Cannot zip #{inspect} with #{other.inspect} because the other array is shorter and its type is not nilable.
 
-				You can either make the type of this array nilable, or add more items so its length matches the others.
-
-				#{inspect}
+				The missing positions would be padded with nil. Either make the other array's type nilable, or make its length at least #{my_length}.
 			MESSAGE
 		end
 
-		# Check others match the max length or their types is nilable
-		others.each_with_index do |other, index|
-			unless other.length == max_length || other_types[index] === nil
-				raise ArgumentError.new(<<~MESSAGE)
-					The literal array could not be zipped becuase its type is not nilable and it has fewer items than the maximum number of items in the other arrays.
+		tuple_type = Literal::Tuple(@__type__, *other_types)
+		tuple_types = tuple_type.types
+		collection_type = Literal::Types._Tuple(@__type__, *other_types)
 
-					You can either make the type of this array nilable, or add more items so its length matches the others.
+		rows = @__value__.zip(*other_values)
 
-					#{inspect}
-				MESSAGE
-			end
-		end
-
-		i = 0
-
-		if block_given?
-			while i < max_length
-				yield tuple.new(
-					@__value__[i],
-					*others.map { |it| it[i] }
-				)
-				i += 1
+		if block
+			rows.each do |row|
+				yield Literal::Tuple.allocate.__initialize_without_check__(row, types: tuple_types, collection_type:)
 			end
 
 			nil
 		else
-			result_value = []
-
-			while i < max_length
-				result_value << tuple.new(
-					@__value__[i],
-					*others.map { |it| it[i] }
-				)
-				i += 1
+			rows.map! do |row|
+				Literal::Tuple.allocate.__initialize_without_check__(row, types: tuple_types, collection_type:)
 			end
 
-			__with__(result_value)
+			Literal::Array.allocate.__initialize_without_check__(rows, type: tuple_type)
 		end
+	end
+
+	def |(other)
+		__with__(@__value__ | __compatible_value__(other, "#|"))
+	end
+
+	# Used to create a new Literal::Array with the same type but a new value.
+	# The value is not checked, so the caller must guarantee every element
+	# matches the type and that the value is not shared with another owner.
+	private def __with__(value)
+		Literal::Array.allocate.__initialize_without_check__(
+			value,
+			type: @__type__,
+			collection_type: @__collection_type__,
+		)
+	end
+
+	# Resolves the element type of another operand for tuple-producing
+	# operations. A plain Array's element type is unknown, which is `_Any?`.
+	private def __other_type__(other, method)
+		case other
+		when Literal::Array
+			other.__type__
+		when ::Array
+			Literal::Types._Any?
+		else
+			raise ArgumentError.new("Cannot perform `#{method}` between a Literal::Array and #{other.class.inspect}.")
+		end
+	end
+
+	# Unwraps the other operand for operations where the result can only
+	# contain our own elements, so the other's element types don't matter.
+	private def __other_value__(other, method)
+		case other
+		when Literal::Array
+			other.__value__
+		when ::Array
+			other
+		else
+			raise ArgumentError.new("Cannot perform `#{method}` between a Literal::Array and #{other.class.inspect}.")
+		end
+	end
+
+	# Unwraps the other operand for operations where its elements end up in our
+	# array. A Literal::Array proves compatibility through its element type; a
+	# plain Array is checked element by element at this boundary.
+	private def __compatible_value__(other, method)
+		case other
+		when Literal::Array
+			unless Literal.subtype?(other.__type__, @__type__)
+				raise Literal::TypeError.new(
+					context: Literal::TypeError::Context.new(
+						expected: Literal::Array(@__type__),
+						actual: other,
+					),
+				)
+			end
+
+			other.__value__
+		when ::Array
+			Literal.check(other, @__collection_type__) do |c|
+				c.fill_receiver(receiver: self, method:)
+			end
+
+			other
+		else
+			raise ArgumentError.new("Cannot perform `#{method}` between a Literal::Array and #{other.class.inspect}.")
+		end
+	end
+
+	# Writing beyond the end of the array pads the gap with nils, which is only
+	# valid if our element type admits nil.
+	private def __check_padding__(index)
+		if Integer === index && index > @__value__.length && !(@__type__ === nil)
+			raise Literal::TypeError.new(
+				context: Literal::TypeError::Context.new(
+					expected: @__type__,
+					actual: nil,
+				),
+			)
+		end
+	end
+
+	private def initialize_copy(source)
+		super
+		@__value__ = @__value__.dup
+	end
+
+	private def initialize_clone(source, freeze: nil)
+		super(source)
+		@__value__ = source.__value__.clone(freeze:)
+		self
+	end
+
+	# TODO: Implement type-safe versions of the remaining removed methods:
+	# - Literal::Hash-producing: group_by, tally, tally_by, to_h
+	# - Producing Literal::Arrays of Literal::Arrays: each_slice, each_cons,
+	#   chunk_while, slice_when
+
+	# The Enumerable methods below are supported as-is because they never leak
+	# an untyped collection. Everything else Enumerable defines is removed —
+	# either we provide our own type-safe version above, or the method is
+	# unsupported until we can provide one.
+	SUPPORTED_ENUMERABLE_METHODS = Set[
+		:all?,
+		:any?,
+		:each_with_index,
+		:each_with_object,
+		:find,
+		:none?,
+		:one?,
+		:reduce,
+	].freeze
+
+	Enumerable.instance_methods.each do |method|
+		next if SUPPORTED_ENUMERABLE_METHODS.include?(method)
+
+		undef_method(method) if instance_method(method).owner == Enumerable
 	end
 end
