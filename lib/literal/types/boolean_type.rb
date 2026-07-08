@@ -18,6 +18,8 @@ class Literal::Types::BooleanType
 		case other
 		when true, false, Literal::Types::BooleanType
 			true
+		when Class
+			!!(other <= TrueClass || other <= FalseClass)
 		else
 			false
 		end

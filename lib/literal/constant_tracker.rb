@@ -24,10 +24,6 @@ module Literal::ConstantTracker
 		EMPTY_REFERENCES
 	end
 
-	def self.immediate_value?(object)
-		object in Integer | Float | Symbol | nil | true | false
-	end
-
 	def const_added(const)
 		return super if autoload?(const, false)
 
@@ -37,7 +33,7 @@ module Literal::ConstantTracker
 			return super
 		end
 
-		return super if Literal::ConstantTracker.immediate_value?(object)
+		return super if object in Literal::Immediate
 
 		begin
 			(CONSTANTS[object] ||= []) << Reference.new(self, const)

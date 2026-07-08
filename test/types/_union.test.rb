@@ -121,6 +121,18 @@ test "===" do
 	refute position === "top"
 end
 
+test "nil members cover nilable types" do
+	immediate = _Union(Integer, Float, Symbol, nil, _Boolean)
+
+	assert_subtype _Nilable(Integer), immediate
+	assert_subtype _Falsy, immediate
+	assert _Kind(immediate) === _Nilable(Integer)
+	assert _Kind(immediate) === _Falsy
+	assert _Kind(immediate) === NilClass
+	assert _Kind(immediate) === TrueClass
+	assert _Kind(immediate) === FalseClass
+end
+
 test "other unions are flattened" do
 	type = _Union(
 		_Union(String, Integer),

@@ -4,6 +4,8 @@ require "zeitwerk"
 require_relative "literal/version"
 
 module Literal
+	OBJECT_ID = BasicObject.instance_method(:__id__)
+
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/rails")
 		loader.ignore("#{__dir__}/literal/railtie.rb")
@@ -22,6 +24,8 @@ module Literal
 
 		loader.setup
 	end
+
+	Immediate = Types._Union(Integer, Float, Symbol, nil, Types._Boolean)
 
 	def self.const_name(object)
 		const_ref(object).first&.name
@@ -124,7 +128,7 @@ module Literal
 
 	def self.with_match_guard(type, value)
 		state = (Thread.current[:literal_match_state] ||= {})
-		key = [type.class, type.object_id, value.object_id]
+		key = [type.class, OBJECT_ID.bind_call(type), OBJECT_ID.bind_call(value)]
 
 		return false if state[key]
 
@@ -170,6 +174,12 @@ module Literal
 			true
 		elsif supertype == subtype
 			true
+		elsif supertype == nil
+			subtype == NilClass
+		elsif supertype == true
+			subtype == TrueClass
+		elsif supertype == false
+			subtype == FalseClass
 		else
 			case supertype
 			when Literal::Type
@@ -188,12 +198,14 @@ module Literal
 					supertype >= ::Array
 				when ::Hash
 					supertype >= ::Hash
-				when Date
-					supertype >= Date
 				when Literal::Type
 					subtype.<=(supertype, context:)
 				else
-					false
+					if defined?(::Date) && ::Date === subtype
+						supertype >= ::Date
+					else
+						false
+					end
 				end
 			when Range
 				supertype.cover?(subtype)
