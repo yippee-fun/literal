@@ -28,7 +28,7 @@ module Literal
 	end
 
 	def self.const_ref(object)
-		ConstantTracker::CONSTANTS[object] || []
+		ConstantTracker.const_ref(object)
 	end
 
 	def self.Value(*, **, &block)

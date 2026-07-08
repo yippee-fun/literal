@@ -2,6 +2,7 @@
 
 module Literal::ConstantTracker
 	CONSTANTS = ObjectSpace::WeakKeyMap.new
+	EMPTY_REFERENCES = [].freeze
 
 	Reference = Data.define(:owner, :const) do
 		def name
@@ -17,6 +18,16 @@ module Literal::ConstantTracker
 		alias_method :to_s, :name
 	end
 
+	def self.const_ref(object)
+		CONSTANTS[object] || EMPTY_REFERENCES
+	rescue ::StandardError
+		EMPTY_REFERENCES
+	end
+
+	def self.immediate_value?(object)
+		object in Integer | Float | Symbol | nil | true | false
+	end
+
 	def const_added(const)
 		return super if autoload?(const, false)
 
@@ -26,13 +37,13 @@ module Literal::ConstantTracker
 			return super
 		end
 
-		return super if object in BasicObject | Integer | Symbol | nil | true | false
+		return super if Literal::ConstantTracker.immediate_value?(object)
 
 		begin
 			(CONSTANTS[object] ||= []) << Reference.new(self, const)
-		rescue ::ArgumentError
+		rescue ::StandardError
+			# object is not weak-keyable or hashable.
 			return super
-			# object is not weak-keyable: integer, symbol, true, false, nil, etc.
 		end
 
 		super
