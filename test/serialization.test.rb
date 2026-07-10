@@ -161,6 +161,125 @@ class SerializationOpaqueSerializer < Literal::Serializer
 	end
 end
 
+class SerializationMoney
+	attr_reader :cents, :currency
+
+	def initialize(cents, currency)
+		@cents = cents
+		@currency = currency
+	end
+
+	def ==(other)
+		self.class === other && cents == other.cents && currency == other.currency
+	end
+end
+
+class SerializationMoneyCodec < Literal::Serializer::Codec
+	def type
+		SerializationMoney
+	end
+
+	def encoded_type
+		_Map(cents: Integer, currency: String)
+	end
+
+	def encode(value)
+		{ cents: value.cents, currency: value.currency }
+	end
+
+	def decode(value)
+		SerializationMoney.new(value[:cents], value[:currency])
+	end
+end
+
+class SerializationSpan
+	attr_reader :range
+
+	def initialize(range)
+		@range = range
+	end
+
+	def ==(other)
+		self.class === other && range == other.range
+	end
+end
+
+class SerializationSpanCodec < Literal::Serializer::Codec
+	def type
+		SerializationSpan
+	end
+
+	def encoded_type
+		_Map(
+			from: _Nilable(Date),
+			to: _Nilable(Date),
+			inclusive: _Boolean,
+		)
+	end
+
+	def encode(value)
+		range = value.range
+
+		{ from: range.begin, to: range.end, inclusive: !range.exclude_end? }
+	end
+
+	def decode(value)
+		if value[:inclusive]
+			SerializationSpan.new((value[:from])..(value[:to]))
+		else
+			SerializationSpan.new((value[:from])...(value[:to]))
+		end
+	end
+end
+
+class SerializationWallet
+	attr_reader :money
+
+	def initialize(money)
+		@money = money
+	end
+
+	def ==(other)
+		self.class === other && money == other.money
+	end
+end
+
+class SerializationWalletCodec < Literal::Serializer::Codec
+	def type
+		SerializationWallet
+	end
+
+	def encoded_type
+		SerializationMoney
+	end
+
+	def encode(value)
+		value.money
+	end
+
+	def decode(value)
+		SerializationWallet.new(value)
+	end
+end
+
+class SerializationBrokenCodec < Literal::Serializer::Codec
+	def type
+		SerializationOpaque
+	end
+
+	def encoded_type
+		_Map(value: Object)
+	end
+
+	def encode(value)
+		{ value: }
+	end
+
+	def decode(value)
+		value[:value]
+	end
+end
+
 Example = Literal::SerializationContext.new
 
 test "serialization context includes default serializers" do
@@ -1827,6 +1946,188 @@ test "supering with no matching serializer later in the chain raises" do
 
 	assert error.message.include?("No serializer for type")
 	assert error.message.match?(/SerializationOpaque after .*SerializationOpaqueSerializer/)
+end
+
+test "codecs map values to an encoded type" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec)
+	original = SerializationMoney.new(100, "USD")
+
+	assert context.kind === SerializationMoney
+
+	serialized = context.serialize(original, type: SerializationMoney)
+
+	assert_equal(serialized, { "cents" => 100, "currency" => "USD" })
+	assert_equal(context.deserialize(serialized, type: SerializationMoney), original)
+
+	assert_equal(
+		context.json_schema(SerializationMoney),
+		{
+			"type" => "object",
+			"properties" => {
+				"cents" => { "type" => "integer" },
+				"currency" => { "type" => "string" },
+			},
+			"required" => ["cents", "currency"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "encoded types nest inside other serializable types" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec)
+	type = _Array(SerializationMoney)
+	original = [SerializationMoney.new(100, "USD"), SerializationMoney.new(50, "GBP")]
+
+	serialized = context.serialize(original, type:)
+
+	assert_equal(serialized, [{ "cents" => 100, "currency" => "USD" }, { "cents" => 50, "currency" => "GBP" }])
+	assert_equal(context.deserialize(serialized, type:), original)
+end
+
+test "codecs discriminate in unions through their encoded shape" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec)
+	type = _Union(SerializationMoney, String)
+	money = SerializationMoney.new(100, "USD")
+
+	money_serialized = context.serialize(money, type:)
+	string_serialized = context.serialize("free", type:)
+
+	assert_equal(money_serialized, { "cents" => 100, "currency" => "USD" })
+	assert_equal(string_serialized, "free")
+	assert_equal(context.deserialize(money_serialized, type:), money)
+	assert_equal(context.deserialize(string_serialized, type:), "free")
+end
+
+test "codecs whose encoded type is a closed object merge tagged union discriminators" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec)
+	type = _TaggedUnion(money: SerializationMoney, note: String)
+	original = SerializationMoney.new(100, "USD")
+
+	serialized = context.serialize(original, type:)
+
+	assert_equal(serialized, { "cents" => 100, "currency" => "USD", "$type" => "money" })
+	assert_equal(context.deserialize(serialized, type:), original)
+end
+
+test "codecs delegate nested values to their serializers" do
+	context = Literal::SerializationContext.new(SerializationSpanCodec)
+	original = SerializationSpan.new((Date.new(2025, 1, 1))..(Date.new(2025, 12, 31)))
+
+	assert context.kind === SerializationSpan
+
+	serialized = context.serialize(original, type: SerializationSpan)
+
+	assert_equal(serialized, { "from" => "2025-01-01", "to" => "2025-12-31", "inclusive" => true })
+	assert_equal(context.deserialize(serialized, type: SerializationSpan), original)
+end
+
+test "codecs roundtrip exclusive and endless spans" do
+	context = Literal::SerializationContext.new(SerializationSpanCodec)
+
+	exclusive = SerializationSpan.new((Date.new(2025, 1, 1))...(Date.new(2025, 12, 31)))
+	serialized = context.serialize(exclusive, type: SerializationSpan)
+
+	assert_equal(serialized, { "from" => "2025-01-01", "to" => "2025-12-31", "inclusive" => false })
+	assert_equal(context.deserialize(serialized, type: SerializationSpan), exclusive)
+
+	endless = SerializationSpan.new((Date.new(2025, 1, 1))..)
+	serialized = context.serialize(endless, type: SerializationSpan)
+
+	assert_equal(serialized, { "from" => "2025-01-01", "to" => nil, "inclusive" => true })
+	assert_equal(context.deserialize(serialized, type: SerializationSpan), endless)
+end
+
+test "codecs derive json schemas with nilable members from their encoded type" do
+	context = Literal::SerializationContext.new(SerializationSpanCodec)
+
+	assert_equal(
+		context.json_schema(SerializationSpan),
+		{
+			"type" => "object",
+			"properties" => {
+				"from" => {
+					"anyOf" => [
+						{ "type" => "string", "format" => "date" },
+						{ "type" => "null" },
+					],
+				},
+				"to" => {
+					"anyOf" => [
+						{ "type" => "string", "format" => "date" },
+						{ "type" => "null" },
+					],
+				},
+				"inclusive" => { "type" => "boolean" },
+			},
+			"required" => ["inclusive"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "codec encoded types may be handled by earlier serializers in the chain" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec, SerializationWalletCodec)
+	original = SerializationWallet.new(SerializationMoney.new(100, "USD"))
+
+	assert context.serializable_type?(SerializationWallet)
+
+	serialized = context.serialize(original, type: SerializationWallet)
+
+	assert_equal(serialized, { "cents" => 100, "currency" => "USD" })
+	assert_equal(context.deserialize(serialized, type: SerializationWallet), original)
+end
+
+test "codecs must implement type and encoded_type" do
+	error = assert_raises(NoMethodError) do
+		Literal::SerializationContext.new(Class.new(Literal::Serializer::Codec))
+	end
+
+	assert error.message.include?("must implement #type")
+
+	codec = Class.new(Literal::Serializer::Codec) do
+		def type = SerializationOpaque
+	end
+
+	context = Literal::SerializationContext.new(codec)
+
+	error = assert_raises(NoMethodError) do
+		context.serialize(SerializationOpaque.new, type: SerializationOpaque)
+	end
+
+	assert error.message.include?("must implement #encoded_type")
+end
+
+test "codecs must implement encode and decode" do
+	codec = Class.new(Literal::Serializer::Codec) do
+		def type = SerializationOpaque
+		def encoded_type = _Map(value: String)
+	end
+
+	context = Literal::SerializationContext.new(codec)
+
+	error = assert_raises(NoMethodError) do
+		context.serialize(SerializationOpaque.new, type: SerializationOpaque)
+	end
+
+	assert error.message.include?("must implement #encode(value)")
+
+	error = assert_raises(NoMethodError) do
+		context.deserialize({ "value" => "example" }, type: SerializationOpaque)
+	end
+
+	assert error.message.include?("must implement #decode(value)")
+end
+
+test "codecs reject encoded types that are not serializable" do
+	context = Literal::SerializationContext.new(SerializationBrokenCodec)
+
+	refute context.kind === SerializationOpaque
+	refute context.serializable_type?(SerializationOpaque)
+
+	error = assert_raises(Literal::ArgumentError) { context.json_schema(SerializationOpaque) }
+
+	assert error.message.include?("there is no serializer for Object")
+	assert error.message.include?("SerializationOpaque → _Map({value: Object}) → Object")
 end
 
 test "coerced properties deserialize without re-running the coercion" do
