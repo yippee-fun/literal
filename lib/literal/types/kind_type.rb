@@ -10,6 +10,10 @@ class Literal::Types::KindType
 
 	attr_reader :type
 
+	def inspect
+		"_Kind(#{@type.inspect})"
+	end
+
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
 

@@ -37,10 +37,9 @@ class Literal::SerializationContext
 		@kind = _Deferred { @kind }
 
 		@serializers = serializers.map { |it| it.new(self) }.freeze
-		@serializer_kinds = @serializers.to_h { |serializer| [serializer, _Kind(serializer.type)] }.freeze
 
 		@type = Literal::Serializer::SerializableType.new(self, _Union(*@serializers.map(&:type)))
-		@kind = _Union(*@serializer_kinds.values)
+		@kind = _Kind(@type)
 
 		@cache_mutex = Mutex.new
 		@serializer_cache = new_type_cache
@@ -116,10 +115,6 @@ class Literal::SerializationContext
 		else
 			raise Literal::ArgumentError, "No serializer for type #{type.inspect}"
 		end
-	end
-
-	def serializer_kind(serializer)
-		@serializer_kinds.fetch(serializer)
 	end
 
 	# Whether this context can round-trip values of the given type. This is the
@@ -209,7 +204,9 @@ class Literal::SerializationContext
 	private def serializable_type_within?(type, stack, seen)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		return true if Literal::Serializer::SerializableType === type
+		# Only this context's own aggregate type is trivially serializable;
+		# another context's aggregate proves nothing about this one.
+		return type.equal?(@type) if Literal::Serializer::SerializableType === type
 		return referenceable_type?(type) if stack.key?(type)
 
 		cached = seen[type]
@@ -231,7 +228,9 @@ class Literal::SerializationContext
 	private def unserializable_type_path(type, stack)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		return nil if Literal::Serializer::SerializableType === type
+		if Literal::Serializer::SerializableType === type
+			return type.equal?(@type) ? nil : [type]
+		end
 
 		if stack.key?(type)
 			return referenceable_type?(type) ? nil : [type]

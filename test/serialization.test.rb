@@ -1216,7 +1216,16 @@ test "context type rejects values whose structure type is not serializable" do
 	assert_raises(Literal::ArgumentError) { Example.serialize([unsupported], type: Example.type) }
 end
 
+test "kind does not match another context's serializable type" do
+	other = Literal::SerializationContext.new(Literal::StringSerializer, defaults: false)
+
+	assert other.kind === other.type
+	refute other.kind === Example.type
+	refute Example.serializable_type?(other.type)
+end
+
 test "recursive kind support" do
+	assert Example.kind === Example.type
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
 	assert Example.kind === _Set(Example.type)
