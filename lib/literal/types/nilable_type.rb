@@ -31,6 +31,8 @@ class Literal::Types::NilableType
 
 	def >=(other, context: nil)
 		case other
+		when Literal::Types::VoidType
+			@type == Literal::Types::AnyType::Instance
 		when Literal::Types::NilableType
 			Literal.subtype?(other.type, @type, context:)
 		when nil

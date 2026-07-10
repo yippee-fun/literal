@@ -12,8 +12,8 @@ module Literal::Types
 	end
 
 	# Matches any value including `nil` — the nilable counterpart of `_Any`,
-	# and the opposite of `_Never`. Unlike `_Void`, which signals that the
-	# value must not be depended on, `_Any?` positively accepts any value.
+	# and the opposite of `_Never`. It is equivalent to `_Void` in the type
+	# hierarchy, but `_Void` signals that the value must not be depended on.
 	# ```ruby
 	# _Any?
 	# ```

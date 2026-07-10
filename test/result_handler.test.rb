@@ -47,6 +47,17 @@ test "can ignore a branch without a block" do
 	assert_equal nil, handled
 end
 
+test "plain success handler covers a void success type" do
+	result = Literal::Result(_Void, Symbol) { |type| type.success(nil) }
+
+	handled = result.handle do |on|
+		on.success { "handled" }
+		on.failure(Symbol)
+	end
+
+	assert_equal "handled", handled
+end
+
 test "treats split handlers as exhaustive for union success types" do
 	result = Literal::Result(_Union(String, Integer), Symbol) { |type| type.success("hello") }
 
