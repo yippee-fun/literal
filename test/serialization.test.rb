@@ -2000,6 +2000,22 @@ test "never cannot serialize or deserialize values" do
 	assert_raises(Literal::ArgumentError) { Example.deserialize("Joel", type: _Never) }
 end
 
+test "void discards serialized and deserialized values" do
+	assert Example.kind === _Void
+	assert_equal(Example.json_schema(_Void), true)
+	assert_equal(Example.serialize(Object.new, type: _Void), nil)
+	assert_equal(Example.deserialize(nil, type: _Void), nil)
+	assert_equal(Example.deserialize("any JSON value", type: _Void), nil)
+	assert_equal(Example.deserialize({ "nested" => [1, true] }, type: _Void), nil)
+end
+
+test "void does not have a single JSON type for union discrimination" do
+	type = _Union(String, _Void)
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	assert error.message.include?("_Void does not serialize to a single JSON type")
+end
+
 test "never union members are ignored" do
 	type = _Union(String, SerializationValueObject, _Never)
 	value_original = SerializationValueObject.new(value: "Joel")

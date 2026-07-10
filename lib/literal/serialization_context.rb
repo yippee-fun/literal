@@ -5,6 +5,7 @@ class Literal::SerializationContext
 
 	DefaultSerializers = [
 		Literal::NeverSerializer,
+		Literal::VoidSerializer,
 		Literal::StringSerializer,
 		Literal::SymbolSerializer,
 		Literal::IntegerSerializer,
