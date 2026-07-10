@@ -11,6 +11,7 @@ class Literal::SerializationContext
 		Literal::JSONSchemaNumberSerializer,
 		Literal::FloatSerializer,
 		Literal::BooleanSerializer,
+		Literal::TimeSerializer,
 		Literal::DateSerializer,
 		Literal::StructureSerializer,
 		Literal::TaggedUnionSerializer,

@@ -583,6 +583,31 @@ test "date json schema" do
 	)
 end
 
+test "time and datetime json schema" do
+	time = Time.new(2025, 1, 13, 20, 30, 45, "+01:00")
+	datetime = DateTime.new(2025, 1, 13, 20, 30, 45, "+01:00")
+
+	assert_equal(
+		Example.json_schema(Time),
+		{ "type" => "string", "format" => "date-time" },
+	)
+
+	assert_equal(
+		Example.json_schema(DateTime),
+		{ "type" => "string", "format" => "date-time" },
+	)
+
+	assert_equal(
+		Example.json_schema(time),
+		{ "type" => "string", "format" => "date-time", "const" => "2025-01-13T20:30:45+01:00" },
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(DateTime, datetime)),
+		{ "type" => "string", "format" => "date-time", "const" => "2025-01-13T20:30:45+01:00" },
+	)
+end
+
 test "hash json schema" do
 	assert_equal(
 		Example.json_schema(_Hash(Symbol, Integer)),
@@ -1103,6 +1128,24 @@ test "date serialization roundtrip" do
 	serialized = Example.serialize(original, type:)
 
 	assert_equal(serialized, "2025-01-13")
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "time serialization roundtrip" do
+	original = Time.new(2025, 1, 13, 20, 30, 45.123456789r, "+01:00")
+	type = Time
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, "2025-01-13T20:30:45.123456789+01:00")
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "datetime serialization roundtrip" do
+	original = DateTime.new(2025, 1, 13, 20, 30, 45 + (123_456_789r / 1_000_000_000), "+01:00")
+	type = DateTime
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, "2025-01-13T20:30:45.123456789+01:00")
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
