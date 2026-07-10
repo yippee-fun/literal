@@ -20,6 +20,7 @@ class Literal::SerializationContext
 		Literal::TupleSerializer,
 		Literal::ArraySerializer,
 		Literal::SetSerializer,
+		Literal::RangeSerializer,
 		Literal::NilableSerializer,
 		Literal::JSONDataSerializer,
 	].freeze

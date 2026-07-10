@@ -1217,6 +1217,96 @@ test "set serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "range serialization roundtrip" do
+	original = (Date.new(2025, 1, 1))..(Date.new(2025, 12, 31))
+	type = _Range(Date)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "from" => "2025-01-01", "to" => "2025-12-31", "inclusive" => true })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "exclusive, endless and beginless range serialization roundtrips" do
+	type = _Range(Integer)
+
+	exclusive = 1...10
+	serialized = Example.serialize(exclusive, type:)
+
+	assert_equal(serialized, { "from" => 1, "to" => 10, "inclusive" => false })
+	assert_equal(Example.deserialize(serialized, type:), exclusive)
+
+	endless = (1..)
+	serialized = Example.serialize(endless, type:)
+
+	assert_equal(serialized, { "from" => 1, "to" => nil, "inclusive" => true })
+	assert_equal(Example.deserialize(serialized, type:), endless)
+
+	beginless = (..10)
+	serialized = Example.serialize(beginless, type:)
+
+	assert_equal(serialized, { "from" => nil, "to" => 10, "inclusive" => true })
+	assert_equal(Example.deserialize(serialized, type:), beginless)
+end
+
+test "range json schema" do
+	bound = {
+		"anyOf" => [
+			{ "type" => "string", "format" => "date" },
+			{ "type" => "null" },
+		],
+	}
+
+	assert_equal(
+		Example.json_schema(_Range(Date)),
+		{
+			"type" => "object",
+			"properties" => {
+				"from" => bound,
+				"to" => bound,
+				"inclusive" => { "type" => "boolean" },
+			},
+			"required" => ["from", "to", "inclusive"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "range deserialization requires the inclusive key" do
+	assert_raises(KeyError) do
+		Example.deserialize({ "from" => 1, "to" => 5 }, type: _Range(Integer))
+	end
+end
+
+test "ranges discriminate in unions through their shape" do
+	type = _Union(_Range(Integer), String)
+
+	range_serialized = Example.serialize(1..5, type:)
+	string_serialized = Example.serialize("none", type:)
+
+	assert_equal(range_serialized, { "from" => 1, "to" => 5, "inclusive" => true })
+	assert_equal(string_serialized, "none")
+	assert_equal(Example.deserialize(range_serialized, type:), 1..5)
+	assert_equal(Example.deserialize(string_serialized, type:), "none")
+end
+
+test "ranges merge tagged union discriminators" do
+	type = _TaggedUnion(span: _Range(Integer), note: String)
+
+	serialized = Example.serialize(1..5, type:)
+
+	assert_equal(serialized, { "from" => 1, "to" => 5, "inclusive" => true, "$type" => "span" })
+	assert_equal(Example.deserialize(serialized, type:), 1..5)
+end
+
+test "constraint-wrapped range serialization roundtrip" do
+	type = _Constraint(_Range(Integer), min: 1)
+	serialized = Example.serialize(1..5, type:)
+
+	assert_equal(serialized, { "from" => 1, "to" => 5, "inclusive" => true })
+	assert_equal(Example.deserialize(serialized, type:), 1..5)
+	assert Example.kind === type
+end
+
 test "structure serialization roundtrip" do
 	original = SerializationPerson.new(name: "Joel", age: 42)
 	type = SerializationPerson
@@ -1348,6 +1438,7 @@ test "recursive kind support" do
 	assert Example.kind === _TaggedUnion(foo: Example.type, bar: String)
 	assert Example.kind === _Array(Example.type)
 	assert Example.kind === _Set(Example.type)
+	assert Example.kind === _Range(Example.type)
 	assert Example.kind === SerializationRecursiveOrder
 	assert Example.kind === SerializationRecursiveNode
 end
