@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 module Literal::ConstantTracker
+	CONST_GET_METHOD = Module.instance_method(:const_get)
 	CONSTANTS = ObjectSpace::WeakKeyMap.new
 	EMPTY_REFERENCES = [].freeze
 
@@ -20,7 +21,7 @@ module Literal::ConstantTracker
 
 	def self.const_ref(object)
 		CONSTANTS[object] || EMPTY_REFERENCES
-	rescue ::StandardError
+	rescue
 		EMPTY_REFERENCES
 	end
 
@@ -28,7 +29,7 @@ module Literal::ConstantTracker
 		return super if autoload?(const, false)
 
 		begin
-			object = const_get(const, false)
+			object = CONST_GET_METHOD.bind_call(self, const, false)
 		rescue ::NameError
 			return super
 		end
@@ -37,7 +38,7 @@ module Literal::ConstantTracker
 
 		begin
 			(CONSTANTS[object] ||= []) << Reference.new(self, const)
-		rescue ::StandardError
+		rescue
 			# object is not weak-keyable or hashable.
 			return super
 		end
