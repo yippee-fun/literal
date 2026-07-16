@@ -334,6 +334,47 @@ test "slices preserve the original property order" do
 	assert_equal(instance.to_h, { a: "first", b: "second" })
 end
 
+test "slices can be built from an instance of the original" do
+	original = SliceExample.new(name: "John", id: 1, age: 30)
+	slice = SliceExample.slice(:id, :name).from(original)
+
+	assert_equal slice.to_h, { id: 1, name: "John" }
+	assert_equal slice.frozen?, true
+end
+
+test "from applies defaults for properties the source doesn't have" do
+	source = Class.new(Literal::Data) do
+		prop :name, String
+	end
+
+	instance = SliceExample.slice(:name, :age).from(source.new(name: "John"))
+
+	assert_equal instance.name, "John"
+	assert_equal instance.age, 0
+end
+
+test "from raises for missing required properties" do
+	source = Class.new(Literal::Data) do
+		prop :name, String
+	end
+
+	error = assert_raises(Literal::ArgumentError) do
+		SliceExample.slice(:name, :id).from(source.new(name: "John"))
+	end
+
+	assert error.message.include?("Missing property :id")
+end
+
+test "from type checks matching properties" do
+	source = Class.new(Literal::Data) do
+		prop :name, _Nilable(String)
+	end
+
+	assert_raises(Literal::TypeError) do
+		SliceExample.slice(:name).from(source.new(name: nil))
+	end
+end
+
 test "slice raises NameError for unknown properties" do
 	error = assert_raises(NameError) { SliceExample.slice(:id, :nope) }
 

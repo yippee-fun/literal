@@ -25,6 +25,14 @@ class Literal::DataStructure
 	# and assigns them directly, type checking each value but never coercing.
 	# Omitted properties fall back to their defaults. Like from_pack, it does
 	# not run the initializer or after_initialize.
+	# Construct an instance from another object's matching properties — e.g.
+	# an instance of the class a slice was taken from. Properties the object
+	# doesn't have fall back to their defaults, and anything extra in its
+	# to_h is ignored. The values are final: type checked, never coerced.
+	def self.from(original)
+		from_props(original.to_h.slice(*literal_properties.map(&:name)))
+	end
+
 	def self.from_props(props)
 		instance = allocate
 		matched = instance.__send__(:__literal_assign_props__, props, ".from_props")
