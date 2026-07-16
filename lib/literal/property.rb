@@ -5,6 +5,7 @@ class Literal::Property
 	RUBY_KEYWORDS = %i[alias and begin break case class def do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield].to_h { |k| [k, "__#{k}__"] }.freeze
 
 	VISIBILITY_OPTIONS = Set[false, :private, :protected, :public].freeze
+	VISIBILITY_ORDER = { false => 0, :private => 1, :protected => 2, :public => 3 }.freeze
 	KIND_OPTIONS = Set[:positional, :*, :keyword, :**, :&].freeze
 
 	include Comparable

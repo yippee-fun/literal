@@ -38,6 +38,130 @@ test "nilable keyword params are optional" do
 	refute_raises { example.new(example: "Hello") }
 end
 
+test "properties can be redefined with a subtype of the inherited type" do
+	parent = Class.new(Example) do
+		prop :id, _Union(Integer, String)
+	end
+
+	example = Class.new(parent) do
+		prop :id, Integer
+	end
+
+	refute_raises { example.new(id: 1) }
+	assert_raises(Literal::TypeError) { example.new(id: "1") }
+end
+
+test "properties cannot be redefined with a type incompatible with the inherited type" do
+	parent = Class.new(Example) do
+		prop :name, String
+	end
+
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(parent) do
+			prop :name, Symbol
+		end
+	end
+
+	assert error.message.include?("must be a subtype of the inherited type")
+end
+
+test "properties cannot be redefined with a different kind" do
+	parent = Class.new(Example) do
+		prop :name, String, :positional
+	end
+
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(parent) do
+			prop :name, String
+		end
+	end
+
+	assert error.message.include?("must match the inherited kind :positional")
+end
+
+test "properties can be redefined to add a reader" do
+	parent = Class.new(Example) do
+		prop :name, String
+	end
+
+	example = Class.new(parent) do
+		prop :name, String, reader: :public
+	end
+
+	assert_equal example.new(name: "John").name, "John"
+end
+
+test "properties cannot be redefined to remove or hide a reader" do
+	parent = Class.new(Example) do
+		prop :name, String, reader: :public
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		Class.new(parent) { prop :name, String }
+	end
+
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(parent) { prop :name, String, reader: :private }
+	end
+
+	assert error.message.include?("must be at least as visible as the inherited reader")
+end
+
+test "properties with an inherited writer can be redefined with a narrower type" do
+	parent = Class.new(Example) do
+		prop :id, _Union(Integer, String), writer: :public
+	end
+
+	example = Class.new(parent) do
+		prop :id, Integer, writer: :public, reader: :public
+	end
+
+	instance = example.new(id: 1)
+	instance.id = 2
+
+	assert_equal instance.id, 2
+
+	# The narrowed writer rejects values the inherited writer accepted, failing
+	# loudly at the assignment site.
+	assert_raises(Literal::TypeError) { instance.id = "3" }
+end
+
+test "narrowed redefinitions can add a writer when the inherited property had none" do
+	parent = Class.new(Example) do
+		prop :id, _Union(Integer, String)
+	end
+
+	example = Class.new(parent) do
+		prop :id, Integer, reader: :public, writer: :public
+	end
+
+	instance = example.new(id: 1)
+	instance.id = 2
+
+	assert_equal instance.id, 2
+end
+
+test "properties can be redefined within the same class" do
+	example = Class.new(Example) do
+		prop :name, String
+		prop :name, Symbol
+	end
+
+	refute_raises { example.new(name: :john) }
+end
+
+test "properties can be redefined when either type is deferred" do
+	parent = Class.new(Example) do
+		prop :value, _Deferred { Integer }
+	end
+
+	refute_raises do
+		Class.new(parent) do
+			prop :value, Integer
+		end
+	end
+end
+
 test "prop? accepts a description" do
 	example = Class.new(Example) do
 		prop? :example, String, description: "An optional example"
@@ -270,14 +394,16 @@ test "after initialize callback" do
 end
 
 class Friend < Person
-	prop :age, Float, reader: :public
+	prop :age, _Integer(18..), reader: :public
 end
 
 test "inheritance" do
-	friend = Friend.new("John", age: 30.5)
+	friend = Friend.new("John", age: 30)
 
 	assert_equal friend.name, "John"
-	assert_equal friend.age, 30.5
+	assert_equal friend.age, 30
+
+	assert_raises(Literal::TypeError) { Friend.new("John", age: 17) }
 end
 
 class WithPredicate

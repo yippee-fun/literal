@@ -48,6 +48,26 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
 		end
 
+		if Literal::Properties === superclass && (inherited_property = superclass.literal_properties[name])
+			unless kind == inherited_property.kind
+				raise Literal::ArgumentError.new("The kind for #{name.inspect} must match the inherited kind #{inherited_property.kind.inspect}.")
+			end
+
+			{ reader:, writer:, predicate: }.each do |option, visibility|
+				inherited_visibility = inherited_property.__send__(option)
+
+				if Literal::Property::VISIBILITY_ORDER[visibility] < Literal::Property::VISIBILITY_ORDER[inherited_visibility]
+					raise Literal::ArgumentError.new("The #{option} for #{name.inspect} must be at least as visible as the inherited #{option}, which is #{inherited_visibility.inspect}.")
+				end
+			end
+
+			inherited_type = inherited_property.type
+
+			unless Literal::Types::DeferredType === type || Literal::Types::DeferredType === inherited_type || Literal.subtype?(type, inherited_type)
+				raise Literal::ArgumentError.new("The type for #{name.inspect} must be a subtype of the inherited type #{inherited_type.inspect}.")
+			end
+		end
+
 		property = __literal_property_class__.new(
 			name:,
 			type:,
