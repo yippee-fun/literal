@@ -27,31 +27,7 @@ class Literal::DataStructure
 	# not run the initializer or after_initialize.
 	def self.from_props(props)
 		instance = allocate
-		properties = literal_properties
-		matched = 0
-
-		properties.each do |property|
-			name = property.name
-
-			if props.key?(name)
-				matched += 1
-				value = props[name]
-			else
-				value = missing_prop_value(property, instance)
-			end
-
-			Literal.check(value, property.type) do |context|
-				context.fill_receiver(receiver: instance, method: ".from_props", label: name.name)
-			end
-
-			instance.instance_variable_set(:"@#{name.name}", value)
-		end
-
-		if matched < props.size
-			unknown = props.each_key.find { |key| properties[key].nil? }
-			raise NameError.new("unknown attribute: #{unknown.inspect} for #{self}")
-		end
-
+		instance.__send__(:__literal_assign_props__, props, ".from_props")
 		instance
 	end
 
@@ -110,11 +86,39 @@ class Literal::DataStructure
 	def marshal_load(payload)
 		_version, attributes, was_frozen = payload
 
-		attributes.each do |key, value|
-			instance_variable_set("@#{key}", value)
-		end
+		__literal_assign_props__(attributes, "#marshal_load")
 
 		freeze if was_frozen
+	end
+
+	# Assign final property values from a Hash keyed by Symbol property name,
+	# type checking each value but never coercing. Missing properties resolve
+	# the same way an omitted initializer parameter would; unknown keys raise.
+	private def __literal_assign_props__(props, method_name)
+		properties = self.class.literal_properties
+		matched = 0
+
+		properties.each do |property|
+			name = property.name
+
+			if props.key?(name)
+				matched += 1
+				value = props[name]
+			else
+				value = self.class.__send__(:missing_prop_value, property, self)
+			end
+
+			Literal.check(value, property.type) do |context|
+				context.fill_receiver(receiver: self, method: method_name, label: name.name)
+			end
+
+			instance_variable_set(:"@#{name.name}", value)
+		end
+
+		if matched < props.size
+			unknown = props.each_key.find { |key| properties[key].nil? }
+			raise NameError.new("unknown attribute: #{unknown.inspect} for #{self.class}")
+		end
 	end
 
 	# required method for Marshal compatibility

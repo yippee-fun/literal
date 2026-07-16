@@ -110,6 +110,29 @@ test "from_props data objects are frozen" do
 	assert_equal(FromPropsExample.from_props(x: 1, label: "home").frozen?, true)
 end
 
+test "from_pack type checks the payload" do
+	payload = Person.new(name: "John").as_pack
+	payload[1][:name] = 42
+
+	assert_raises(Literal::TypeError) { Person.from_pack(payload) }
+end
+
+test "from_pack raises NameError for unknown attributes" do
+	payload = Person.new(name: "John").as_pack
+	payload[1][:nope] = true
+
+	error = assert_raises(NameError) { Person.from_pack(payload) }
+
+	assert error.message.include?("unknown attribute: :nope")
+end
+
+test "from_pack applies defaults for missing properties" do
+	payload = FromPropsExample.new(1, 2, label: "home", note: nil).as_pack
+	payload[1].delete(:y)
+
+	assert_equal(FromPropsExample.from_pack(payload).y, 0)
+end
+
 test "== comparison with readerless properties" do
 	a = ReaderlessExample.new(name: "John")
 	b = ReaderlessExample.new(name: "John")
