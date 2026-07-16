@@ -174,6 +174,34 @@ test "properties can be added while no descendant has inherited the schema" do
 	assert_equal instance.to_h, { a: "1", b: "2" }
 end
 
+test "frozen defaults are type checked when the property is defined" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(Example) do
+			prop :age, Integer, default: "0"
+		end
+	end
+
+	assert error.message.include?("must match its type")
+end
+
+test "defaults that go through coercion are not checked at definition" do
+	example = Class.new(Example) do
+		prop :age, Integer, reader: :public, default: "0" do |value|
+			Integer(value)
+		end
+	end
+
+	assert_equal example.new.age, 0
+end
+
+test "proc defaults are not checked at definition" do
+	example = Class.new(Example) do
+		prop :age, Integer, reader: :public, default: -> { 18 }
+	end
+
+	assert_equal example.new.age, 18
+end
+
 test "properties can be redefined within the same class" do
 	example = Class.new(Example) do
 		prop :name, String

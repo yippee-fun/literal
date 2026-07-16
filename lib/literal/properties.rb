@@ -22,6 +22,10 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 
+		if !default.nil? && !(Proc === default) && !coercion && !(Literal::Types::DeferredType === type) && !(type === default)
+			raise Literal::ArgumentError.new("The default for #{name.inspect} must match its type.")
+		end
+
 		unless Literal::Property::VISIBILITY_OPTIONS.include?(reader)
 			raise Literal::ArgumentError.new("The reader must be one of #{Literal::Property::VISIBILITY_OPTIONS.map(&:inspect).join(', ')}.")
 		end
