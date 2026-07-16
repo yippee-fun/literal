@@ -27,7 +27,13 @@ class Literal::DataStructure
 	# not run the initializer or after_initialize.
 	def self.from_props(props)
 		instance = allocate
-		instance.__send__(:__literal_assign_props__, props, ".from_props")
+		matched = instance.__send__(:__literal_assign_props__, props, ".from_props")
+
+		if matched < props.size
+			unknown = props.each_key.find { |key| literal_properties[key].nil? }
+			raise NameError.new("unknown attribute: #{unknown.inspect} for #{self}")
+		end
+
 		instance
 	end
 
@@ -93,7 +99,10 @@ class Literal::DataStructure
 
 	# Assign final property values from a Hash keyed by Symbol property name,
 	# type checking each value but never coercing. Missing properties resolve
-	# the same way an omitted initializer parameter would; unknown keys raise.
+	# the same way an omitted initializer parameter would. Keys that don't
+	# match a property are ignored — for marshalling, they're values for
+	# properties that have since been removed. Returns the number of keys
+	# that matched a property so callers can be stricter.
 	private def __literal_assign_props__(props, method_name)
 		properties = self.class.literal_properties
 		matched = 0
@@ -115,10 +124,7 @@ class Literal::DataStructure
 			instance_variable_set(:"@#{name.name}", value)
 		end
 
-		if matched < props.size
-			unknown = props.each_key.find { |key| properties[key].nil? }
-			raise NameError.new("unknown attribute: #{unknown.inspect} for #{self.class}")
-		end
+		matched
 	end
 
 	# required method for Marshal compatibility

@@ -117,13 +117,14 @@ test "from_pack type checks the payload" do
 	assert_raises(Literal::TypeError) { Person.from_pack(payload) }
 end
 
-test "from_pack raises NameError for unknown attributes" do
+test "from_pack ignores attributes for properties that have been removed" do
 	payload = Person.new(name: "John").as_pack
-	payload[1][:nope] = true
+	payload[1][:removed] = true
 
-	error = assert_raises(NameError) { Person.from_pack(payload) }
+	person = Person.from_pack(payload)
 
-	assert error.message.include?("unknown attribute: :nope")
+	assert_equal(person.name, "John")
+	assert_equal(person.instance_variable_defined?(:@removed), false)
 end
 
 test "from_pack applies defaults for missing properties" do
