@@ -189,6 +189,133 @@ test "define" do
 	assert_equal(person_with_define.to_h, person.to_h)
 end
 
+class SliceExample < Literal::Data
+	prop :name, String
+	prop :id, Integer
+	prop :age, Integer, default: 0
+end
+
+test "slice returns a new data class with only the given properties" do
+	slice = SliceExample.slice(:id, :name)
+	user = slice.new(id: 1, name: "John")
+
+	assert_equal(user.id, 1)
+	assert_equal(user.name, "John")
+	assert_equal(user.to_h, { id: 1, name: "John" })
+	assert_equal(user.respond_to?(:age), false)
+end
+
+test "slices that drop properties do not subclass the sliced class" do
+	slice = SliceExample.slice(:id)
+
+	assert_equal(slice < Literal::Data, true)
+	assert_equal(slice < SliceExample, nil)
+end
+
+test "slices subclass the deepest ancestor whose properties are all in the slice" do
+	admin = Class.new(SliceExample) do
+		prop :level, Integer
+	end
+
+	slice = admin.slice(:name, :id, :age)
+
+	assert_equal(slice < SliceExample, true)
+	assert_equal(slice < admin, nil)
+	assert_equal(slice.new(name: "John", id: 1).to_h, { name: "John", id: 1, age: 0 })
+end
+
+test "slices subclass ancestors whose properties were narrowed by the sliced class" do
+	parent = Class.new(Literal::Data) do
+		prop :id, _Union(Integer, String)
+	end
+
+	child = Class.new(parent) do
+		prop :id, Integer
+		prop :name, String
+	end
+
+	slice = child.slice(:id)
+
+	assert_equal(slice < parent, true)
+	assert_equal(slice.new(id: 1).id, 1)
+	assert_raises(Literal::TypeError) { slice.new(id: "1") }
+end
+
+test "slices carry over properties redefined by the sliced class" do
+	parent = Class.new(Literal::Data) do
+		prop :name, String
+	end
+
+	child = Class.new(parent) do
+		prop :name, String, default: "Anon"
+		prop :id, Integer
+	end
+
+	slice = child.slice(:name)
+
+	assert_equal(slice < parent, true)
+	assert_equal(slice.new.name, "Anon")
+end
+
+test "slices behave like an equivalent data class" do
+	slice = SliceExample.slice(:id, :name)
+	equivalent = Literal::Data.define(id: Integer, name: String)
+
+	a = slice.new(id: 1, name: "John")
+	b = slice.new(id: 1, name: "John")
+
+	assert_equal(a, b)
+	assert_equal(a.hash, b.hash)
+	assert_equal(a.frozen?, true)
+	assert_equal(a.to_h, equivalent.new(id: 1, name: "John").to_h)
+end
+
+test "slices type check their properties" do
+	slice = SliceExample.slice(:id)
+
+	assert_raises(Literal::TypeError) { slice.new(id: "1") }
+end
+
+test "slices carry over defaults" do
+	slice = SliceExample.slice(:age)
+
+	assert_equal(slice.new.age, 0)
+end
+
+test "slices carry over coercions" do
+	klass = Class.new(Literal::Data) do
+		prop :name, String do |value|
+			"#{value}!"
+		end
+
+		prop :id, Integer
+	end
+
+	slice = klass.slice(:name)
+
+	assert_equal(slice.new(name: "John").name, "John!")
+end
+
+test "slices preserve the original property order" do
+	klass = Class.new(Literal::Data) do
+		prop :a, String, :positional
+		prop :b, String, :positional
+	end
+
+	slice = klass.slice(:b, :a)
+	instance = slice.new("first", "second")
+
+	assert_equal(instance.a, "first")
+	assert_equal(instance.b, "second")
+	assert_equal(instance.to_h, { a: "first", b: "second" })
+end
+
+test "slice raises NameError for unknown properties" do
+	error = assert_raises(NameError) { SliceExample.slice(:id, :nope) }
+
+	assert error.message.include?("unknown property: :nope")
+end
+
 test "initialize with [] method" do
 	person_a = Person.new(name: "John")
 	person_b = Person[name: "John"]

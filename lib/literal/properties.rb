@@ -67,6 +67,37 @@ module Literal::Properties
 		name
 	end
 
+	def slice(*names)
+		properties = literal_properties
+
+		names.each do |name|
+			properties[name] || raise(NameError.new("unknown property: #{name.inspect} for #{self}"))
+		end
+
+		context = Literal::SubtypeContext.new
+
+		base = self
+		until base.literal_properties.all? { |property| names.include?(property.name) && Literal.subtype?(properties[property.name].type, property.type, context:) }
+			base = base.superclass
+		end
+
+		base_properties = base.literal_properties
+		sliced = properties.select { |property| names.include?(property.name) && !property.equal?(base_properties[property.name]) }
+		origin_name = name
+
+		Class.new(base) do
+			if origin_name && respond_to?(:set_temporary_name)
+				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
+			end
+
+			sliced.each do |property|
+				literal_properties << property
+				__define_literal_methods__(property)
+				include(__literal_extension__)
+			end
+		end
+	end
+
 	def literal_properties
 		return @literal_properties if defined?(@literal_properties)
 
