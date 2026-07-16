@@ -141,6 +141,39 @@ test "narrowed redefinitions can add a writer when the inherited property had no
 	assert_equal instance.id, 2
 end
 
+test "properties cannot be added after a descendant has inherited the schema" do
+	parent = Class.new(Example) do
+		prop :a, String
+	end
+
+	grandchild = Class.new(Class.new(parent))
+	grandchild.literal_properties
+
+	error = assert_raises(Literal::ArgumentError) do
+		parent.class_eval do
+			prop :b, String
+		end
+	end
+
+	assert error.message.include?("already inherited its properties")
+end
+
+test "properties can be added while no descendant has inherited the schema" do
+	parent = Class.new(Example) do
+		prop :a, String
+	end
+
+	child = Class.new(parent)
+
+	parent.class_eval do
+		prop :b, String
+	end
+
+	instance = child.new(a: "1", b: "2")
+
+	assert_equal instance.to_h, { a: "1", b: "2" }
+end
+
 test "properties can be redefined within the same class" do
 	example = Class.new(Example) do
 		prop :name, String

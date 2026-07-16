@@ -48,6 +48,17 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
 		end
 
+		queue = subclasses
+		until queue.empty?
+			subclass = queue.shift
+
+			if subclass.instance_variable_defined?(:@literal_properties)
+				raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because #{subclass} has already inherited its properties.")
+			end
+
+			queue.concat(subclass.subclasses)
+		end
+
 		if Literal::Properties === superclass && (inherited_property = superclass.literal_properties[name])
 			unless kind == inherited_property.kind
 				raise Literal::ArgumentError.new("The kind for #{name.inspect} must match the inherited kind #{inherited_property.kind.inspect}.")
