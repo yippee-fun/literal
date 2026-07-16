@@ -77,6 +77,12 @@ module Literal
 		end
 	end
 
+	def self.Draft(type)
+		Class.new(Literal::Draft) do
+			__draft__(type)
+		end
+	end
+
 	def self.Array(type)
 		Literal::Array::Generic.new(type)
 	end
