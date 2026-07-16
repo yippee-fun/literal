@@ -127,7 +127,7 @@ class Literal::DataStructure
 	end
 
 	def ==(other)
-		self.class === other && other.class.literal_properties.empty?
+		self.class == other.class
 	end
 
 	alias_method :eql?, :==

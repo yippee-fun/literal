@@ -316,6 +316,22 @@ test "slice raises NameError for unknown properties" do
 	assert error.message.include?("unknown property: :nope")
 end
 
+test "instances of a subclass are never equal to instances of the parent" do
+	parent = Class.new(Literal::Data) do
+		prop :name, String
+	end
+
+	child = Class.new(parent)
+
+	a = parent.new(name: "John")
+	b = child.new(name: "John")
+
+	refute_equal(a, b)
+	refute_equal(b, a)
+	assert_equal(a.eql?(b), false)
+	assert_equal(a.hash == b.hash, false)
+end
+
 test "initialize with [] method" do
 	person_a = Person.new(name: "John")
 	person_b = Person[name: "John"]
