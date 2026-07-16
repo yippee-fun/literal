@@ -56,6 +56,22 @@ test "protected writer" do
 	assert_equal object.__send__(:example=, "world"), "world"
 end
 
+test "writers apply coercion" do
+	example = Class.new(Example) do
+		prop :example, String, writer: :public, reader: :public do |value|
+			value.to_s.strip
+		end
+	end
+
+	object = example.new(example: " hello ")
+
+	assert_equal object.example, "hello"
+
+	object.example = " world "
+
+	assert_equal object.example, "world"
+end
+
 test "public writer" do
 	example = Class.new(Example) do
 		prop :example, String, writer: :public, reader: :public

@@ -131,9 +131,16 @@ class Literal::Property
 			" def " <<
 			@name.name <<
 			"=(value)\n" <<
-			"  self.class.literal_properties[:" <<
+			"  __property__ = self.class.literal_properties[:" <<
 			@name.name <<
-			"].check_writer(self, value)\n" <<
+			"]\n"
+
+		if @coercion
+			buffer << "  value = __property__.coerce(value, context: self)\n"
+		end
+
+		buffer <<
+			"  __property__.check_writer(self, value)\n" <<
 			"  @" << @name.name << " = value\n" <<
 			"rescue Literal::TypeError => error\n  error.set_backtrace(caller(1))\n  raise\n" <<
 			"end\n"
