@@ -280,6 +280,46 @@ class SerializationBrokenCodec < Literal::Serializer::Codec
 	end
 end
 
+class SerializationPriority < Literal::Enum(Integer)
+	Low = new(1)
+	Medium = new(2)
+	High = new(3)
+
+	__after_defined__ if RUBY_ENGINE == "truffleruby"
+end
+
+class SerializationToggle < Literal::Enum(Literal::Types::BooleanType::Instance)
+	On = new(true)
+	Off = new(false)
+
+	__after_defined__ if RUBY_ENGINE == "truffleruby"
+end
+
+class SerializationSuit < Literal::Enum(Symbol)
+	Hearts = new(:hearts)
+	Spades = new(:spades)
+
+	__after_defined__ if RUBY_ENGINE == "truffleruby"
+end
+
+class SerializationCode < Literal::Enum(Literal::Types::UnionType.new([String, Integer]))
+	Slug = new("welcome")
+	Number = new(200)
+
+	__after_defined__ if RUBY_ENGINE == "truffleruby"
+end
+
+class SerializationAmbiguousEnum < Literal::Enum(Literal::Types::UnionType.new([String, Date]))
+	Text = new("text")
+
+	__after_defined__ if RUBY_ENGINE == "truffleruby"
+end
+
+class SerializationTask < Literal::Data
+	prop :name, String
+	prop :priority, SerializationPriority
+end
+
 Example = Literal::SerializationContext.new
 
 test "serialization context includes default serializers" do
@@ -2536,4 +2576,129 @@ test "big nested serialization roundtrip" do
 		})
 
 	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "enum json schema uses the backing type schema with the enum values" do
+	assert_equal(
+		Example.json_schema(SerializationPriority),
+		{ "type" => "integer", "enum" => [1, 2, 3] },
+	)
+
+	assert_equal(
+		Example.json_schema(SerializationToggle),
+		{ "type" => "boolean", "enum" => [true, false] },
+	)
+end
+
+test "enum serialization roundtrip" do
+	type = SerializationPriority
+	serialized = Example.serialize(SerializationPriority::Medium, type:)
+
+	assert_equal(serialized, 2)
+	assert_equal(Example.deserialize(serialized, type:), SerializationPriority::Medium)
+end
+
+test "boolean-backed enum serialization roundtrip" do
+	type = SerializationToggle
+	serialized = Example.serialize(SerializationToggle::On, type:)
+
+	assert_equal(serialized, true)
+	assert_equal(Example.deserialize(serialized, type:), SerializationToggle::On)
+end
+
+test "symbol-backed enum serialization roundtrip" do
+	type = SerializationSuit
+	serialized = Example.serialize(SerializationSuit::Hearts, type:)
+
+	assert_equal(serialized, "hearts")
+	assert_equal(Example.deserialize(serialized, type:), SerializationSuit::Hearts)
+end
+
+test "symbol-backed enum json schema serializes the enum values" do
+	# The enum values must be serialized through the backing type, so a
+	# Symbol-backed enum should list JSON strings rather than raw symbols.
+	assert_equal(
+		Example.json_schema(SerializationSuit),
+		{ "type" => "string", "enum" => ["hearts", "spades"] },
+	)
+end
+
+test "enum deserialization coerces the raw backing value into a member" do
+	assert_equal(Example.deserialize(3, type: SerializationPriority), SerializationPriority::High)
+	assert_equal(Example.deserialize(false, type: SerializationToggle), SerializationToggle::Off)
+end
+
+test "enum property serialization roundtrip" do
+	type = SerializationTask
+	original = SerializationTask.new(name: "Ship", priority: SerializationPriority::High)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "name" => "Ship", "priority" => 3 })
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "enum property json schema" do
+	assert_equal(
+		Example.json_schema(SerializationTask),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"priority" => { "type" => "integer", "enum" => [1, 2, 3] },
+			},
+			"required" => ["name", "priority"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "enum types are serializable" do
+	assert Example.kind === SerializationPriority
+	assert Example.kind === SerializationToggle
+	assert Example.kind === SerializationSuit
+end
+
+test "union-backed enum serialization roundtrip" do
+	type = SerializationCode
+
+	slug_serialized = Example.serialize(SerializationCode::Slug, type:)
+	number_serialized = Example.serialize(SerializationCode::Number, type:)
+
+	assert_equal(slug_serialized, "welcome")
+	assert_equal(number_serialized, 200)
+	assert_equal(Example.deserialize(slug_serialized, type:), SerializationCode::Slug)
+	assert_equal(Example.deserialize(number_serialized, type:), SerializationCode::Number)
+end
+
+test "union-backed enum is serializable when its backing union is" do
+	assert Example.kind === SerializationCode
+end
+
+test "union-backed enum json schema intersects the backing schema with the enum values" do
+	assert_equal(
+		Example.json_schema(SerializationCode),
+		{
+			"oneOf" => [
+				{ "type" => "string" },
+				{ "type" => "integer" },
+			],
+			"enum" => ["welcome", 200],
+		},
+	)
+end
+
+test "an enum is not serializable when its backing type is not" do
+	refute Example.kind === SerializationAmbiguousEnum
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(SerializationAmbiguousEnum) }
+	assert error.message.include?("SerializationAmbiguousEnum")
+	assert error.message.include?("_Union(String, Date)")
+end
+
+test "a structure carrying an unserializable enum is not serializable" do
+	holder = Class.new(Literal::Data)
+	holder.prop :code, SerializationAmbiguousEnum
+
+	refute Example.kind === holder
+	assert_raises(Literal::ArgumentError) { Example.json_schema(holder) }
 end
