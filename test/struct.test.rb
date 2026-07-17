@@ -1,5 +1,14 @@
 # frozen_string_literal: true
 
+test "props support predicates" do
+	example = Class.new(Literal::Struct) do
+		prop :enabled, _Boolean, predicate: :public
+	end
+
+	assert_equal example.new(enabled: true).enabled?, true
+	assert_equal example.new(enabled: false).enabled?, false
+end
+
 class Person < Literal::Struct
 	prop :name, String
 end
