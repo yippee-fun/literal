@@ -62,23 +62,17 @@ class Literal::Draft < Literal::Struct
 		private def __draft_property__(property)
 			original_coercion = property.coercion
 
-			draft_property = Literal::Property.new(
-				name: property.name,
-				type: Literal::Types._Union(property.type, Literal::Undefined),
-				kind: property.kind,
-				reader: :public,
-				writer: :public,
+			prop(
+				property.name,
+				Literal::Types._Union(property.type, Literal::Undefined),
+				property.kind,
 				predicate: property.predicate,
 				default: Literal::Undefined,
 				description: property.description,
-				coercion: original_coercion && proc { |value|
+				&(original_coercion && proc { |value|
 					(Literal::Undefined == value) ? value : instance_exec(value, &original_coercion)
-				},
+				})
 			)
-
-			literal_properties << draft_property
-			__define_literal_methods__(draft_property)
-			include(__literal_extension__)
 		end
 	end
 
