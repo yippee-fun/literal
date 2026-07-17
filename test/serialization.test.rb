@@ -2702,3 +2702,52 @@ test "a structure carrying an unserializable enum is not serializable" do
 	refute Example.kind === holder
 	assert_raises(Literal::ArgumentError) { Example.json_schema(holder) }
 end
+
+test "an enum member is serializable through the context's aggregate type" do
+	assert Example.type === SerializationPriority::Medium
+
+	serialized = Example.serialize(SerializationPriority::Medium, type: Example.type)
+
+	assert_equal(serialized, 2)
+end
+
+test "enum in a union with a distinguishable type roundtrips" do
+	type = _Union(SerializationPriority, String)
+
+	member_serialized = Example.serialize(SerializationPriority::High, type:)
+	string_serialized = Example.serialize("none", type:)
+
+	assert_equal(member_serialized, 3)
+	assert_equal(string_serialized, "none")
+	assert_equal(Example.deserialize(member_serialized, type:), SerializationPriority::High)
+	assert_equal(Example.deserialize(string_serialized, type:), "none")
+end
+
+test "enum in a union json schema nests the enum schema as a member" do
+	assert_equal(
+		Example.json_schema(_Union(SerializationPriority, String)),
+		{
+			"oneOf" => [
+				{ "type" => "integer", "enum" => [1, 2, 3] },
+				{ "type" => "string" },
+			],
+		},
+	)
+end
+
+test "an enum that collides with a sibling union member is rejected" do
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(_Union(SerializationSuit, String))
+	end
+
+	assert error.message.include?("SerializationSuit")
+	assert error.message.include?("String")
+end
+
+test "serializing a value that is not a member of the enum raises" do
+	assert_raises(Literal::ArgumentError) { Example.serialize("red", type: SerializationSuit) }
+end
+
+test "deserializing a value outside the enum raises" do
+	assert_raises(ArgumentError) { Example.deserialize("green", type: SerializationSuit) }
+end

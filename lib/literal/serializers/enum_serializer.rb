@@ -7,6 +7,14 @@ class Literal::EnumSerializer < Literal::Serializer
     [backing_type(type)]
   end
 
+  def json_type(type)
+    json_type_for(backing_type(type))
+  end
+
+  def value_type(value)
+    value.class if Literal::Enum === value
+  end
+
   def json_schema(type, generator: nil)
     backing = backing_type(type)
     values = type.values.map { |value| serialize_contents(value, type: backing) }
