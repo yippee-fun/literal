@@ -18,6 +18,7 @@ class Literal::SerializationContext
 		Literal::TaggedUnionSerializer,
 		Literal::UnionSerializer,
 		Literal::HashSerializer,
+		Literal::EnumSerializer,
 		Literal::MapSerializer,
 		Literal::TupleSerializer,
 		Literal::ArraySerializer,
