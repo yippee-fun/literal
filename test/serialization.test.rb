@@ -2614,6 +2614,15 @@ test "symbol-backed enum serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), SerializationSuit::Hearts)
 end
 
+test "symbol-backed enum json schema serializes the enum values" do
+	# The enum values must be serialized through the backing type, so a
+	# Symbol-backed enum should list JSON strings rather than raw symbols.
+	assert_equal(
+		Example.json_schema(SerializationSuit),
+		{ "type" => "string", "enum" => ["hearts", "spades"] },
+	)
+end
+
 test "enum deserialization coerces the raw backing value into a member" do
 	assert_equal(Example.deserialize(3, type: SerializationPriority), SerializationPriority::High)
 	assert_equal(Example.deserialize(false, type: SerializationToggle), SerializationToggle::Off)

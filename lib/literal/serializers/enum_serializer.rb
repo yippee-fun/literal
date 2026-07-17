@@ -8,7 +8,10 @@ class Literal::EnumSerializer < Literal::Serializer
   end
 
   def json_schema(type, generator: nil)
-    { **json_schema_for(backing_type(type), generator:), "enum" => type.values }
+    backing = backing_type(type)
+    values = type.values.map { |value| serialize_contents(value, type: backing) }
+
+    { **json_schema_for(backing, generator:), "enum" => values }
   end
 
   def serialize(value, type:)
