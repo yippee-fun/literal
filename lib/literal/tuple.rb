@@ -23,6 +23,11 @@ class Literal::Tuple
 
 		attr_reader :types
 
+		# The primitive collection type this maps to, wrapping the member types.
+		def primitive_type
+			Literal::Types._Tuple(*@types)
+		end
+
 		def new(*values)
 			Literal::Tuple.new(values, types: @types)
 		end

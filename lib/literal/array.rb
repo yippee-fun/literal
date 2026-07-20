@@ -23,6 +23,11 @@ class Literal::Array
 
 		attr_reader :type
 
+		# The primitive collection type this maps to, wrapping the member type.
+		def primitive_type
+			Literal::Types._Array(@type)
+		end
+
 		def new(*values)
 			Literal::Array.new(values, type: @type)
 		end

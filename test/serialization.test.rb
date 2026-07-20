@@ -2751,3 +2751,246 @@ end
 test "deserializing a value outside the enum raises" do
 	assert_raises(ArgumentError) { Example.deserialize("green", type: SerializationSuit) }
 end
+
+class SerializationCollections < Literal::Data
+	prop :tags, Literal::Array(String)
+	prop :counts, Literal::Hash(Symbol, Integer)
+	prop :pair, Literal::Tuple(String, Integer)
+end
+
+test "Literal::Array serialization roundtrip" do
+	type = Literal::Array(String)
+	original = type.new("a", "b")
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["a", "b"])
+	assert_equal(serialized, Example.serialize(["a", "b"], type: _Array(String)))
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Array === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "Literal::Set serialization roundtrip" do
+	type = Literal::Set(Symbol)
+	original = type.new(:a, :b)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["a", "b"])
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Set === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "Literal::Hash serialization roundtrip" do
+	type = Literal::Hash(Symbol, Integer)
+	original = type.new({ a: 1, b: 2 })
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "a" => 1, "b" => 2 })
+	assert_equal(serialized, Example.serialize({ a: 1, b: 2 }, type: _Hash(Symbol, Integer)))
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Hash === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "Literal::Tuple serialization roundtrip" do
+	type = Literal::Tuple(String, Integer)
+	original = type.new("a", 1)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["a", 1])
+	assert_equal(serialized, Example.serialize(["a", 1], type: _Tuple(String, Integer)))
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Tuple === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "collection instances serialize via the aggregate type" do
+	assert_equal(Example.serialize(Literal::Array(String).new("a"), type: Example.type), ["a"])
+	assert_equal(Example.serialize(Literal::Set(Symbol).new(:a), type: Example.type), ["a"])
+	assert_equal(Example.serialize(Literal::Hash(Symbol, Integer).new({ a: 1 }), type: Example.type), { "a" => 1 })
+	assert_equal(Example.serialize(Literal::Tuple(String, Integer).new("a", 1), type: Example.type), ["a", 1])
+end
+
+test "collection class json schema matches the equivalent type descriptor" do
+	assert_equal(Example.json_schema(Literal::Array(String)), Example.json_schema(_Array(String)))
+	assert_equal(Example.json_schema(Literal::Set(String)), Example.json_schema(_Set(String)))
+	assert_equal(Example.json_schema(Literal::Hash(Symbol, Integer)), Example.json_schema(_Hash(Symbol, Integer)))
+	assert_equal(Example.json_schema(Literal::Tuple(String, Integer)), Example.json_schema(_Tuple(String, Integer)))
+end
+
+test "nested collection classes serialize" do
+	type = Literal::Array(Literal::Array(String))
+	original = type.new(Literal::Array(String).new("a"))
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, [["a"]])
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "records with collection class props are serializable" do
+	record = SerializationCollections.new(
+		tags: Literal::Array(String).new("x", "y"),
+		counts: Literal::Hash(Symbol, Integer).new({ a: 1 }),
+		pair: Literal::Tuple(String, Integer).new("p", 2),
+	)
+
+	serialized = Example.serialize(record, type: SerializationCollections)
+	assert_equal(serialized, { "tags" => ["x", "y"], "counts" => { "a" => 1 }, "pair" => ["p", 2] })
+
+	deserialized = Example.deserialize(serialized, type: SerializationCollections)
+	assert_equal(deserialized, record)
+	assert(Literal::Array === deserialized.tags)
+
+	assert_equal(
+		Example.json_schema(SerializationCollections),
+		{
+			"type" => "object",
+			"properties" => {
+				"tags" => { "type" => "array", "items" => { "type" => "string" } },
+				"counts" => {
+					"type" => "object",
+					"propertyNames" => { "type" => "string" },
+					"additionalProperties" => { "type" => "integer" },
+				},
+				"pair" => {
+					"type" => "array",
+					"prefixItems" => [{ "type" => "string" }, { "type" => "integer" }],
+					"minItems" => 2,
+					"maxItems" => 2,
+				},
+			},
+			"required" => ["tags", "counts", "pair"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "a native array cannot be serialized as a Literal::Array collection type" do
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize(["a"], type: Literal::Array(String))
+	end
+end
+
+test "constrained collection class serialization roundtrip" do
+	array_type = _Constraint(Literal::Array(String), size: 3)
+	array = Literal::Array(String).new("a", "b", "c")
+	serialized = Example.serialize(array, type: array_type)
+
+	assert_equal(serialized, ["a", "b", "c"])
+	assert(Literal::Array === Example.deserialize(serialized, type: array_type))
+	assert_equal(Example.deserialize(serialized, type: array_type), array)
+
+	hash_type = _Constraint(Literal::Hash(Symbol, Integer), size: 2)
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+	serialized = Example.serialize(hash, type: hash_type)
+
+	assert_equal(serialized, { "a" => 1, "b" => 2 })
+	assert(Literal::Hash === Example.deserialize(serialized, type: hash_type))
+end
+
+test "constrained collection class rejects values violating the constraint" do
+	array_type = _Constraint(Literal::Array(String), size: 3)
+
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize(Literal::Array(String).new("a"), type: array_type)
+	end
+end
+
+test "constrained collection class json schema includes the size constraint" do
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Array(String), size: 3)),
+		{ "type" => "array", "items" => { "type" => "string" }, "minItems" => 3, "maxItems" => 3 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Set(String), size: 1..5)),
+		{ "type" => "array", "uniqueItems" => true, "items" => { "type" => "string" }, "minItems" => 1, "maxItems" => 5 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Hash(Symbol, Integer), size: 2)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+			"minProperties" => 2,
+			"maxProperties" => 2,
+		},
+	)
+
+	# Identical to constraining the equivalent type descriptor.
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Array(String), size: 3)),
+		Example.json_schema(_Constraint(_Array(String), size: 3)),
+	)
+end
+
+test "Generic#primitive_type wraps the member types in the primitive collection type" do
+	assert_equal(Literal::Array(String).primitive_type.inspect, _Array(String).inspect)
+	assert_equal(Literal::Set(String).primitive_type.inspect, _Set(String).inspect)
+	assert_equal(Literal::Hash(Symbol, Integer).primitive_type.inspect, _Hash(Symbol, Integer).inspect)
+	assert_equal(Literal::Tuple(String, Integer).primitive_type.inspect, _Tuple(String, Integer).inspect)
+
+	# Member types (including constrained ones) are carried through unchanged.
+	assert_equal(
+		Literal::Array(_String(size: 10)).primitive_type.inspect,
+		_Array(_Constraint(String, size: 10)).inspect,
+	)
+end
+
+test "the aggregate type matches Literal collection instances" do
+	assert Example.type === Literal::Array(String).new("a")
+	assert Example.type === Literal::Set(Symbol).new(:a)
+	assert Example.type === Literal::Hash(Symbol, Integer).new({ a: 1 })
+	assert Example.type === Literal::Tuple(String, Integer).new("a", 1)
+
+	# Native collections still match.
+	assert Example.type === [1, 2, 3]
+	assert Example.type === Set[1, 2, 3]
+	assert Example.type === { a: 1 }
+end
+
+class SerializationCollectionTree < Literal::Data
+	prop :value, String
+	prop :children, Literal::Array(_Deferred { SerializationCollectionTree })
+end
+
+test "a self-referential type reaching a collection class is serializable" do
+	assert Example.serializable_type?(SerializationCollectionTree)
+
+	schema = Example.json_schema(SerializationCollectionTree)
+	assert_equal(schema["properties"]["children"]["type"], "array")
+end
+
+test "a constraint combining a collection class with another object constraint roundtrips" do
+	# object_constraints = [Literal::Array::Generic, Enumerable]; primitive_type
+	# must map only the Generic and leave the bare module untouched.
+	type = _Constraint(Literal::Array(String), Enumerable, size: 2)
+	array = Literal::Array(String).new("a", "b")
+	serialized = Example.serialize(array, type:)
+
+	assert_equal(serialized, ["a", "b"])
+	assert(Literal::Array === Example.deserialize(serialized, type:))
+end
+
+test "a constrained nested collection class roundtrips" do
+	type = _Constraint(Literal::Array(Literal::Array(String)), size: 1)
+	array = Literal::Array(Literal::Array(String)).new(Literal::Array(String).new("a"))
+	serialized = Example.serialize(array, type:)
+
+	assert_equal(serialized, [["a"]])
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Array === deserialized)
+	assert(Literal::Array === deserialized.to_a.first)
+
+	assert_equal(
+		Example.json_schema(type),
+		{ "type" => "array", "items" => { "type" => "array", "items" => { "type" => "string" } }, "minItems" => 1, "maxItems" => 1 },
+	)
+end

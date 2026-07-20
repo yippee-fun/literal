@@ -23,6 +23,11 @@ class Literal::Set
 
 		attr_reader :type
 
+		# The primitive collection type this maps to, wrapping the member type.
+		def primitive_type
+			Literal::Types._Set(@type)
+		end
+
 		def new(*values)
 			Literal::Set.new(::Set.new(values), type: @type)
 		end
