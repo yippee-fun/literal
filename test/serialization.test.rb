@@ -2875,3 +2875,57 @@ test "a native array cannot be serialized as a Literal::Array collection type" d
 		Example.serialize(["a"], type: Literal::Array(String))
 	end
 end
+
+test "constrained collection class serialization roundtrip" do
+	array_type = _Constraint(Literal::Array(String), size: 3)
+	array = Literal::Array(String).new("a", "b", "c")
+	serialized = Example.serialize(array, type: array_type)
+
+	assert_equal(serialized, ["a", "b", "c"])
+	assert(Literal::Array === Example.deserialize(serialized, type: array_type))
+	assert_equal(Example.deserialize(serialized, type: array_type), array)
+
+	hash_type = _Constraint(Literal::Hash(Symbol, Integer), size: 2)
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+	serialized = Example.serialize(hash, type: hash_type)
+
+	assert_equal(serialized, { "a" => 1, "b" => 2 })
+	assert(Literal::Hash === Example.deserialize(serialized, type: hash_type))
+end
+
+test "constrained collection class rejects values violating the constraint" do
+	array_type = _Constraint(Literal::Array(String), size: 3)
+
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize(Literal::Array(String).new("a"), type: array_type)
+	end
+end
+
+test "constrained collection class json schema includes the size constraint" do
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Array(String), size: 3)),
+		{ "type" => "array", "items" => { "type" => "string" }, "minItems" => 3, "maxItems" => 3 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Set(String), size: 1..5)),
+		{ "type" => "array", "uniqueItems" => true, "items" => { "type" => "string" }, "minItems" => 1, "maxItems" => 5 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Hash(Symbol, Integer), size: 2)),
+		{
+			"type" => "object",
+			"propertyNames" => { "type" => "string" },
+			"additionalProperties" => { "type" => "integer" },
+			"minProperties" => 2,
+			"maxProperties" => 2,
+		},
+	)
+
+	# Identical to constraining the equivalent type descriptor.
+	assert_equal(
+		Example.json_schema(_Constraint(Literal::Array(String), size: 3)),
+		Example.json_schema(_Constraint(_Array(String), size: 3)),
+	)
+end

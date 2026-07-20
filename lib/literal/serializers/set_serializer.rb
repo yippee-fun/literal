@@ -56,13 +56,13 @@ class Literal::SetSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		member_type = set_type_for(type).type
+		resolved = set_type_for(type)
 
 		result = raw.to_set do |item|
-			deserialize_contents(item, type: member_type)
+			deserialize_contents(item, type: resolved.type)
 		end
 
-		(Literal::Set::Generic === type) ? type.coerce(result) : result
+		(Literal::Set::Generic === resolved) ? resolved.coerce(result) : result
 	end
 
 	private def set_type_for(type)
@@ -70,7 +70,7 @@ class Literal::SetSerializer < Literal::Serializer
 		when Literal::Types::SetType, Literal::Set::Generic
 			type
 		when Literal::Types::ConstraintType
-			type.object_constraints.find { |constraint| Literal::Types::SetType === constraint }
+			type.object_constraints.find { |constraint| Literal::Types::SetType === constraint || Literal::Set::Generic === constraint }
 		end
 	end
 end

@@ -23,7 +23,7 @@ class Literal::Serializer::HashType
 		when Literal::Types::HashType, Literal::Hash::Generic
 			true
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| Literal::Types::HashType === constraint }
+			other.object_constraints.any? { |constraint| Literal::Types::HashType === constraint || Literal::Hash::Generic === constraint }
 		else
 			false
 		end
@@ -123,7 +123,7 @@ class Literal::HashSerializer < Literal::Serializer
 			]
 		end
 
-		(Literal::Hash::Generic === type) ? type.coerce(result) : result
+		(Literal::Hash::Generic === hash_type) ? hash_type.coerce(result) : result
 	end
 
 	# Hashes serialize as JSON objects when their keys serialize as strings, and
@@ -150,7 +150,7 @@ class Literal::HashSerializer < Literal::Serializer
 		when Literal::Types::HashType, Literal::Hash::Generic
 			type
 		when Literal::Types::ConstraintType
-			type.object_constraints.find { |constraint| Literal::Types::HashType === constraint }
+			type.object_constraints.find { |constraint| Literal::Types::HashType === constraint || Literal::Hash::Generic === constraint }
 		end
 	end
 end

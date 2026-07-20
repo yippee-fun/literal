@@ -21,7 +21,7 @@ class Literal::Serializer::ArrayType
 		when Literal::Types::ArrayType, Literal::Array::Generic
 			true
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint }
+			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint || Literal::Array::Generic === constraint }
 		else
 			false
 		end
@@ -84,13 +84,13 @@ class Literal::ArraySerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		member_type = array_type_for(type).type
+		resolved = array_type_for(type)
 
 		result = raw.map do |item|
-			deserialize_contents(item, type: member_type)
+			deserialize_contents(item, type: resolved.type)
 		end
 
-		(Literal::Array::Generic === type) ? type.coerce(result) : result
+		(Literal::Array::Generic === resolved) ? resolved.coerce(result) : result
 	end
 
 	private def array_type_for(type)
@@ -98,7 +98,7 @@ class Literal::ArraySerializer < Literal::Serializer
 		when Literal::Types::ArrayType, Literal::Array::Generic
 			type
 		when Literal::Types::ConstraintType
-			type.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint }
+			type.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint || Literal::Array::Generic === constraint }
 		end
 	end
 end
