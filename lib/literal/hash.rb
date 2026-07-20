@@ -25,6 +25,11 @@ class Literal::Hash
 
 		attr_reader :key_type, :value_type
 
+		# The primitive collection type this maps to, wrapping the member types.
+		def primitive_type
+			Literal::Types._Hash(@key_type, @value_type)
+		end
+
 		def new(value = {})
 			Literal::Hash.new(value, key_type: @key_type, value_type: @value_type)
 		end

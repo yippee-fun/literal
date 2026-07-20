@@ -20,10 +20,10 @@ class Literal::Serializer::HashType
 
 	def matches?(other)
 		case other
-		when Literal::Types::HashType, Literal::Hash::Generic
+		when Literal::Types::HashType
 			true
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| Literal::Types::HashType === constraint || Literal::Hash::Generic === constraint }
+			other.object_constraints.any? { |constraint| Literal::Types::HashType === constraint }
 		else
 			false
 		end
@@ -56,11 +56,7 @@ class Literal::HashSerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		if Literal::Hash === value
-			Literal.Hash(value.__key_type__, value.__value_type__)
-		elsif type === value
-			_Hash(@context.type, @context.type)
-		end
+		_Hash(@context.type, @context.type) if type === value
 	end
 
 	def json_schema(type, generator: nil)
@@ -95,9 +91,7 @@ class Literal::HashSerializer < Literal::Serializer
 		key_type = hash_type.key_type
 		value_type = hash_type.value_type
 
-		source = (Literal::Hash === value) ? value.__value__ : value
-
-		serialized_entries = source.map do |key, item|
+		serialized_entries = value.map do |key, item|
 			[
 				serialize_contents(key, type: key_type),
 				serialize_contents(item, type: value_type),
@@ -116,14 +110,12 @@ class Literal::HashSerializer < Literal::Serializer
 		key_type = hash_type.key_type
 		value_type = hash_type.value_type
 
-		result = raw.to_h do |key, item|
+		raw.to_h do |key, item|
 			[
 				deserialize_contents(key, type: key_type),
 				deserialize_contents(item, type: value_type),
 			]
 		end
-
-		(Literal::Hash::Generic === hash_type) ? hash_type.coerce(result) : result
 	end
 
 	# Hashes serialize as JSON objects when their keys serialize as strings, and
@@ -147,10 +139,10 @@ class Literal::HashSerializer < Literal::Serializer
 
 	private def hash_type_for(type)
 		case type
-		when Literal::Types::HashType, Literal::Hash::Generic
+		when Literal::Types::HashType
 			type
 		when Literal::Types::ConstraintType
-			type.object_constraints.find { |constraint| Literal::Types::HashType === constraint || Literal::Hash::Generic === constraint }
+			type.object_constraints.find { |constraint| Literal::Types::HashType === constraint }
 		end
 	end
 end

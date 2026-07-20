@@ -2929,3 +2929,68 @@ test "constrained collection class json schema includes the size constraint" do
 		Example.json_schema(_Constraint(_Array(String), size: 3)),
 	)
 end
+
+test "Generic#primitive_type wraps the member types in the primitive collection type" do
+	assert_equal(Literal::Array(String).primitive_type.inspect, _Array(String).inspect)
+	assert_equal(Literal::Set(String).primitive_type.inspect, _Set(String).inspect)
+	assert_equal(Literal::Hash(Symbol, Integer).primitive_type.inspect, _Hash(Symbol, Integer).inspect)
+	assert_equal(Literal::Tuple(String, Integer).primitive_type.inspect, _Tuple(String, Integer).inspect)
+
+	# Member types (including constrained ones) are carried through unchanged.
+	assert_equal(
+		Literal::Array(_String(size: 10)).primitive_type.inspect,
+		_Array(_Constraint(String, size: 10)).inspect,
+	)
+end
+
+test "the aggregate type matches Literal collection instances" do
+	assert Example.type === Literal::Array(String).new("a")
+	assert Example.type === Literal::Set(Symbol).new(:a)
+	assert Example.type === Literal::Hash(Symbol, Integer).new({ a: 1 })
+	assert Example.type === Literal::Tuple(String, Integer).new("a", 1)
+
+	# Native collections still match.
+	assert Example.type === [1, 2, 3]
+	assert Example.type === Set[1, 2, 3]
+	assert Example.type === { a: 1 }
+end
+
+class SerializationCollectionTree < Literal::Data
+	prop :value, String
+	prop :children, Literal::Array(_Deferred { SerializationCollectionTree })
+end
+
+test "a self-referential type reaching a collection class is serializable" do
+	assert Example.serializable_type?(SerializationCollectionTree)
+
+	schema = Example.json_schema(SerializationCollectionTree)
+	assert_equal(schema["properties"]["children"]["type"], "array")
+end
+
+test "a constraint combining a collection class with another object constraint roundtrips" do
+	# object_constraints = [Literal::Array::Generic, Enumerable]; primitive_type
+	# must map only the Generic and leave the bare module untouched.
+	type = _Constraint(Literal::Array(String), Enumerable, size: 2)
+	array = Literal::Array(String).new("a", "b")
+	serialized = Example.serialize(array, type:)
+
+	assert_equal(serialized, ["a", "b"])
+	assert(Literal::Array === Example.deserialize(serialized, type:))
+end
+
+test "a constrained nested collection class roundtrips" do
+	type = _Constraint(Literal::Array(Literal::Array(String)), size: 1)
+	array = Literal::Array(Literal::Array(String)).new(Literal::Array(String).new("a"))
+	serialized = Example.serialize(array, type:)
+
+	assert_equal(serialized, [["a"]])
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Array === deserialized)
+	assert(Literal::Array === deserialized.to_a.first)
+
+	assert_equal(
+		Example.json_schema(type),
+		{ "type" => "array", "items" => { "type" => "array", "items" => { "type" => "string" } }, "minItems" => 1, "maxItems" => 1 },
+	)
+end

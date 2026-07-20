@@ -18,10 +18,10 @@ class Literal::Serializer::ArrayType
 
 	def matches?(other)
 		case other
-		when Literal::Types::ArrayType, Literal::Array::Generic
+		when Literal::Types::ArrayType
 			true
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint || Literal::Array::Generic === constraint }
+			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint }
 		else
 			false
 		end
@@ -53,17 +53,13 @@ class Literal::ArraySerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		if Literal::Array === value
-			Literal.Array(value.__type__)
-		elsif type === value
-			_Array(@context.type)
-		end
+		_Array(@context.type) if type === value
 	end
 
 	def json_schema(type, generator: nil)
 		{ "type" => "array" }.tap do |schema|
 			case type
-			when Literal::Types::ArrayType, Literal::Array::Generic
+			when Literal::Types::ArrayType
 				schema["items"] = json_schema_for(type.type, generator:)
 			when Literal::Types::ConstraintType
 				array_type = array_type_for(type)
@@ -76,29 +72,26 @@ class Literal::ArraySerializer < Literal::Serializer
 
 	def serialize(value, type:)
 		member_type = array_type_for(type).type
-		source = (Literal::Array === value) ? value.__value__ : value
 
-		source.map do |item|
+		value.map do |item|
 			serialize_contents(item, type: member_type)
 		end
 	end
 
 	def deserialize(raw, type:)
-		resolved = array_type_for(type)
+		member_type = array_type_for(type).type
 
-		result = raw.map do |item|
-			deserialize_contents(item, type: resolved.type)
+		raw.map do |item|
+			deserialize_contents(item, type: member_type)
 		end
-
-		(Literal::Array::Generic === resolved) ? resolved.coerce(result) : result
 	end
 
 	private def array_type_for(type)
 		case type
-		when Literal::Types::ArrayType, Literal::Array::Generic
+		when Literal::Types::ArrayType
 			type
 		when Literal::Types::ConstraintType
-			type.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint || Literal::Array::Generic === constraint }
+			type.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint }
 		end
 	end
 end

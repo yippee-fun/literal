@@ -24,18 +24,10 @@ class Literal::SetSerializer < Literal::Serializer
 		"array"
 	end
 
-	def value_type(value)
-		if Literal::Set === value
-			Literal.Set(value.__type__)
-		elsif type === value
-			type
-		end
-	end
-
 	def json_schema(type, generator: nil)
 		{ "type" => "array", "uniqueItems" => true }.tap do |schema|
 			case type
-			when Literal::Types::SetType, Literal::Set::Generic
+			when Literal::Types::SetType
 				schema["items"] = json_schema_for(type.type, generator:)
 			when Literal::Types::ConstraintType
 				set_type = set_type_for(type)
@@ -48,29 +40,26 @@ class Literal::SetSerializer < Literal::Serializer
 
 	def serialize(value, type:)
 		member_type = set_type_for(type).type
-		source = (Literal::Set === value) ? value.__value__ : value
 
-		source.map do |item|
+		value.map do |item|
 			serialize_contents(item, type: member_type)
 		end
 	end
 
 	def deserialize(raw, type:)
-		resolved = set_type_for(type)
+		member_type = set_type_for(type).type
 
-		result = raw.to_set do |item|
-			deserialize_contents(item, type: resolved.type)
+		raw.to_set do |item|
+			deserialize_contents(item, type: member_type)
 		end
-
-		(Literal::Set::Generic === resolved) ? resolved.coerce(result) : result
 	end
 
 	private def set_type_for(type)
 		case type
-		when Literal::Types::SetType, Literal::Set::Generic
+		when Literal::Types::SetType
 			type
 		when Literal::Types::ConstraintType
-			type.object_constraints.find { |constraint| Literal::Types::SetType === constraint || Literal::Set::Generic === constraint }
+			type.object_constraints.find { |constraint| Literal::Types::SetType === constraint }
 		end
 	end
 end
