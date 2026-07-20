@@ -17,7 +17,7 @@ class Literal::Serializer::TupleType
 	end
 
 	def matches?(other)
-		Literal::Types::TupleType === other
+		Literal::Types::TupleType === other || Literal::Tuple::Generic === other
 	end
 end
 
@@ -45,6 +45,10 @@ class Literal::TupleSerializer < Literal::Serializer
 		"array"
 	end
 
+	def value_type(value)
+		Literal.Tuple(*value.__types__) if Literal::Tuple === value
+	end
+
 	def json_schema(type, generator: nil)
 		{
 			"type" => "array",
@@ -55,14 +59,18 @@ class Literal::TupleSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
+		source = (Literal::Tuple === value) ? value.__value__ : value
+
 		type.types.each_with_index.map do |member_type, index|
-			serialize_contents(value.fetch(index), type: member_type)
+			serialize_contents(source.fetch(index), type: member_type)
 		end
 	end
 
 	def deserialize(raw, type:)
-		type.types.each_with_index.map do |member_type, index|
+		result = type.types.each_with_index.map do |member_type, index|
 			deserialize_contents(raw.fetch(index), type: member_type)
 		end
+
+		(Literal::Tuple::Generic === type) ? type.coerce(result) : result
 	end
 end

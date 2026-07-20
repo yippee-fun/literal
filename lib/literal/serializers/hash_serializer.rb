@@ -20,7 +20,7 @@ class Literal::Serializer::HashType
 
 	def matches?(other)
 		case other
-		when Literal::Types::HashType
+		when Literal::Types::HashType, Literal::Hash::Generic
 			true
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |constraint| Literal::Types::HashType === constraint }
@@ -56,7 +56,11 @@ class Literal::HashSerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		_Hash(@context.type, @context.type) if type === value
+		if Literal::Hash === value
+			Literal.Hash(value.__key_type__, value.__value_type__)
+		elsif type === value
+			_Hash(@context.type, @context.type)
+		end
 	end
 
 	def json_schema(type, generator: nil)
@@ -91,7 +95,9 @@ class Literal::HashSerializer < Literal::Serializer
 		key_type = hash_type.key_type
 		value_type = hash_type.value_type
 
-		serialized_entries = value.map do |key, item|
+		source = (Literal::Hash === value) ? value.__value__ : value
+
+		serialized_entries = source.map do |key, item|
 			[
 				serialize_contents(key, type: key_type),
 				serialize_contents(item, type: value_type),
@@ -110,12 +116,14 @@ class Literal::HashSerializer < Literal::Serializer
 		key_type = hash_type.key_type
 		value_type = hash_type.value_type
 
-		raw.to_h do |key, item|
+		result = raw.to_h do |key, item|
 			[
 				deserialize_contents(key, type: key_type),
 				deserialize_contents(item, type: value_type),
 			]
 		end
+
+		(Literal::Hash::Generic === type) ? type.coerce(result) : result
 	end
 
 	# Hashes serialize as JSON objects when their keys serialize as strings, and
@@ -139,7 +147,7 @@ class Literal::HashSerializer < Literal::Serializer
 
 	private def hash_type_for(type)
 		case type
-		when Literal::Types::HashType
+		when Literal::Types::HashType, Literal::Hash::Generic
 			type
 		when Literal::Types::ConstraintType
 			type.object_constraints.find { |constraint| Literal::Types::HashType === constraint }

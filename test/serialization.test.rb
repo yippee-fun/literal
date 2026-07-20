@@ -2751,3 +2751,127 @@ end
 test "deserializing a value outside the enum raises" do
 	assert_raises(ArgumentError) { Example.deserialize("green", type: SerializationSuit) }
 end
+
+class SerializationCollections < Literal::Data
+	prop :tags, Literal::Array(String)
+	prop :counts, Literal::Hash(Symbol, Integer)
+	prop :pair, Literal::Tuple(String, Integer)
+end
+
+test "Literal::Array serialization roundtrip" do
+	type = Literal::Array(String)
+	original = type.new("a", "b")
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["a", "b"])
+	assert_equal(serialized, Example.serialize(["a", "b"], type: _Array(String)))
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Array === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "Literal::Set serialization roundtrip" do
+	type = Literal::Set(Symbol)
+	original = type.new(:a, :b)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["a", "b"])
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Set === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "Literal::Hash serialization roundtrip" do
+	type = Literal::Hash(Symbol, Integer)
+	original = type.new({ a: 1, b: 2 })
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "a" => 1, "b" => 2 })
+	assert_equal(serialized, Example.serialize({ a: 1, b: 2 }, type: _Hash(Symbol, Integer)))
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Hash === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "Literal::Tuple serialization roundtrip" do
+	type = Literal::Tuple(String, Integer)
+	original = type.new("a", 1)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, ["a", 1])
+	assert_equal(serialized, Example.serialize(["a", 1], type: _Tuple(String, Integer)))
+
+	deserialized = Example.deserialize(serialized, type:)
+	assert(Literal::Tuple === deserialized)
+	assert_equal(deserialized, original)
+end
+
+test "collection instances serialize via the aggregate type" do
+	assert_equal(Example.serialize(Literal::Array(String).new("a"), type: Example.type), ["a"])
+	assert_equal(Example.serialize(Literal::Set(Symbol).new(:a), type: Example.type), ["a"])
+	assert_equal(Example.serialize(Literal::Hash(Symbol, Integer).new({ a: 1 }), type: Example.type), { "a" => 1 })
+	assert_equal(Example.serialize(Literal::Tuple(String, Integer).new("a", 1), type: Example.type), ["a", 1])
+end
+
+test "collection class json schema matches the equivalent type descriptor" do
+	assert_equal(Example.json_schema(Literal::Array(String)), Example.json_schema(_Array(String)))
+	assert_equal(Example.json_schema(Literal::Set(String)), Example.json_schema(_Set(String)))
+	assert_equal(Example.json_schema(Literal::Hash(Symbol, Integer)), Example.json_schema(_Hash(Symbol, Integer)))
+	assert_equal(Example.json_schema(Literal::Tuple(String, Integer)), Example.json_schema(_Tuple(String, Integer)))
+end
+
+test "nested collection classes serialize" do
+	type = Literal::Array(Literal::Array(String))
+	original = type.new(Literal::Array(String).new("a"))
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, [["a"]])
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "records with collection class props are serializable" do
+	record = SerializationCollections.new(
+		tags: Literal::Array(String).new("x", "y"),
+		counts: Literal::Hash(Symbol, Integer).new({ a: 1 }),
+		pair: Literal::Tuple(String, Integer).new("p", 2),
+	)
+
+	serialized = Example.serialize(record, type: SerializationCollections)
+	assert_equal(serialized, { "tags" => ["x", "y"], "counts" => { "a" => 1 }, "pair" => ["p", 2] })
+
+	deserialized = Example.deserialize(serialized, type: SerializationCollections)
+	assert_equal(deserialized, record)
+	assert(Literal::Array === deserialized.tags)
+
+	assert_equal(
+		Example.json_schema(SerializationCollections),
+		{
+			"type" => "object",
+			"properties" => {
+				"tags" => { "type" => "array", "items" => { "type" => "string" } },
+				"counts" => {
+					"type" => "object",
+					"propertyNames" => { "type" => "string" },
+					"additionalProperties" => { "type" => "integer" },
+				},
+				"pair" => {
+					"type" => "array",
+					"prefixItems" => [{ "type" => "string" }, { "type" => "integer" }],
+					"minItems" => 2,
+					"maxItems" => 2,
+				},
+			},
+			"required" => ["tags", "counts", "pair"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+test "a native array cannot be serialized as a Literal::Array collection type" do
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize(["a"], type: Literal::Array(String))
+	end
+end

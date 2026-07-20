@@ -18,7 +18,7 @@ class Literal::Serializer::ArrayType
 
 	def matches?(other)
 		case other
-		when Literal::Types::ArrayType
+		when Literal::Types::ArrayType, Literal::Array::Generic
 			true
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |constraint| Literal::Types::ArrayType === constraint }
@@ -53,13 +53,17 @@ class Literal::ArraySerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		_Array(@context.type) if type === value
+		if Literal::Array === value
+			Literal.Array(value.__type__)
+		elsif type === value
+			_Array(@context.type)
+		end
 	end
 
 	def json_schema(type, generator: nil)
 		{ "type" => "array" }.tap do |schema|
 			case type
-			when Literal::Types::ArrayType
+			when Literal::Types::ArrayType, Literal::Array::Generic
 				schema["items"] = json_schema_for(type.type, generator:)
 			when Literal::Types::ConstraintType
 				array_type = array_type_for(type)
@@ -72,8 +76,9 @@ class Literal::ArraySerializer < Literal::Serializer
 
 	def serialize(value, type:)
 		member_type = array_type_for(type).type
+		source = (Literal::Array === value) ? value.__value__ : value
 
-		value.map do |item|
+		source.map do |item|
 			serialize_contents(item, type: member_type)
 		end
 	end
@@ -81,14 +86,16 @@ class Literal::ArraySerializer < Literal::Serializer
 	def deserialize(raw, type:)
 		member_type = array_type_for(type).type
 
-		raw.map do |item|
+		result = raw.map do |item|
 			deserialize_contents(item, type: member_type)
 		end
+
+		(Literal::Array::Generic === type) ? type.coerce(result) : result
 	end
 
 	private def array_type_for(type)
 		case type
-		when Literal::Types::ArrayType
+		when Literal::Types::ArrayType, Literal::Array::Generic
 			type
 		when Literal::Types::ConstraintType
 			type.object_constraints.find { |constraint| Literal::Types::ArrayType === constraint }
