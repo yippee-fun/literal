@@ -1,5 +1,13 @@
 # frozen_string_literal: true
 
+# BigDecimal is a bundled gem as of Ruby 3.4, so its serializer is only
+# registered when the gem is available.
+begin
+	require "bigdecimal"
+rescue LoadError
+	# DefaultSerializers omits Literal::BigDecimalSerializer below.
+end
+
 class Literal::SerializationContext
 	include Literal::Types
 
@@ -11,6 +19,7 @@ class Literal::SerializationContext
 		Literal::IntegerSerializer,
 		Literal::JSONSchemaNumberSerializer,
 		Literal::FloatSerializer,
+		*(Literal::BigDecimalSerializer if defined?(::BigDecimal)),
 		Literal::BooleanSerializer,
 		Literal::TimeSerializer,
 		Literal::DateSerializer,

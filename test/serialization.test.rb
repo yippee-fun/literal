@@ -561,6 +561,44 @@ test "float json schema" do
 	)
 end
 
+test "big decimal json schema" do
+	assert_equal(
+		Example.json_schema(_BigDecimal(finite?: true)),
+		{ "type" => "string", "format" => "decimal" },
+	)
+
+	assert_equal(
+		Example.json_schema(BigDecimal("3.14")),
+		{ "type" => "string", "format" => "decimal", "const" => "3.14" },
+	)
+
+	assert_equal(
+		Example.json_schema(_BigDecimal(BigDecimal("1")..BigDecimal("10"), finite?: true)),
+		{ "type" => "string", "format" => "decimal" },
+	)
+
+	assert_equal(
+		Example.json_schema(_BigDecimal(BigDecimal("3.14"), finite?: true)),
+		{ "type" => "string", "format" => "decimal", "const" => "3.14" },
+	)
+
+	assert_equal(
+		Example.json_schema(_Union(BigDecimal("1.5"), BigDecimal("2.5"))),
+		{ "type" => "string", "format" => "decimal", "enum" => ["1.5", "2.5"] },
+	)
+end
+
+test "big decimal must be finite to be serializable" do
+	error = assert_raises(Literal::ArgumentError) do
+		Example.json_schema(BigDecimal)
+	end
+
+	assert_equal(
+		error.message,
+		"Type BigDecimal cannot be serialized because it admits non-finite values like NaN — use _BigDecimal(finite?: true) instead.",
+	)
+end
+
 test "symbol json schema" do
 	assert_equal(
 		Example.json_schema(Symbol),
@@ -1196,6 +1234,28 @@ test "float serialization roundtrip" do
 
 	assert_equal(serialized, 3.14)
 	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "big decimal serialization roundtrip" do
+	original = BigDecimal("3.141592653589793238462643383279")
+	type = _BigDecimal(finite?: true)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, "3.141592653589793238462643383279")
+	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "big decimal deserialization coerces raw numbers" do
+	type = _BigDecimal(finite?: true)
+
+	assert_equal(Example.deserialize(42, type:), BigDecimal(42))
+	assert_equal(Example.deserialize(3.14, type:), BigDecimal("3.14"))
+end
+
+test "big decimal serialization rejects non-finite values" do
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize(BigDecimal::INFINITY, type: _BigDecimal(finite?: true))
+	end
 end
 
 test "hash serialization roundtrip" do

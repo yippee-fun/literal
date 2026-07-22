@@ -39,6 +39,22 @@ module Literal::Types
 		)
 	end
 
+	# Matches if the value is a `BigDecimal` and matches the given constraints.
+	# Serialization requires finite values, so use `_BigDecimal(finite?: true)` rather than `BigDecimal` there.
+	# ```ruby
+	# _BigDecimal(finite?: true)
+	# ```
+	def _BigDecimal(...)
+		_Constraint(BigDecimal, ...)
+	end
+
+	# Nilable version of `_BigDecimal`.
+	def _BigDecimal?(...)
+		_Nilable(
+			_BigDecimal(...)
+		)
+	end
+
 	# Matches if the value is either `true` or `false`. This is equivalent to `_Union(true, false)`.
 	# ```ruby
 	# _Boolean

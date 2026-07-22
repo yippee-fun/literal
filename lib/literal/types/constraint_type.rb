@@ -141,7 +141,7 @@ class Literal::Types::ConstraintType
 		when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
 			true
 		else
-			false
+			defined?(::BigDecimal) && ::BigDecimal === value
 		end
 	end
 
