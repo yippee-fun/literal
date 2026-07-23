@@ -57,6 +57,7 @@ class Literal::SerializationContext
 
 		@type = Literal::Serializer::SerializableType.new(self, _Union(*@serializers.map(&:type)))
 		@kind = _Kind(@type)
+		@property_kind = _Kind(_Union(@type, Literal::Undefined))
 
 		@cache_mutex = Mutex.new
 		@serializer_cache = new_type_cache
@@ -69,6 +70,12 @@ class Literal::SerializationContext
 	attr_reader :serializers
 	attr_reader :type
 	attr_reader :kind
+
+	# Like kind, but for types at keyed positions — structure properties and
+	# map values — where Literal::Undefined serializes by omitting the key.
+	# It accepts everything kind accepts, plus unions permitting
+	# Literal::Undefined, which are judged by their remaining members.
+	attr_reader :property_kind
 
 	def json_schema(type)
 		Literal::JSONSchema::Generator.new(self).generate(type)

@@ -1619,6 +1619,29 @@ test "explicit null is rejected when the property does not permit nil" do
 	end
 end
 
+test "property kind accepts undefined-optional types at keyed positions" do
+	assert Example.property_kind === String
+	assert Example.property_kind === _Optional(String)
+	assert Example.property_kind === _Optional(_Nilable(String))
+	assert Example.property_kind === _Optional(_Hash(Symbol, Integer))
+
+	# Unserializable types stay rejected, as does undefined at a non-keyed
+	# position, where there is no key to omit.
+	refute Example.property_kind === Object
+	refute Example.property_kind === _Array(_Optional(String))
+	refute Example.kind === _Optional(String)
+
+	# A bare Literal::Undefined property type is degenerate — the property can
+	# never be present — but the union accepts it; a structure containing one
+	# is still unserializable as a whole.
+	assert Example.property_kind === Literal::Undefined
+
+	# Validating a structure's property types, prop? included.
+	SerializationDraft.literal_properties.each do |property|
+		assert Example.property_kind === property.type
+	end
+end
+
 test "undefined structure properties are optional in generated schemas" do
 	assert_equal(
 		Example.json_schema(SerializationManualUndefined),
