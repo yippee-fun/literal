@@ -106,6 +106,22 @@ class Literal::Serializer
 		@context.json_type(type)
 	end
 
+	# Whether the type is a union permitting Literal::Undefined, marking a
+	# property or shape key that is omitted when serializing an undefined value
+	# and restored to Literal::Undefined when its key is missing.
+	private def undefined_optional?(type)
+		Literal::Types::UnionType === type && type.types.include?(Literal::Undefined)
+	end
+
+	# The type an undefined-optional value serializes as when it is present.
+	# Literal::Undefined is never serialized as a standalone value — it only
+	# exists as the absence of a key — so it is stripped before recursing.
+	private def without_undefined(type)
+		return type unless undefined_optional?(type)
+
+		type.reject { |member_type| member_type == Literal::Undefined }
+	end
+
 	# The finite set of raw JSON values the given type can serialize to, or nil
 	# when the domain is unbounded or unknown. Constants have singleton domains;
 	# a union of constants has the union of theirs. Domains are compared as

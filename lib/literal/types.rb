@@ -349,6 +349,13 @@ module Literal::Types
 		NilableType.new(...)
 	end
 
+	# Matches if the value is the given type or `Literal::Undefined`, i.e. the
+	# value may be omitted entirely. Unlike `_Nilable`, which permits an
+	# explicit `nil`.
+	def _Optional(t)
+		_Union(t, Literal::Undefined)
+	end
+
 	# Matches if the given type is *not* matched.
 	def _Not(*types)
 		if types.length > 1

@@ -71,6 +71,21 @@ class SerializationDraft < Literal::Data
 	prop? :subtitle, String
 end
 
+class SerializationManualUndefined < Literal::Data
+	prop :title, String
+	prop :note, _Union(String, Literal::Undefined)
+end
+
+class SerializationDefaultedUndefined < Literal::Data
+	prop :title, String
+	prop :level, _Optional(Integer), default: 3
+end
+
+class SerializationNilableUndefined < Literal::Data
+	prop :title, String
+	prop? :subtitle, _Nilable(String)
+end
+
 class SerializationOrder < Literal::Data
 	prop :id, Integer
 	prop :person, SerializationPerson
@@ -1283,6 +1298,88 @@ test "map serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "undefined map value is omitted when serializing" do
+	type = _Map(name: String, age: _Optional(Integer))
+
+	assert_equal(
+		Example.serialize({ name: "Joel", age: Literal::Undefined }, type:),
+		{ "name" => "Joel" },
+	)
+
+	assert_equal(
+		Example.serialize({ name: "Joel", age: 42 }, type:),
+		{ "name" => "Joel", "age" => 42 },
+	)
+end
+
+test "missing map key deserializes to undefined" do
+	type = _Map(name: String, age: _Optional(Integer))
+
+	assert_equal(
+		Example.deserialize({ "name" => "Joel" }, type:),
+		{ name: "Joel", age: Literal::Undefined },
+	)
+end
+
+test "undefined map value serialization roundtrip" do
+	type = _Map(name: String, age: _Optional(Integer))
+	original = { name: "Joel", age: Literal::Undefined }
+
+	assert_equal(Example.deserialize(Example.serialize(original, type:), type:), original)
+end
+
+test "hash default value declares how missing map keys read" do
+	type = _Map(name: String, age: _Optional(Integer))
+
+	# A hash whose default reads missing keys as Literal::Undefined gets
+	# absence-as-undefined semantics without carrying explicit entries.
+	defaulted = Hash.new(Literal::Undefined).merge(name: "Joel")
+	assert type === defaulted
+	assert_equal(Example.serialize(defaulted, type:), { "name" => "Joel" })
+
+	# A plain hash reads missing keys as nil, which _Optional does not permit.
+	refute type === { name: "Joel" }
+end
+
+test "explicit null map value stays distinct from undefined" do
+	type = _Map(name: String, bio: _Optional(_Nilable(String)))
+
+	assert_equal(
+		Example.deserialize({ "name" => "Joel", "bio" => nil }, type:),
+		{ name: "Joel", bio: nil },
+	)
+
+	assert_equal(
+		Example.serialize({ name: "Joel", bio: nil }, type:),
+		{ "name" => "Joel", "bio" => nil },
+	)
+end
+
+test "explicit null map value is rejected when the value type does not permit nil" do
+	type = _Map(name: String, age: _Optional(Integer))
+
+	assert_raises(Literal::ArgumentError) do
+		Example.deserialize({ "name" => "Joel", "age" => nil }, type:)
+	end
+end
+
+test "undefined map values are optional in generated schemas" do
+	type = _Map(name: String, age: _Optional(Integer))
+
+	assert_equal(
+		Example.json_schema(type),
+		{
+			"type" => "object",
+			"properties" => {
+				"name" => { "type" => "string" },
+				"age" => { "type" => "integer" },
+			},
+			"required" => ["name"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
 test "map with type key serialization roundtrip" do
 	original = { "$type": "user", name: "Joel" }
 	type = _Map("$type": String, name: String)
@@ -1468,6 +1565,73 @@ test "optional structure property serialization roundtrip" do
 	assert_equal(Example.serialize(with_subtitle, type:), { "title" => "Draft", "subtitle" => "Optional" })
 	assert_equal(Example.deserialize({ "title" => "Draft" }, type:), without_subtitle)
 	assert_equal(Example.deserialize({ "title" => "Draft", "subtitle" => "Optional" }, type:), with_subtitle)
+end
+
+test "undefined structure property is omitted when serializing" do
+	type = SerializationManualUndefined
+	undefined_note = SerializationManualUndefined.new(title: "Draft", note: Literal::Undefined)
+	defined_note = SerializationManualUndefined.new(title: "Draft", note: "Remember")
+
+	assert_equal(Example.serialize(undefined_note, type:), { "title" => "Draft" })
+	assert_equal(Example.serialize(defined_note, type:), { "title" => "Draft", "note" => "Remember" })
+end
+
+test "missing key deserializes to undefined" do
+	deserialized = Example.deserialize({ "title" => "Draft" }, type: SerializationManualUndefined)
+
+	assert_equal(deserialized.title, "Draft")
+	assert_equal(deserialized.note, Literal::Undefined)
+end
+
+test "missing key deserializes to undefined rather than the property default" do
+	# The initializer would resolve Literal::Undefined to the default, so the
+	# undefined value has to be assigned as a final value through from_props.
+	original = SerializationDefaultedUndefined.from_props(title: "Draft", level: Literal::Undefined)
+	serialized = Example.serialize(original, type: SerializationDefaultedUndefined)
+	deserialized = Example.deserialize(serialized, type: SerializationDefaultedUndefined)
+
+	assert_equal(serialized, { "title" => "Draft" })
+	assert_equal(deserialized.level, Literal::Undefined)
+	assert_equal(deserialized, original)
+end
+
+test "explicit null stays distinct from undefined" do
+	type = SerializationNilableUndefined
+
+	explicit_null = Example.deserialize({ "title" => "Draft", "subtitle" => nil }, type:)
+	missing = Example.deserialize({ "title" => "Draft" }, type:)
+
+	assert_equal(explicit_null.subtitle, nil)
+	assert_equal(missing.subtitle, Literal::Undefined)
+	refute_equal(explicit_null, missing)
+
+	assert_equal(Example.serialize(explicit_null, type:), { "title" => "Draft", "subtitle" => nil })
+	assert_equal(Example.serialize(missing, type:), { "title" => "Draft" })
+end
+
+test "explicit null is rejected when the property does not permit nil" do
+	assert_raises(Literal::TypeError) do
+		Example.deserialize({ "title" => "Draft", "subtitle" => nil }, type: SerializationDraft)
+	end
+
+	assert_raises(Literal::TypeError) do
+		Example.deserialize({ "title" => "Draft", "note" => nil }, type: SerializationManualUndefined)
+	end
+end
+
+test "undefined structure properties are optional in generated schemas" do
+	assert_equal(
+		Example.json_schema(SerializationManualUndefined),
+		{
+			"type" => "object",
+			"properties" => {
+				"title" => { "type" => "string" },
+				"note" => { "type" => "string" },
+			},
+			"required" => ["title"],
+			"additionalProperties" => false,
+		},
+	)
 end
 
 test "tagged union serialization roundtrip" do

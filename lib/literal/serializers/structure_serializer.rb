@@ -37,7 +37,7 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	def child_types(type)
-		type.literal_properties.map { |property| property_schema_type(property.type) }
+		type.literal_properties.map { |property| without_undefined(property.type) }
 	end
 
 	def referenceable?(type)
@@ -60,9 +60,9 @@ class Literal::StructureSerializer < Literal::Serializer
 		type.literal_properties.each do |property|
 			name = property.name.name
 			allowed << name
-			required << name if property.required?
+			required << name if property.required? && !undefined_optional?(property.type)
 
-			if (domain = const_domain(property_schema_type(property.type)))
+			if (domain = const_domain(without_undefined(property.type)))
 				const_domains[name] = domain
 			end
 		end
@@ -94,7 +94,7 @@ class Literal::StructureSerializer < Literal::Serializer
 
 			[
 				property.name.name,
-				serialize_contents(property_value, type: property_schema_type(property.type)),
+				serialize_contents(property_value, type: without_undefined(property.type)),
 			]
 		end.to_h
 	end
@@ -102,33 +102,28 @@ class Literal::StructureSerializer < Literal::Serializer
 	def deserialize(raw, type:)
 		type.from_props(
 			type.literal_properties.filter_map do |property|
-				next unless raw.key?(property.name.name)
-
-				[
-					property.name,
-					deserialize_contents(raw[property.name.name], type: property_schema_type(property.type)),
-				]
+				if raw.key?(property.name.name)
+					[
+						property.name,
+						deserialize_contents(raw[property.name.name], type: without_undefined(property.type)),
+					]
+				elsif undefined_optional?(property.type)
+					# An undefined property is omitted when serialized, so a missing
+					# key deserializes back to Literal::Undefined — not the property's
+					# default, which is what an omitted from_props key would resolve to.
+					[property.name, Literal::Undefined]
+				end
 			end.to_h
 		)
 	end
 
 	private def property_json_schema(property, generator:)
-		schema = json_schema_for(property_schema_type(property.type), generator:)
+		schema = json_schema_for(without_undefined(property.type), generator:)
 		return schema unless property.description?
 
 		# Merge rather than mutate: the child schema may be shared through a
 		# "$defs" entry, and the description belongs to this property site only.
 		schema = {} unless Hash === schema
 		schema.merge("description" => property.description)
-	end
-
-	private def undefined_optional?(type)
-		Literal::Types::UnionType === type && type.types.include?(Literal::Undefined)
-	end
-
-	private def property_schema_type(type)
-		return type unless undefined_optional?(type)
-
-		type.reject { |member_type| member_type == Literal::Undefined }
 	end
 end

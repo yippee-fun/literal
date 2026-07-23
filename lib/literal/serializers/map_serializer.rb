@@ -30,7 +30,7 @@ class Literal::MapSerializer < Literal::Serializer
 	end
 
 	def child_types(type)
-		type.shape.values
+		type.shape.values.map { |value_type| without_undefined(value_type) }
 	end
 
 	def referenceable?(type)
@@ -49,9 +49,9 @@ class Literal::MapSerializer < Literal::Serializer
 		type.shape.each do |key, value_type|
 			name = key.name
 			allowed << name
-			required << name unless value_type === nil
+			required << name unless value_type === nil || undefined_optional?(value_type)
 
-			if (domain = const_domain(value_type))
+			if (domain = const_domain(without_undefined(value_type)))
 				const_domains[name] = domain
 			end
 		end
@@ -63,7 +63,7 @@ class Literal::MapSerializer < Literal::Serializer
 		{
 			"type" => "object",
 			"properties" => type.shape.to_h do |key, value_type|
-				[key.name, json_schema_for(value_type, generator:)]
+				[key.name, json_schema_for(without_undefined(value_type), generator:)]
 			end,
 			"required" => object_shape(type).required.to_a,
 			"additionalProperties" => false,
@@ -75,14 +75,23 @@ class Literal::MapSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		type.shape.to_h do |key, value_type|
-			[key.name, serialize_contents(value[key], type: value_type)]
-		end
+		type.shape.filter_map do |key, value_type|
+			item = value[key]
+			next if undefined_optional?(value_type) && Literal::Undefined == item
+
+			[key.name, serialize_contents(item, type: without_undefined(value_type))]
+		end.to_h
 	end
 
 	def deserialize(raw, type:)
 		type.shape.to_h do |key, value_type|
-			[key, deserialize_contents(raw[key.name], type: value_type)]
+			if undefined_optional?(value_type) && !raw.key?(key.name)
+				# An undefined value is omitted when serialized, so a missing key
+				# deserializes back to Literal::Undefined.
+				[key, Literal::Undefined]
+			else
+				[key, deserialize_contents(raw[key.name], type: without_undefined(value_type))]
+			end
 		end
 	end
 end
