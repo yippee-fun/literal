@@ -78,13 +78,17 @@ class Literal::Draft < Literal::Struct
 
 	# Build the drafted type from the properties that have been set. The
 	# drafted type's defaults apply to anything left unset, and its required
-	# properties are enforced here.
-	def finalize
+	# properties are enforced here. Any properties passed here are assigned
+	# to the draft first — through its writers, so they're coerced and type
+	# checked like any other assignment.
+	def finalize(**props)
 		type = self.class.__type__
 
 		unless type.respond_to?(:from_props)
 			raise Literal::ArgumentError.new("Cannot finalize a draft into #{type}, because it doesn't support from_props.")
 		end
+
+		props.each { |name, value| self[name] = value }
 
 		type.from_props(to_h.reject { |_, value| Literal::Undefined == value })
 	end

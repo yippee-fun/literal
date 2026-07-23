@@ -86,6 +86,38 @@ test "finalize builds the drafted type, applying its defaults" do
 	assert_equal finalized.frozen?, true
 end
 
+test "finalize takes properties to assign as part of finalization" do
+	draft = Literal::Draft(DraftExample).new
+	draft.name = "John"
+
+	finalized = draft.finalize(id: 1, nickname: "Johnny")
+
+	assert_equal finalized, DraftExample.new(name: "John", id: 1, nickname: "Johnny")
+	assert_equal draft.id, 1
+end
+
+test "properties passed to finalize are coerced and type checked" do
+	klass = Class.new(Literal::Struct) do
+		prop :name, String, reader: :public do |value|
+			value.to_s.strip
+		end
+	end
+
+	draft = Literal::Draft(klass).new
+
+	assert_equal draft.finalize(name: " John ").name, "John"
+
+	unfinalizable = Literal::Draft(DraftExample).new(name: "John", id: 1)
+
+	assert_raises(Literal::TypeError) { unfinalizable.finalize(id: "2") }
+end
+
+test "finalize raises for properties the draft doesn't have" do
+	draft = Literal::Draft(DraftExample).new(name: "John", id: 1)
+
+	assert_raises(NameError) { draft.finalize(shoe_size: 9) }
+end
+
 test "finalize raises for unset required properties" do
 	draft = Literal::Draft(DraftExample).new(name: "John")
 
