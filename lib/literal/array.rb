@@ -12,6 +12,12 @@
 #
 # The element type is fixed at construction and never changes in place — it can
 # neither be widened nor narrowed. `narrow` and `widen` return new instances.
+#
+# Methods that promise an element return `Literal::Undefined` when there is no
+# element to return — an out-of-bounds index, an empty array, a value that
+# isn't found — never `nil`. `nil` only ever appears when the element type
+# actually permits it. For a per-lookup fallback, pass a block —
+# `array[index] { fallback }` — or use `fetch` to raise on a missing index.
 class Literal::Array
 	class Generic
 		include Literal::Type
@@ -142,19 +148,24 @@ class Literal::Array
 		Literal::Array === other && @__value__ == other.__value__
 	end
 
-	def [](index, length = nil)
-		if length
-			slice = @__value__[index, length]
-			slice && __with__(slice)
+	# Returns the element or slice. When there is nothing at the index — out of
+	# bounds, or a slice starting beyond the end — yields the index to the block
+	# if one is given, and returns `Literal::Undefined` otherwise.
+	def [](index, length = nil, &fallback)
+		slice = if length
+			@__value__[index, length]
+		elsif Range === index
+			@__value__[index]
 		else
-			case index
-			when Range
-				slice = @__value__[index]
-				slice && __with__(slice)
-			else
-				@__value__[index]
-			end
+			return @__value__.fetch(index, &fallback) if fallback
+
+			return @__value__.fetch(index) { Literal::Undefined }
 		end
+
+		return __with__(slice) if slice
+		return yield(index) if fallback
+
+		Literal::Undefined
 	end
 
 	def []=(index, value)
@@ -206,16 +217,22 @@ class Literal::Array
 		@__value__.count(...)
 	end
 
-	def delete(...)
-		@__value__.delete(...)
+	def delete(value, &block)
+		return @__value__.delete(value, &block) if block
+
+		@__value__.delete(value) { Literal::Undefined }
 	end
 
-	def delete_at(...)
-		@__value__.delete_at(...)
+	def delete_at(index)
+		@__value__.fetch(index) { return Literal::Undefined }
+
+		@__value__.delete_at(index)
 	end
 
-	def dig(...)
-		@__value__.dig(...)
+	def dig(index, *indexes)
+		@__value__.fetch(index) { return Literal::Undefined }
+
+		@__value__.dig(index, *indexes)
 	end
 
 	def drop(n)
@@ -254,7 +271,10 @@ class Literal::Array
 	end
 
 	def first(n = nil)
-		n ? __with__(@__value__.first(n)) : @__value__.first
+		return __with__(@__value__.first(n)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.first
 	end
 
 	def flat_map(type, &block)
@@ -319,7 +339,10 @@ class Literal::Array
 	end
 
 	def last(n = nil)
-		n ? __with__(@__value__.last(n)) : @__value__.last
+		return __with__(@__value__.last(n)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.last
 	end
 
 	def map(type, &block)
@@ -354,23 +377,35 @@ class Literal::Array
 	end
 
 	def max(n = nil, &)
-		n ? __with__(@__value__.max(n, &)) : @__value__.max(&)
+		return __with__(@__value__.max(n, &)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.max(&)
 	end
 
 	def max_by(n = nil, &block)
 		raise ArgumentError.new("#max_by requires a block.") unless block
 
-		n ? __with__(@__value__.max_by(n, &block)) : @__value__.max_by(&block)
+		return __with__(@__value__.max_by(n, &block)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.max_by(&block)
 	end
 
 	def min(n = nil, &)
-		n ? __with__(@__value__.min(n, &)) : @__value__.min(&)
+		return __with__(@__value__.min(n, &)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.min(&)
 	end
 
 	def min_by(n = nil, &block)
 		raise ArgumentError.new("#min_by requires a block.") unless block
 
-		n ? __with__(@__value__.min_by(n, &block)) : @__value__.min_by(&block)
+		return __with__(@__value__.min_by(n, &block)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.min_by(&block)
 	end
 
 	def minmax(&)
@@ -431,7 +466,10 @@ class Literal::Array
 	end
 
 	def pop(n = nil)
-		n ? __with__(@__value__.pop(n)) : @__value__.pop
+		return __with__(@__value__.pop(n)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.pop
 	end
 
 	# Returns a Literal::Array of Literal::Tuples with every combination of our
@@ -509,7 +547,10 @@ class Literal::Array
 	end
 
 	def sample(n = nil, random: Random)
-		n ? __with__(@__value__.sample(n, random:)) : @__value__.sample(random:)
+		return __with__(@__value__.sample(n, random:)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.sample(random:)
 	end
 
 	def select(&block)
@@ -526,7 +567,10 @@ class Literal::Array
 	end
 
 	def shift(n = nil)
-		n ? __with__(@__value__.shift(n)) : @__value__.shift
+		return __with__(@__value__.shift(n)) if n
+		return Literal::Undefined if @__value__.empty?
+
+		@__value__.shift
 	end
 
 	def shuffle(random: Random)

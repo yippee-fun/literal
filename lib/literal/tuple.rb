@@ -137,8 +137,22 @@ class Literal::Tuple
 		Literal::Tuple === other && @__value__ == other.__value__
 	end
 
+	# Every valid tuple index always holds a value, so lookups never need a
+	# "missing" representation — an index outside the tuple is a programmer
+	# error and raises, exactly like `#[]=`.
 	def [](index)
-		@__value__[index]
+		size = @__value__.size
+		normalized = index
+
+		if (Integer === normalized) && (normalized < 0)
+			normalized += size
+		end
+
+		unless Integer === normalized && normalized >= 0 && normalized < size
+			raise IndexError.new("Index #{index.inspect} is out of bounds for a tuple of size #{size}.")
+		end
+
+		@__value__[normalized]
 	end
 
 	def []=(index, value)

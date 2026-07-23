@@ -219,7 +219,9 @@ test "#[] with an index returns the element" do
 
 	assert_equal array[0], 1
 	assert_equal array[-1], 3
-	assert_equal array[3], nil
+	assert_equal array[3], Literal::Undefined
+	assert_equal array[3] { |index| index }, 3
+	assert_equal array[0] { |index| index }, 1
 end
 
 test "#[] with a range returns a typed sub-array" do
@@ -227,13 +229,16 @@ test "#[] with a range returns a typed sub-array" do
 
 	assert_literal_array array[0..1], type: Integer, values: [1, 2]
 	assert_literal_array array[2..], type: Integer, values: [3]
-	assert_equal array[5..], nil
+	assert_equal array[5..], Literal::Undefined
+	assert_equal array[5..] { :fallback }, :fallback
 end
 
 test "#[] with a start and length returns a typed sub-array" do
 	array = Literal::Array(Integer).new(1, 2, 3)
 
 	assert_literal_array array[1, 2], type: Integer, values: [2, 3]
+	assert_equal array[5, 2], Literal::Undefined
+	assert_equal array[5, 2] { :fallback }, :fallback
 end
 
 test "#fetch" do
@@ -250,7 +255,8 @@ test "#first and #last return elements without an argument" do
 
 	assert_equal array.first, 1
 	assert_equal array.last, 3
-	assert_equal Literal::Array(Integer).new.first, nil
+	assert_equal Literal::Array(Integer).new.first, Literal::Undefined
+	assert_equal Literal::Array(Integer).new.last, Literal::Undefined
 end
 
 test "#first and #last return typed arrays with an argument" do
@@ -825,6 +831,28 @@ test "#delete and #delete_at return the removed element" do
 	assert_equal array.delete(2), 2
 	assert_equal array.delete_at(0), 1
 	assert_equal array.to_a, [3]
+end
+
+test "element lookups return Literal::Undefined when there is no element, never nil" do
+	empty = Literal::Array(Integer).new
+	nilable = Literal::Array(_Nilable(Integer)).new(nil)
+
+	assert_equal empty.pop, Literal::Undefined
+	assert_equal empty.shift, Literal::Undefined
+	assert_equal empty.sample, Literal::Undefined
+	assert_equal empty.min, Literal::Undefined
+	assert_equal empty.max, Literal::Undefined
+	assert_equal empty.min_by(&:itself), Literal::Undefined
+	assert_equal empty.max_by(&:itself), Literal::Undefined
+	assert_equal empty.delete(1), Literal::Undefined
+	assert_equal empty.delete(1) { |element| element }, 1
+	assert_equal empty.delete_at(0), Literal::Undefined
+	assert_equal empty.dig(0, 0), Literal::Undefined
+
+	# A nil element is a real element, so it is returned as itself.
+	assert_equal nilable.first, nil
+	assert_equal nilable[0], nil
+	assert_equal nilable.pop, nil
 end
 
 test "#pop and #shift return elements without an argument" do

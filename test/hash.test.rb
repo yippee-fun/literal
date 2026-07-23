@@ -128,7 +128,7 @@ test "#[], #fetch, #dig, #key?, #value?, #size and #empty?" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
 
 	assert_equal hash[:a], 1
-	assert_equal hash[:c], nil
+	assert_equal hash[:c], Literal::Undefined
 	assert_equal hash.fetch(:b), 2
 	assert_equal hash.fetch(:c, 3), 3
 	assert_raises(KeyError) { hash.fetch(:c) }
@@ -141,6 +141,31 @@ test "#[], #fetch, #dig, #key?, #value?, #size and #empty?" do
 	assert_equal hash.size, 2
 	refute hash.empty?
 	assert Literal::Hash(Symbol, Integer).new.empty?
+end
+
+test "#[] yields the key to a given block when it is missing" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1 })
+
+	assert_equal hash[:a] { |key| key }, 1
+	assert_equal hash[:b] { |key| key }, :b
+	assert_equal hash[:b] { 0 }, 0
+end
+
+test "looking up a missing key returns Literal::Undefined, distinct from a nil value" do
+	hash = Literal::Hash(Symbol, _Nilable(Integer)).new({ a: nil })
+
+	assert_equal hash[:a], nil
+	assert_equal hash[:b], Literal::Undefined
+	assert_equal hash.dig(:b, :deeper), Literal::Undefined
+end
+
+test "a backing hash's default value never leaks through lookups" do
+	# The default was never type checked, so honoring it would break the
+	# guarantee that lookups only return values the value type permits.
+	hash = Literal::Hash(Symbol, Integer).new(Hash.new("unchecked").merge(a: 1))
+
+	assert_equal hash[:b], Literal::Undefined
+	assert_equal hash.dig(:b, :deeper), Literal::Undefined
 end
 
 test "#each yields pairs and returns self" do
@@ -317,8 +342,15 @@ test "#delete returns the removed value" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1 })
 
 	assert_equal hash.delete(:a), 1
-	assert_equal hash.delete(:a), nil
+	assert_equal hash.delete(:a), Literal::Undefined
 	assert hash.empty?
+end
+
+test "#delete yields the key to a given block when it is missing" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1 })
+
+	assert_equal hash.delete(:b) { |key| key }, :b
+	assert_equal hash.delete(:a) { |key| key }, 1
 end
 
 test "#select!, #reject!, #compact! and #clear return self" do

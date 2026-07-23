@@ -13,6 +13,12 @@
 # The key and value types are fixed at construction and never change in place —
 # they can neither be widened nor narrowed. `narrow` and `widen` return new
 # instances.
+#
+# Looking up a missing key returns `Literal::Undefined`, never `nil` — `nil` is
+# only ever a value the value type actually permits. For the same reason, a
+# `Literal::Hash` has no default value machinery: a default could fabricate
+# values the types never checked. For a per-lookup fallback, pass a block —
+# `hash[key] { fallback }` — or use `fetch` to raise on a missing key.
 class Literal::Hash
 	class Generic
 		include Literal::Type
@@ -110,8 +116,12 @@ class Literal::Hash
 		Literal::Hash === other && @__value__ == other.__value__
 	end
 
-	def [](key)
-		@__value__[key]
+	# Returns the value for the key. For a missing key, yields the key to the
+	# block if one is given, and returns `Literal::Undefined` otherwise.
+	def [](key, &fallback)
+		return @__value__.fetch(key, &fallback) if fallback
+
+		@__value__.fetch(key) { Literal::Undefined }
 	end
 
 	def []=(key, value)
@@ -157,12 +167,16 @@ class Literal::Hash
 		self
 	end
 
-	def delete(...)
-		@__value__.delete(...)
+	def delete(key, &block)
+		return @__value__.delete(key, &block) if block
+
+		@__value__.delete(key) { Literal::Undefined }
 	end
 
-	def dig(...)
-		@__value__.dig(...)
+	def dig(key, *keys)
+		return Literal::Undefined unless @__value__.key?(key)
+
+		@__value__.dig(key, *keys)
 	end
 
 	def each(&block)

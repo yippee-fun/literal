@@ -139,7 +139,9 @@ test "#[], #fetch, #first, #last, #size and #include?" do
 
 	assert_equal tuple[0], "a"
 	assert_equal tuple[-1], 1
-	assert_equal tuple[2], nil
+	assert_raises(IndexError) { tuple[2] }
+	assert_raises(IndexError) { tuple[-3] }
+	assert_raises(IndexError) { tuple[0..1] }
 	assert_equal tuple.fetch(1), 1
 	assert_raises(IndexError) { tuple.fetch(2) }
 	assert_equal tuple.first, "a"
