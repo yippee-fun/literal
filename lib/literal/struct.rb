@@ -5,6 +5,20 @@ class Literal::Struct < Literal::DataStructure
 		def prop(name, type, kind = :keyword, reader: :public, writer: :public, predicate: false, default: nil, description: nil)
 			super
 		end
+
+		def prop?(name, type, kind = :keyword, reader: :public, writer: :public, predicate: false, description: nil, &coercion)
+			prop(
+				name,
+				Literal::Types._Union(type, Literal::Undefined),
+				kind,
+				reader:,
+				writer:,
+				predicate:,
+				default: Literal::Undefined,
+				description:,
+				&coercion
+			)
+		end
 	end
 
 	def []=(key, value)

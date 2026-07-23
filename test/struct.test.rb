@@ -9,6 +9,53 @@ test "props support predicates" do
 	assert_equal example.new(enabled: false).enabled?, false
 end
 
+class StructOptional < Literal::Struct
+	prop? :name, String
+end
+
+test "prop? defines a public reader and writer by default" do
+	example = StructOptional.new
+
+	assert_equal example.name, Literal::Undefined
+
+	example.name = "Joel"
+	assert_equal example.name, "Joel"
+
+	assert_raises(Literal::TypeError) { example.name = 1 }
+end
+
+test "prop? honours explicitly supplied visibility options" do
+	example = Class.new(Literal::Struct) do
+		prop? :name, String, reader: :private, writer: :private
+	end.new
+
+	refute example.respond_to?(:name)
+	refute example.respond_to?(:name=)
+	assert_equal example.__send__(:name), Literal::Undefined
+end
+
+test "prop? serializes undefined by omission and restores it from a missing key" do
+	context = Literal::SerializationContext.new
+	example = StructOptional.new
+
+	assert_equal context.serialize(example, type: StructOptional), {}
+
+	deserialized = context.deserialize({}, type: StructOptional)
+	assert_equal deserialized.name, Literal::Undefined
+
+	example.name = "Joel"
+	assert_equal context.serialize(example, type: StructOptional), { "name" => "Joel" }
+end
+
+test "Literal::Data prop? keeps a public reader and no writer" do
+	example = Class.new(Literal::Data) do
+		prop? :name, String
+	end.new
+
+	assert_equal example.name, Literal::Undefined
+	refute example.respond_to?(:name=)
+end
+
 class Person < Literal::Struct
 	prop :name, String
 end
