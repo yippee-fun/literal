@@ -7,6 +7,7 @@ module Literal
 	OBJECT_ID = BasicObject.instance_method(:__id__)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
+		loader.ignore("#{__dir__}/literal/kernel.rb")
 		loader.ignore("#{__dir__}/literal/rails")
 		loader.ignore("#{__dir__}/literal/railtie.rb")
 		loader.ignore("#{__dir__}/ruby_lsp")
