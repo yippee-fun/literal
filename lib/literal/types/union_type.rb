@@ -148,7 +148,7 @@ class Literal::Types::UnionType
 
 	private def primitive_match?(value)
 		@primitives.include?(value)
-	rescue ::StandardError
+	rescue
 		@primitives.any? { |primitive| primitive == value }
 	end
 
