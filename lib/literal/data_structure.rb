@@ -56,6 +56,8 @@ class Literal::DataStructure
 		else
 			if property.default?
 				property.default_value(instance)
+			elsif property.undefinable?
+				Literal::Undefined
 			elsif property.type === nil
 				nil
 			else

@@ -14,7 +14,6 @@ class Literal::Struct < Literal::DataStructure
 				reader:,
 				writer:,
 				predicate:,
-				default: Literal::Undefined,
 				description:,
 				&coercion
 			)

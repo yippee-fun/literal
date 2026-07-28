@@ -44,6 +44,14 @@ class Literal::Types::UnionType
 		@types.each { |type| yield type }
 	end
 
+	# Whether this union contains the exact `Literal::Undefined` object as a
+	# member — the shape `_Optional` builds — making a property of this type
+	# omittable. Exact containment, not `===`: the sentinel is a truthy object,
+	# so types like `_Truthy` merely match it.
+	def optional?
+		@types.any? { |type| Literal::Undefined.equal?(type) }
+	end
+
 	def inspect
 		"_Union(#{to_a.map(&:inspect).join(', ')})"
 	end

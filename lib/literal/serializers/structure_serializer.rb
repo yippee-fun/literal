@@ -60,7 +60,7 @@ class Literal::StructureSerializer < Literal::Serializer
 		type.literal_properties.each do |property|
 			name = property.name.name
 			allowed << name
-			required << name if property.required? && !undefined_optional?(property.type)
+			required << name if property.required?
 
 			if (domain = const_domain(without_undefined(property.type)))
 				const_domains[name] = domain

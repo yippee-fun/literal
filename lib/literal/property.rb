@@ -25,7 +25,17 @@ class Literal::Property
 	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion
 
 	def optional?
-		default? || @type === nil
+		default? || @type === nil || undefinable?
+	end
+
+	# Whether the type is a union containing the exact `Literal::Undefined`
+	# object — the shape `_Optional` builds — i.e. the value may be omitted.
+	# Containment, not `===`: the sentinel is a truthy object, so types like
+	# `_Truthy` merely match it without meaning "omittable". Blocks are
+	# excluded because Ruby resolves an omitted block to `nil`, so a block
+	# parameter can never receive `Literal::Undefined`.
+	def undefinable?
+		:& != @kind && Literal::Types::UnionType === @type && @type.optional?
 	end
 
 	def required?

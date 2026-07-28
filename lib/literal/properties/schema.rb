@@ -126,7 +126,7 @@ class Literal::Properties::Schema
 			when :&
 				buffer << "&" << property.escaped_name
 			when :positional
-				if property.default?
+				if property.default? || property.undefinable? # optional
 					buffer << property.escaped_name << " = Literal::Undefined"
 				elsif property.type === nil # optional
 					buffer << property.escaped_name << " = nil"
@@ -134,7 +134,7 @@ class Literal::Properties::Schema
 					buffer << property.escaped_name
 				end
 			when :keyword
-				if property.default?
+				if property.default? || property.undefinable? # optional
 					buffer << property.name.name << ": Literal::Undefined"
 				elsif property.type === nil
 					buffer << property.name.name << ": nil" # optional
