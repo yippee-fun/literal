@@ -3,7 +3,7 @@
 require "bigdecimal"
 
 class Literal::BigDecimalSerializer < Literal::Serializer
-	Type = _Constraint(BigDecimal, finite?: true)
+	Type = _BigDecimal(finite?: true)
 
 	def type
 		Type
