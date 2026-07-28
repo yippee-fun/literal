@@ -11,9 +11,17 @@ class Literal::Types::UnionType
 
 		while queue.length > 0
 			type = queue.shift
+			# Flattened members are queued at the front so that they take the
+			# position of the member they came from — order decides which member
+			# `resolve` tries first and how JSON schemas list them.
 			case type
 			when Literal::Types::UnionType
-				queue.concat(type.types, type.primitives.to_a)
+				queue.unshift(*type.types, *type.primitives)
+			when Literal::Types::NilableType
+				# A nilable member is the same as its type plus nil, and flattening it
+				# is what makes `_Optional(_Nilable(String))` and
+				# `_Nilable(_Optional(String))` the same union.
+				queue.unshift(type.type, nil)
 			when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
 				primitives << type
 			else
@@ -89,10 +97,17 @@ class Literal::Types::UnionType
 		to_a
 	end
 
+	# Member order is behaviourally meaningful — `resolve` takes the first match
+	# and JSON schemas list members in order — but it does not distinguish one
+	# type from another, so equality compares members as a set. `@primitives`
+	# already does; `@types` is uniqued by the constructor, so for equal sizes a
+	# subset is an equal set.
 	def ==(other)
 		case other
 		when Literal::Types::UnionType
-			@types == other.types && @primitives == other.primitives
+			@primitives == other.primitives &&
+				@types.size == other.types.size &&
+				(@types == other.types || @types.all? { |type| other.types.include?(type) })
 		else
 			false
 		end

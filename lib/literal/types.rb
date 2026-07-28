@@ -345,8 +345,20 @@ module Literal::Types
 	end
 
 	# Matches if the value is either `nil` or the given type.
-	def _Nilable(...)
-		NilableType.new(...)
+	#
+	# A union gets `nil` folded into it rather than wrapped, so that nesting
+	# `_Nilable` and `_Union` in either order produces the same type. The common
+	# case — a single non-union type — stays a `NilableType`, whose two-branch
+	# `===` is an order of magnitude faster than a union's.
+	def _Nilable(type)
+		case type
+		when NilableType
+			type
+		when UnionType
+			_Union(type, nil)
+		else
+			NilableType.new(type)
+		end
 	end
 
 	# Matches if the value is the given type or `Literal::Undefined`, i.e. the
@@ -510,7 +522,9 @@ module Literal::Types
 		inhabited = members.reject { |member| NeverType === member }
 
 		return NeverType::Instance if inhabited.empty?
-		return NilableAnyType if inhabited.any? { |member| NilableType === member && AnyType === member.type }
+		# Nilable members are flattened into the union, so nilable-any arrives as
+		# `_Any` alongside nil rather than as a NilableType member.
+		return NilableAnyType if inhabited.include?(nil) && inhabited.any? { |member| AnyType === member }
 		return inhabited.first if inhabited.length == 1
 
 		(inhabited.length == members.length) ? union : UnionType.new(inhabited)

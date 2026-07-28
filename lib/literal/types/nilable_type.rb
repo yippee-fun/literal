@@ -35,6 +35,11 @@ class Literal::Types::NilableType
 			@type == Literal::Types::AnyType::Instance
 		when Literal::Types::NilableType
 			Literal.subtype?(other.type, @type, context:)
+		when Literal::Types::UnionType
+			# nil is covered by definition, so only the other members need to be.
+			# Without this, `_Union(String, nil)` is not recognised as a subtype of
+			# `_Nilable(String)`, even though the two denote the same set.
+			other.all? { |member| nil == member || Literal.subtype?(member, @type, context:) }
 		when nil
 			true
 		else

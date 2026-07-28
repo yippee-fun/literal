@@ -90,6 +90,33 @@ test "a union does not absorb void" do
 	assert_equal _Union(String, _Void).to_a, [String, _Void]
 end
 
+test "a union flattens nilable members" do
+	assert_equal _Union(_Nilable(String), Integer).to_a, [nil, String, Integer]
+	assert_equal _Union(_Nilable(String), _Nilable(Integer)).to_a, [nil, String, Integer]
+	assert_equal _Union(_Nilable(_Union(String, Symbol))).to_a, [nil, String, Symbol]
+end
+
+test "flattening a member keeps its declared position" do
+	# Order decides which member resolve tries first and how JSON schemas list
+	# members, so a flattened member takes the place of the one it came from.
+	assert_equal _Union(_Nilable(String), Integer).literal_child_types.to_a, [String, Integer]
+	assert_equal _Union(Integer, _Nilable(String)).literal_child_types.to_a, [Integer, String]
+	assert_equal _Union(_Union(String, Symbol), Integer).literal_child_types.to_a, [String, Symbol, Integer]
+	assert_equal _Union(Integer, _Union(String, Symbol)).literal_child_types.to_a, [Integer, String, Symbol]
+end
+
+test "a union of the same members is equal regardless of order" do
+	# Order is behaviourally meaningful — resolve takes the first match — but it
+	# does not distinguish one type from another.
+	assert_equal _Union(String, Integer), _Union(Integer, String)
+	assert_equal _Union(String, Integer, :a, :b), _Union(:b, Integer, :a, String)
+	assert_equal _Optional(_Nilable(String)), _Nilable(_Optional(String))
+
+	refute_equal _Union(String, Integer), _Union(String, Integer, Symbol)
+	refute_equal _Union(String, Integer), _Union(String, Symbol)
+	refute_equal _Union(String, :a), _Union(String, :b)
+end
+
 test "a union with a single member is that member" do
 	assert_equal _Union(String), String
 	assert_equal _Union(String, String), String
