@@ -14,7 +14,9 @@ module Literal::Properties
 	end
 
 	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, description: nil, &coercion)
-		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, default: Literal::Undefined, description:, &coercion)
+		# The union admitting Literal::Undefined is what makes the property
+		# optional — see Literal::Property#undefinable? — so there's no default.
+		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, description:, &coercion)
 	end
 
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)

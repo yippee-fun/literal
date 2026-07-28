@@ -1856,7 +1856,7 @@ test "ambiguous union errors name the members that collide" do
 	assert error.message.include?("_Float(finite?: true)")
 
 	error = assert_raises(Literal::ArgumentError) do
-		Example.json_schema(_Union(_Nilable(String), Integer))
+		Example.json_schema(_Union(_JSONData, Integer))
 	end
 	assert error.message.include?("does not serialize to a single JSON type")
 
@@ -2085,6 +2085,32 @@ test "union serialization roundtrip" do
 	assert_equal(age_serialized, 42)
 	assert_equal(Example.deserialize(name_serialized, type:), name_original)
 	assert_equal(Example.deserialize(age_serialized, type:), age_original)
+end
+
+test "a union with a nilable member is natural" do
+	# The nilable is flattened into the union, so its type is classified as its
+	# own member rather than being opaque — null, string and integer are each
+	# resolvable from the raw value.
+	type = _Union(_Nilable(String), Integer)
+
+	assert_equal(
+		Example.json_schema(type),
+		{ "oneOf" => [{ "type" => "null" }, { "type" => "string" }, { "type" => "integer" }] },
+	)
+
+	[nil, "Joel", 42].each do |original|
+		serialized = Example.serialize(original, type:)
+
+		assert_equal(Example.deserialize(serialized, type:), original)
+	end
+end
+
+test "a union with a nilable member still catches genuine collisions" do
+	type = _Union(_Nilable(String), Symbol)
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+
+	assert error.message.include?("both serialize to JSON string values")
 end
 
 test "natural union number deserialization accepts integers" do

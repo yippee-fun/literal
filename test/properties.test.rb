@@ -271,6 +271,141 @@ test "nilable block params are optional" do
 	refute_raises { example.new { "Hello" } }
 end
 
+test "optional keyword params are optional" do
+	example = Class.new(Example) do
+		prop :example, _Optional(String), reader: :public
+	end
+
+	refute_raises { example.new }
+	refute_raises { example.new(example: "Hello") }
+	refute_raises { example.new(example: Literal::Undefined) }
+	assert_raises(Literal::TypeError) { example.new(example: 1) }
+	assert_equal example.new.example, Literal::Undefined
+	refute example.literal_properties[:example].required? { "Expected example to not be required" }
+end
+
+test "optional positional params are optional" do
+	example = Class.new(Example) do
+		prop :example, _Optional(String), :positional, reader: :public
+	end
+
+	refute_raises { example.new }
+	refute_raises { example.new("Hello") }
+	assert_equal example.new.example, Literal::Undefined
+	assert_equal example.new("Hello").example, "Hello"
+end
+
+test "_Optional and prop? produce equivalent properties" do
+	bare = Class.new(Example) do
+		prop :example, _Optional(String), reader: :public
+	end
+
+	sugar = Class.new(Example) do
+		prop? :example, String, reader: :public
+	end
+
+	bare_property = bare.literal_properties[:example]
+	sugar_property = sugar.literal_properties[:example]
+
+	assert_equal bare_property.type, sugar_property.type
+	assert_equal bare_property.optional?, sugar_property.optional?
+	assert_equal bare_property.default, sugar_property.default
+	assert_equal bare.new.example, sugar.new.example
+end
+
+test "optional properties nest with nilable in either order" do
+	example = Class.new(Example) do
+		prop :undefined_or_nil, _Optional(_Nilable(String)), reader: :public
+		prop :nil_or_undefined, _Nilable(_Optional(String)), reader: :public
+	end
+
+	# Both spellings canonicalise to the same union, so both are omittable and
+	# both distinguish an omitted value from an explicit nil.
+	assert_equal(
+		example.literal_properties[:undefined_or_nil].type,
+		example.literal_properties[:nil_or_undefined].type,
+	)
+
+	assert_equal example.new.undefined_or_nil, Literal::Undefined
+	assert_equal example.new.nil_or_undefined, Literal::Undefined
+	assert_equal example.new(undefined_or_nil: nil, nil_or_undefined: nil).nil_or_undefined, nil
+end
+
+test "optional block params are still required" do
+	# Ruby resolves an omitted block to nil, so a block param can never receive
+	# Literal::Undefined and _Optional cannot make one omittable.
+	example = Class.new(Example) do
+		prop :example, _Optional(Proc), :&
+	end
+
+	assert_raises(Literal::TypeError) { example.new }
+	assert example.literal_properties[:example].required? { "Expected example to be required" }
+end
+
+test "only a union containing Literal::Undefined is optional" do
+	# Optionality is exact containment, not `===`. The sentinel is a truthy
+	# object, so `_Truthy === Literal::Undefined` is true — but merely matching
+	# the sentinel does not mean "omittable"; declaring it as a union member
+	# does. A bare `_Union` spelling is the same shape `_Optional` builds.
+	example = Class.new(Example) do
+		prop :declared, _Union(String, Literal::Undefined), reader: :public
+		prop :truthy, _Truthy
+		prop :any, _Any
+		prop :not_nil, _Not(nil)
+	end
+
+	# The sentinel matches these types, but matching is not containment.
+	assert example.literal_properties[:truthy].type === Literal::Undefined
+	assert example.literal_properties[:any].type === Literal::Undefined
+	assert example.literal_properties[:not_nil].type === Literal::Undefined
+
+	assert example.literal_properties[:declared].undefinable? { "Expected declared to be undefinable" }
+	refute example.literal_properties[:truthy].optional? { "Expected truthy to be required" }
+	refute example.literal_properties[:any].optional? { "Expected any to be required" }
+	refute example.literal_properties[:not_nil].optional? { "Expected not_nil to be required" }
+
+	assert_raises(ArgumentError) do
+		example.new(truthy: true, any: 1)
+	end
+
+	instance = example.new(truthy: true, any: 1, not_nil: 1)
+
+	assert_equal instance.declared, Literal::Undefined
+end
+
+test "the sentinel is an ordinary object, not a Module" do
+	# Literal::Undefined used to be a module, which made `Module === Undefined`
+	# true and silently turned Module-typed properties optional. As a plain
+	# object it satisfies no type about the object model.
+	refute Module === Literal::Undefined
+	refute Class === Literal::Undefined
+
+	example = Class.new(Example) do
+		prop :a, Module
+	end
+
+	assert_raises(ArgumentError) { example.new }
+	assert example.literal_properties[:a].required? { "Expected a to be required" }
+end
+
+test "a declared Literal::Undefined member takes precedence over nil" do
+	# A type can accept both sentinels. `_Optional` declares Literal::Undefined
+	# as a member, so an omitted value resolves to it and stays distinguishable
+	# from an explicit nil. `_Nilable(_Truthy)` only accepts it incidentally, so
+	# nil wins and the property behaves as it always has.
+	example = Class.new(Example) do
+		prop :declared, _Optional(_Nilable(String)), reader: :public
+		prop :incidental, _Nilable(_Truthy), reader: :public
+	end
+
+	assert example.literal_properties[:declared].undefinable? { "Expected declared to be undefinable" }
+	refute example.literal_properties[:incidental].undefinable? { "Expected incidental not to be undefinable" }
+
+	assert_equal example.new.declared, Literal::Undefined
+	assert_equal example.new.incidental, nil
+	assert_equal example.new(declared: nil).declared, nil
+end
+
 class Person
 	extend Literal::Properties
 

@@ -12,4 +12,12 @@ module Kernel
 	private def undefined
 		Literal::Undefined
 	end
+
+	private def never
+		Literal::Types::NeverType::Instance
+	end
+
+	private def void
+		Literal::Types::VoidType::Instance
+	end
 end

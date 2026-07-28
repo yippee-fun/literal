@@ -106,11 +106,11 @@ class Literal::Serializer
 		@context.json_type(type)
 	end
 
-	# Whether the type is a union permitting Literal::Undefined, marking a
+	# Whether the type is a union containing Literal::Undefined, marking a
 	# property or shape key that is omitted when serializing an undefined value
 	# and restored to Literal::Undefined when its key is missing.
 	private def undefined_optional?(type)
-		Literal::Types::UnionType === type && type.types.include?(Literal::Undefined)
+		Literal::Types::UnionType === type && type.optional?
 	end
 
 	# The type an undefined-optional value serializes as when it is present.

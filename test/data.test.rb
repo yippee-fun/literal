@@ -65,6 +65,19 @@ test "from_props resolves omitted nilable, splat and double splat properties" do
 	assert_equal(splats.extras, {})
 end
 
+test "from_props resolves omitted optional properties to Literal::Undefined" do
+	gap = Class.new(Literal::Data) do
+		prop :a, _Optional(String)
+		prop? :b, String
+	end
+
+	instance = gap.from_props({})
+
+	assert_equal(instance.a, Literal::Undefined)
+	assert_equal(instance.b, Literal::Undefined)
+	assert_equal(gap.from_props(a: "first", b: "second").to_h, { a: "first", b: "second" })
+end
+
 test "from_props assigns block properties" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
