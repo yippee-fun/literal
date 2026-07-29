@@ -9,6 +9,7 @@ module Literal::Properties
 
 	def self.extended(base)
 		super
+		base.include(Literal::Coercions)
 		base.include(DocString)
 		base.include(base.__send__(:__literal_extension__))
 	end
