@@ -49,6 +49,12 @@ test "Generic#coerce passes matching literal sets through unchanged" do
 	assert_equal Literal::Set(String).coerce(set), nil
 end
 
+test "Generic#to_proc coerces" do
+	mapped = [::Set[1, 2]].map(&Literal::Set(Integer))
+
+	assert_equal mapped, [Literal::Set(Integer).new(1, 2)]
+end
+
 test "Generic#=== matches covariantly" do
 	assert Literal::Set(Integer) === Literal::Set(Integer).new(1)
 	assert Literal::Set(Numeric) === Literal::Set(Integer).new(1)

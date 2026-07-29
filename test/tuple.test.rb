@@ -62,6 +62,12 @@ test "Generic#coerce passes matching literal tuples through unchanged" do
 	assert_same Literal::Tuple(Numeric, Numeric).coerce(tuple), tuple
 end
 
+test "Generic#to_proc coerces" do
+	mapped = [["a", 1]].map(&Literal::Tuple(String, Integer))
+
+	assert_equal mapped, [Literal::Tuple(String, Integer).new("a", 1)]
+end
+
 test "Generic#=== matches covariantly per position" do
 	tuple = Literal::Tuple(Integer, String).new(1, "a")
 

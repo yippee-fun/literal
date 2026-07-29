@@ -60,6 +60,12 @@ test "Generic#coerce passes matching literal hashes through unchanged" do
 	assert_equal Literal::Hash(String, Integer).coerce(hash), nil
 end
 
+test "Generic#to_proc coerces" do
+	mapped = [{ a: 1 }].map(&Literal::Hash(Symbol, Integer))
+
+	assert_equal mapped, [Literal::Hash(Symbol, Integer).new({ a: 1 })]
+end
+
 test "Generic#=== matches covariantly in keys and values" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1 })
 
