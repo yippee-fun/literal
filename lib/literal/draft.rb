@@ -5,6 +5,14 @@
 # hold Literal::Undefined, so an explicit nil is distinguishable from "not
 # provided yet". Create a draft class with `Literal::Draft(SomeType)`.
 class Literal::Draft < Literal::Struct
+	# Draft classes keyed by the drafted class's schema — see Literal.Draft.
+	# The schema, not its snapshot: WeakKeyMap compares keys with eql?, and a
+	# subclass's snapshot is eql? to its parent's, while schemas are one per
+	# class and compare by identity. Each entry holds [snapshot, draft] so a
+	# schema change (snapshot identity change) reads as a miss. The key is
+	# weak: when a class is collected, its schema and cached draft follow.
+	CACHE = ObjectSpace::WeakKeyMap.new
+
 	class << self
 		# Generated draft classes override this with the class they draft.
 		def __type__

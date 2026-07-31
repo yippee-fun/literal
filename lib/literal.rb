@@ -79,9 +79,29 @@ module Literal
 		end
 	end
 
+	# Returns the canonical draft class for the given class at its current
+	# shape: repeated calls return the same class until the drafted class's
+	# properties change, at which point a fresh draft class is generated and
+	# the stale one becomes collectable.
 	def self.Draft(type)
-		Class.new(Literal::Draft) do
-			__draft__(type)
+		unless Literal::Properties === type
+			raise Literal::ArgumentError.new("Literal::Draft requires a class that extends Literal::Properties.")
+		end
+
+		schema = type.literal_properties
+		snapshot = schema.snapshot
+		cached = Literal::Draft::CACHE[schema]
+
+		if cached && snapshot.equal?(cached[0])
+			cached[1]
+		else
+			draft = Class.new(Literal::Draft) do
+				__draft__(type)
+			end
+
+			Literal::Draft::CACHE[schema] = [snapshot, draft].freeze
+
+			draft
 		end
 	end
 

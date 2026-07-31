@@ -296,3 +296,24 @@ test "drafting relaxes deferred types without materializing them" do
 
 	assert_equal draft.finalize.name, "a"
 end
+
+test "Literal::Draft returns the canonical draft class for the class's current shape" do
+	klass = Class.new(Literal::Data) { prop :a, String }
+
+	first = Literal::Draft(klass)
+
+	assert first.equal?(Literal::Draft(klass))
+
+	klass.class_eval { prop :b, _Nilable(Integer), default: nil }
+	second = Literal::Draft(klass)
+
+	refute first.equal?(second)
+	assert second.new.respond_to?(:b)
+
+	# A subclass with the same properties still drafts into itself.
+	subclass = Class.new(klass)
+
+	refute Literal::Draft(subclass).equal?(second)
+	assert_equal Literal::Draft(subclass).__type__, subclass
+end
+
