@@ -2,9 +2,12 @@
 
 # A composable property seal. Wraps a callable that fixes a value's final
 # representation — freezing it, for example — running after any coercion and
-# before the type check. Unlike coercions, seals run on every path that
-# stores a value into a real object: the initializer, writers, `from_props`,
-# and `marshal_load`. Drafts drop the seal — their state stays mutable — and
+# before the type check. Unlike coercions, seals run on every constructing
+# path: the initializer, writers, and `from_props` (which takes values that
+# may never have been through construction, and computes defaults itself).
+# They don't run on `marshal_load` — a loaded object was constructed, and
+# sealed, before it was dumped, and the frozen state recorded at dump is
+# what gets restored. Drafts drop the seal — their state stays mutable — and
 # it is re-applied when the draft finalizes.
 #
 # Seals must be idempotent and type-preserving.

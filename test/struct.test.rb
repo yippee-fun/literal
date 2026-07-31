@@ -205,3 +205,25 @@ test do
 	with_keyword_property_names.end = "finish2"
 	assert_equal(with_keyword_property_names.to_h, { :begin => "start2", :end => "finish2", :module => nil })
 end
+
+class ::RootStructWithSealedProp < Literal::Struct
+	SEAL_CALLS = []
+
+	prop :tags, _Array(String), &(Literal::Seal { |it|
+		SEAL_CALLS << it
+		it.frozen? ? it : it.dup.freeze
+	})
+end
+
+test "seals run at construction but not when marshal loading" do
+	a = RootStructWithSealedProp.new(tags: ["a"])
+
+	assert a.tags.frozen?
+
+	calls_before = RootStructWithSealedProp::SEAL_CALLS.size
+	b = Marshal.load(Marshal.dump(a))
+
+	assert_equal RootStructWithSealedProp::SEAL_CALLS.size, calls_before
+	assert b.tags.frozen?
+	assert_equal b, a
+end
