@@ -19,6 +19,12 @@ class Literal::Draft < Literal::Struct
 			nil
 		end
 
+		# Build a finalized value in one call: constructs a draft (passing any
+		# arguments through), yields it to the block, and finalizes it.
+		def build(*args, **kwargs, &block)
+			new(*args, **kwargs).finalize(&block)
+		end
+
 		# Draft classes are types: any draft of a subtype of our drafted type
 		# matches, regardless of which Literal::Draft() call built its class.
 		def ===(value)
@@ -175,8 +181,12 @@ class Literal::Draft < Literal::Struct
 	#
 	# Nested drafts finalize too, depth-first — unless the drafted type's
 	# property accepts the draft as-is, in which case the slot wanted a draft
-	# and it stays one. The draft itself is never mutated: finalizing twice
-	# builds two independent values.
+	# and it stays one. The draft itself is never mutated by building: aside
+	# from any props and block given here, finalizing twice builds two
+	# independent values.
+	#
+	# A block receives the draft after any props are assigned and before the
+	# value is built — for last touches like conditional assignment.
 	def finalize(**props)
 		type = self.class.__type__
 
@@ -185,6 +195,8 @@ class Literal::Draft < Literal::Struct
 		end
 
 		props.each { |name, value| self[name] = value }
+
+		yield self if block_given?
 
 		properties = type.literal_properties
 		attributes = {}

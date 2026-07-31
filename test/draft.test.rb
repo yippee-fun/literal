@@ -317,3 +317,67 @@ test "Literal::Draft returns the canonical draft class for the class's current s
 	assert_equal Literal::Draft(subclass).__type__, subclass
 end
 
+test "build constructs, yields and finalizes a draft in one call" do
+	condition = true
+
+	value = Literal::Draft(DraftExample).build(id: 1) do |draft|
+		draft.name = "John" if condition
+	end
+
+	assert DraftExample === value
+	assert_equal value.name, "John"
+	assert_equal value.age, 18
+end
+
+test "finalize yields the draft to a block before building" do
+	condition = true
+
+	value = Literal::Draft(DraftExample).new(id: 1).finalize do |draft|
+		draft.name = "John" if condition
+	end
+
+	assert DraftExample === value
+	assert_equal value.name, "John"
+	assert_equal value.age, 18
+end
+
+test "finalize assigns props before yielding" do
+	Literal::Draft(DraftExample).new(name: "John").finalize(id: 1) do |draft|
+		assert_equal draft.id, 1
+	end
+end
+
+test "Literal::Data.build builds through a draft" do
+	value = DraftExample.build do |draft|
+		draft.name = "John"
+		draft.id = 1
+	end
+
+	assert_equal value, DraftExample.new(name: "John", id: 1)
+end
+
+test "Literal::Data.build passes arguments to the draft's constructor" do
+	condition = false
+
+	value = DraftExample.build(name: "John", id: 1) do |draft|
+		draft.nickname = "Johnny" if condition
+	end
+
+	assert_equal value, DraftExample.new(name: "John", id: 1)
+	assert_equal DraftExample.build(name: "John", id: 1), value
+end
+
+test "Literal::Struct.build builds through a draft" do
+	klass = Class.new(Literal::Struct) do
+		prop :name, String, reader: :public
+		prop :id, Integer, reader: :public
+	end
+
+	value = klass.build(id: 1) do |draft|
+		draft.name = "John"
+	end
+
+	assert klass === value
+	assert_equal value.name, "John"
+	assert_equal value.id, 1
+end

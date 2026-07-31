@@ -5,6 +5,13 @@ class Literal::DataStructure
 	extend Literal::Properties
 
 	class << self
+		# Build an instance through a draft: yields a draft of this class to
+		# the block, then finalizes it. Any arguments are passed through to
+		# the draft's constructor.
+		def build(...)
+			Literal::Draft(self).build(...)
+		end
+
 		def literal_child_types
 			return enum_for(__method__) unless block_given?
 
