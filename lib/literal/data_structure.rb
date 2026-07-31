@@ -5,6 +5,13 @@ class Literal::DataStructure
 	extend Literal::Properties
 
 	class << self
+		# Build an instance through a draft: yields a draft of this class to
+		# the block, then finalizes it. Any arguments are passed through to
+		# the draft's constructor.
+		def build(...)
+			Literal::Draft(self).build(...)
+		end
+
 		def literal_child_types
 			return enum_for(__method__) unless block_given?
 
@@ -100,20 +107,32 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_load(payload)
-		_version, attributes, was_frozen = payload
+		_version, attributes, was_frozen, frozen_values = payload
 
-		__literal_assign_props__(attributes, "#marshal_load")
+		# Marshal.load rebuilds contained objects unfrozen, so restore the
+		# frozen state each value had when it was dumped — before the type
+		# check, which may require it. Version 1 payloads carry no list.
+		frozen_values&.each do |name|
+			attributes[name].freeze if attributes.key?(name)
+		end
+
+		# Seals don't apply here: they belong to construction, and a loaded
+		# object was constructed — and sealed — before it was dumped. The
+		# frozen state recorded at dump is what gets restored.
+		__literal_assign_props__(attributes, "#marshal_load", seal: false)
 
 		freeze if was_frozen
 	end
 
 	# Assign final property values from a Hash keyed by Symbol property name,
-	# type checking each value but never coercing. Missing properties resolve
-	# the same way an omitted initializer parameter would. Keys that don't
-	# match a property are ignored — for marshalling, they're values for
-	# properties that have since been removed. Returns the number of keys
-	# that matched a property so callers can be stricter.
-	private def __literal_assign_props__(props, method_name)
+	# type checking each value but never coercing. Seals apply unless the
+	# caller is restoring already-constructed state — they fix a value's
+	# final representation, not its input. Missing properties resolve the
+	# same way an omitted initializer parameter would. Keys that don't match
+	# a property are ignored — for marshalling, they're values for properties
+	# that have since been removed. Returns the number of keys that matched a
+	# property so callers can be stricter.
+	private def __literal_assign_props__(props, method_name, seal: true)
 		properties = self.class.literal_properties
 		matched = 0
 
@@ -125,6 +144,10 @@ class Literal::DataStructure
 				value = props[name]
 			else
 				value = self.class.__send__(:missing_prop_value, property, self)
+			end
+
+			if seal && (property_seal = property.seal)
+				value = property_seal.call(value)
 			end
 
 			Literal.check(value, property.type) do |context|
@@ -139,7 +162,20 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_dump
-		[1, to_h, frozen?].freeze
+		attributes = to_h
+
+		# Record which values are frozen so marshal_load can restore that
+		# state. Immediates are skipped — they always load frozen anyway.
+		frozen_values = attributes.keys.select do |name|
+			case (value = attributes[name])
+			when Integer, Float, Symbol, nil, true, false
+				false
+			else
+				Literal::FROZEN.bind_call(value)
+			end
+		end
+
+		[2, attributes, frozen?, frozen_values.freeze].freeze
 	end
 
 	def hash

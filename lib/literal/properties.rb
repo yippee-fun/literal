@@ -21,11 +21,21 @@ module Literal::Properties
 	end
 
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
+		seal = nil
+
+		# A block built from a Literal::Coercion or Literal::Seal carries its
+		# pipeline structure, which splits into the property's two slots.
+		if coercion&.respond_to?(:__literal_pipeline__)
+			pipeline = coercion.__literal_pipeline__
+			coercion = pipeline.coercion_proc
+			seal = pipeline.seal_proc
+		end
+
 		if default && !(Proc === default || default.frozen?)
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 
-		if !default.nil? && !(Proc === default) && !coercion && !(Literal::Types::DeferredType === type) && !(type === default)
+		if !default.nil? && !(Proc === default) && !coercion && !seal && !(Literal::Types::DeferredType === type) && !(type === default)
 			raise Literal::ArgumentError.new("The default for #{name.inspect} must match its type.")
 		end
 
@@ -96,6 +106,7 @@ module Literal::Properties
 			default:,
 			description:,
 			coercion:,
+			seal:,
 		)
 
 		literal_properties << property

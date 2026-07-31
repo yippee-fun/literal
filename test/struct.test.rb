@@ -124,6 +124,27 @@ test "marshalling a frozen struct" do
 	assert b.frozen?
 end
 
+class ::RootStructWithFrozenProp < Literal::Struct
+	prop :tags, _Frozen(_Array(String))
+	prop :list, _Array(String)
+end
+
+test "marshalling restores the frozen state of property values" do
+	a = RootStructWithFrozenProp.new(tags: ["a"].freeze, list: ["b"])
+
+	b = Marshal.load(Marshal.dump(a))
+
+	assert_equal b, a
+	assert b.tags.frozen?
+	refute b.list.frozen?
+end
+
+test "marshalling loads version 1 payloads" do
+	a = RootStruct.from_pack([1, { name: "Joel" }, false])
+
+	assert_equal a.name, "Joel"
+end
+
 test "as_pack/from_pack" do
 	a = RootStruct.new(name: "Joel")
 	a.freeze
@@ -183,4 +204,26 @@ test do
 	with_keyword_property_names[:begin] = "start2"
 	with_keyword_property_names.end = "finish2"
 	assert_equal(with_keyword_property_names.to_h, { :begin => "start2", :end => "finish2", :module => nil })
+end
+
+class ::RootStructWithSealedProp < Literal::Struct
+	SEAL_CALLS = []
+
+	prop :tags, _Array(String), &(Literal::Seal { |it|
+		SEAL_CALLS << it
+		it.frozen? ? it : it.dup.freeze
+	})
+end
+
+test "seals run at construction but not when marshal loading" do
+	a = RootStructWithSealedProp.new(tags: ["a"])
+
+	assert a.tags.frozen?
+
+	calls_before = RootStructWithSealedProp::SEAL_CALLS.size
+	b = Marshal.load(Marshal.dump(a))
+
+	assert_equal RootStructWithSealedProp::SEAL_CALLS.size, calls_before
+	assert b.tags.frozen?
+	assert_equal b, a
 end

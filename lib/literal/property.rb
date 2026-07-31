@@ -10,7 +10,7 @@ class Literal::Property
 
 	include Comparable
 
-	def initialize(name:, type:, kind:, reader:, writer:, predicate:, default:, description:, coercion:)
+	def initialize(name:, type:, kind:, reader:, writer:, predicate:, default:, description:, coercion:, seal: nil)
 		@name = name
 		@type = type
 		@kind = kind
@@ -20,9 +20,10 @@ class Literal::Property
 		@default = default
 		@description = description
 		@coercion = coercion
+		@seal = seal
 	end
 
-	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion
+	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion, :seal
 
 	def optional?
 		default? || @type === nil || undefinable?
@@ -149,6 +150,10 @@ class Literal::Property
 			buffer << "  value = __property__.coerce(value, context: self)\n"
 		end
 
+		if @seal
+			buffer << "  value = __property__.seal.call(value)\n"
+		end
+
 		buffer <<
 			"  __property__.check_writer(self, value)\n" <<
 			"  @" << @name.name << " = value\n" <<
@@ -199,6 +204,10 @@ class Literal::Property
 			generate_initializer_coerce_property(buffer)
 		end
 
+		if @seal
+			generate_initializer_seal_property(buffer)
+		end
+
 		generate_initializer_check_type(buffer)
 		generate_initializer_assign_value(buffer)
 	end
@@ -217,6 +226,14 @@ class Literal::Property
 			"= __property__.coerce(" <<
 			escaped_name <<
 			", context: self)\n"
+	end
+
+	private def generate_initializer_seal_property(buffer = +"")
+		buffer <<
+			escaped_name <<
+			"= __property__.seal.call(" <<
+			escaped_name <<
+			")\n"
 	end
 
 	private def generate_initializer_assign_default(buffer = +"")

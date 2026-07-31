@@ -5,6 +5,7 @@ require_relative "literal/version"
 
 module Literal
 	OBJECT_ID = BasicObject.instance_method(:__id__)
+	FROZEN = Kernel.instance_method(:frozen?)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")
@@ -78,10 +79,38 @@ module Literal
 		end
 	end
 
+	# Returns the canonical draft class for the given class at its current
+	# shape: repeated calls return the same class until the drafted class's
+	# properties change, at which point a fresh draft class is generated and
+	# the stale one becomes collectable.
 	def self.Draft(type)
-		Class.new(Literal::Draft) do
-			__draft__(type)
+		unless Literal::Properties === type
+			raise Literal::ArgumentError.new("Literal::Draft requires a class that extends Literal::Properties.")
 		end
+
+		schema = type.literal_properties
+		snapshot = schema.snapshot
+		cached = Literal::Draft::CACHE[schema]
+
+		if cached && snapshot.equal?(cached[0])
+			cached[1]
+		else
+			draft = Class.new(Literal::Draft) do
+				__draft__(type)
+			end
+
+			Literal::Draft::CACHE[schema] = [snapshot, draft].freeze
+
+			draft
+		end
+	end
+
+	def self.Coercion(&block)
+		Literal::Coercion.new(&block)
+	end
+
+	def self.Seal(&block)
+		Literal::Seal.new(&block)
 	end
 
 	def self.Array(type)

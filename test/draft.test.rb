@@ -168,3 +168,216 @@ test "drafts keep positional properties positional" do
 
 	assert_equal draft.finalize, klass.new(1, 2)
 end
+
+class DraftNestedAddress < Literal::Data
+	prop :street, String
+	prop :city, String, default: "London"
+end
+
+class DraftNestedPerson < Literal::Data
+	prop :name, String
+	prop :address, DraftNestedAddress
+	prop :fallback_address, _Nilable(DraftNestedAddress), default: nil
+end
+
+test "draft slots accept a draft of the property's type" do
+	person = Literal::Draft(DraftNestedPerson).new
+	address = Literal::Draft(DraftNestedAddress).new
+
+	person.address = address
+
+	assert person.address.equal?(address)
+	assert_raises(Literal::TypeError) { person.address = "not an address" }
+end
+
+test "draft slots accept drafts of subtypes of the property's type" do
+	child = Class.new(DraftNestedAddress)
+	person = Literal::Draft(DraftNestedPerson).new
+
+	person.address = Literal::Draft(child).new(street: "1 Main St")
+
+	assert_equal person.address.street, "1 Main St"
+end
+
+test "nested drafts are accepted through nilable types" do
+	person = Literal::Draft(DraftNestedPerson).new
+
+	person.fallback_address = Literal::Draft(DraftNestedAddress).new(street: "2 Side St")
+
+	assert_equal person.fallback_address.street, "2 Side St"
+end
+
+test "finalize builds nested drafts too, applying their defaults" do
+	person_draft = Literal::Draft(DraftNestedPerson).new(name: "Joel")
+	person_draft.address = Literal::Draft(DraftNestedAddress).new(street: "1 Main St")
+
+	person = person_draft.finalize
+
+	assert DraftNestedPerson === person
+	assert_equal person.address, DraftNestedAddress.new(street: "1 Main St")
+	assert_equal person.address.city, "London"
+end
+
+test "finalize raises when a nested draft is missing required properties" do
+	person_draft = Literal::Draft(DraftNestedPerson).new(name: "Joel")
+	person_draft.address = Literal::Draft(DraftNestedAddress).new
+
+	error = assert_raises(Literal::ArgumentError) { person_draft.finalize }
+
+	assert error.message.include?("Missing property :street")
+end
+
+test "finalize doesn't mutate the draft" do
+	person_draft = Literal::Draft(DraftNestedPerson).new(name: "Joel")
+	address_draft = Literal::Draft(DraftNestedAddress).new(street: "1 Main St")
+	person_draft.address = address_draft
+
+	first = person_draft.finalize
+	second = person_draft.finalize
+
+	assert person_draft.address.equal?(address_draft)
+	assert_equal first, second
+	refute first.address.equal?(second.address)
+end
+
+class DraftPendingHolder < Literal::Data
+	prop :pending, Literal::Draft(DraftNestedAddress)
+end
+
+test "a property typed as a draft class keeps its draft at finalize" do
+	holder_draft = Literal::Draft(DraftPendingHolder).new
+	pending = Literal::Draft(DraftNestedAddress).new(street: "1 Main St")
+	holder_draft.pending = pending
+
+	holder = holder_draft.finalize
+
+	assert holder.pending.equal?(pending)
+end
+
+test "draft coercions skip nested drafts" do
+	klass = Class.new(Literal::Struct) do
+		prop :address, DraftNestedAddress, reader: :public do |value|
+			(Hash === value) ? DraftNestedAddress.new(**value) : value
+		end
+	end
+
+	draft = Literal::Draft(klass).new
+
+	draft.address = { street: "1 Main St" }
+
+	assert DraftNestedAddress === draft.address
+
+	nested = Literal::Draft(DraftNestedAddress).new(street: "2 Side St")
+	draft.address = nested
+
+	assert draft.address.equal?(nested)
+	assert_equal draft.finalize.address.street, "2 Side St"
+end
+
+class DraftDeferredNode < Literal::Data
+	prop :name, String
+	prop :child, _Nilable(_Deferred { DraftDeferredNode }), default: nil
+end
+
+test "deferred property types accept nested drafts" do
+	root = Literal::Draft(DraftDeferredNode).new(name: "root")
+	root.child = Literal::Draft(DraftDeferredNode).new(name: "leaf")
+
+	assert_equal root.finalize.child.name, "leaf"
+end
+
+test "drafting relaxes deferred types without materializing them" do
+	klass = Class.new(Literal::Data) do
+		prop :name, String
+		prop :other, _Nilable(_Deferred { NeverDefinedAnywhere }), default: nil
+	end
+
+	draft = Literal::Draft(klass).new(name: "a")
+
+	assert_equal draft.finalize.name, "a"
+end
+
+test "Literal::Draft returns the canonical draft class for the class's current shape" do
+	klass = Class.new(Literal::Data) { prop :a, String }
+
+	first = Literal::Draft(klass)
+
+	assert first.equal?(Literal::Draft(klass))
+
+	klass.class_eval { prop :b, _Nilable(Integer), default: nil }
+	second = Literal::Draft(klass)
+
+	refute first.equal?(second)
+	assert second.new.respond_to?(:b)
+
+	# A subclass with the same properties still drafts into itself.
+	subclass = Class.new(klass)
+
+	refute Literal::Draft(subclass).equal?(second)
+	assert_equal Literal::Draft(subclass).__type__, subclass
+end
+
+test "build constructs, yields and finalizes a draft in one call" do
+	condition = true
+
+	value = Literal::Draft(DraftExample).build(id: 1) do |draft|
+		draft.name = "John" if condition
+	end
+
+	assert DraftExample === value
+	assert_equal value.name, "John"
+	assert_equal value.age, 18
+end
+
+test "finalize yields the draft to a block before building" do
+	condition = true
+
+	value = Literal::Draft(DraftExample).new(id: 1).finalize do |draft|
+		draft.name = "John" if condition
+	end
+
+	assert DraftExample === value
+	assert_equal value.name, "John"
+	assert_equal value.age, 18
+end
+
+test "finalize assigns props before yielding" do
+	Literal::Draft(DraftExample).new(name: "John").finalize(id: 1) do |draft|
+		assert_equal draft.id, 1
+	end
+end
+
+test "Literal::Data.build builds through a draft" do
+	value = DraftExample.build do |draft|
+		draft.name = "John"
+		draft.id = 1
+	end
+
+	assert_equal value, DraftExample.new(name: "John", id: 1)
+end
+
+test "Literal::Data.build passes arguments to the draft's constructor" do
+	condition = false
+
+	value = DraftExample.build(name: "John", id: 1) do |draft|
+		draft.nickname = "Johnny" if condition
+	end
+
+	assert_equal value, DraftExample.new(name: "John", id: 1)
+	assert_equal DraftExample.build(name: "John", id: 1), value
+end
+
+test "Literal::Struct.build builds through a draft" do
+	klass = Class.new(Literal::Struct) do
+		prop :name, String, reader: :public
+		prop :id, Integer, reader: :public
+	end
+
+	value = klass.build(id: 1) do |draft|
+		draft.name = "John"
+	end
+
+	assert klass === value
+	assert_equal value.name, "John"
+	assert_equal value.id, 1
+end

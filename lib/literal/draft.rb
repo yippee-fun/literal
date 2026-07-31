@@ -5,10 +5,24 @@
 # hold Literal::Undefined, so an explicit nil is distinguishable from "not
 # provided yet". Create a draft class with `Literal::Draft(SomeType)`.
 class Literal::Draft < Literal::Struct
+	# Draft classes keyed by the drafted class's schema — see Literal.Draft.
+	# The schema, not its snapshot: WeakKeyMap compares keys with eql?, and a
+	# subclass's snapshot is eql? to its parent's, while schemas are one per
+	# class and compare by identity. Each entry holds [snapshot, draft] so a
+	# schema change (snapshot identity change) reads as a miss. The key is
+	# weak: when a class is collected, its schema and cached draft follow.
+	CACHE = ObjectSpace::WeakKeyMap.new
+
 	class << self
 		# Generated draft classes override this with the class they draft.
 		def __type__
 			nil
+		end
+
+		# Build a finalized value in one call: constructs a draft (passing any
+		# arguments through), yields it to the block, and finalizes it.
+		def build(*args, **kwargs, &block)
+			new(*args, **kwargs).finalize(&block)
 		end
 
 		# Draft classes are types: any draft of a subtype of our drafted type
@@ -64,16 +78,70 @@ class Literal::Draft < Literal::Struct
 
 			prop(
 				property.name,
-				Literal::Types._Union(property.type, Literal::Undefined),
+				# Undefined first: union members are tried in order, and matching
+				# the unset sentinel by identity keeps deferred types in the
+				# relaxed member from materializing before a real value arrives.
+				Literal::Types._Union(Literal::Undefined, Literal::Types._DraftState(property.type)),
 				property.kind,
 				predicate: property.predicate,
 				default: Literal::Undefined,
 				description: property.description,
 				&(original_coercion && proc { |value|
-					(Literal::Undefined == value) ? value : instance_exec(value, &original_coercion)
+					# Coercions normalize input for the drafted type. Unset slots and
+					# nested drafts aren't that input yet — the draft meets the
+					# coercion's output contract at finalize, through its own
+					# construction — so both pass through untouched.
+					if Literal::Undefined == value || Literal::Draft === value
+						value
+					else
+						instance_exec(value, &original_coercion)
+					end
 				})
 			)
 		end
+
+	end
+
+	# Matches any draft whose drafted type is a subtype of the given type —
+	# what `Literal::Draft(type).===` matches, without generating a draft
+	# class. Relaxed draft slots use this as their union member, which keeps
+	# recursive types (a Person with a Person property) from recursing forever
+	# at draft-class definition.
+	class Type
+		include Literal::Type
+
+		def initialize(type)
+			@type = type
+			freeze
+		end
+
+		attr_reader :type
+
+		def inspect
+			"Literal::Draft(#{@type.inspect})"
+		end
+
+		def ===(value)
+			Literal::Draft === value && (drafted = value.class.__type__) &&
+				Literal.subtype?(drafted, @type)
+		end
+
+		def >=(other, context: nil)
+			case other
+			when Literal::Draft::Type
+				Literal.subtype?(other.type, @type, context:)
+			when Class
+				if other <= Literal::Draft && (drafted = other.__type__)
+					Literal.subtype?(drafted, @type, context:)
+				else
+					false
+				end
+			else
+				false
+			end
+		end
+
+		freeze
 	end
 
 	# Build the drafted type from the properties that have been set. The
@@ -81,6 +149,15 @@ class Literal::Draft < Literal::Struct
 	# properties are enforced here. Any properties passed here are assigned
 	# to the draft first — through its writers, so they're coerced and type
 	# checked like any other assignment.
+	#
+	# Nested drafts finalize too, depth-first — unless the drafted type's
+	# property accepts the draft as-is, in which case the slot wanted a draft
+	# and it stays one. The draft itself is never mutated by building: aside
+	# from any props and block given here, finalizing twice builds two
+	# independent values.
+	#
+	# A block receives the draft after any props are assigned and before the
+	# value is built — for last touches like conditional assignment.
 	def finalize(**props)
 		type = self.class.__type__
 
@@ -90,6 +167,21 @@ class Literal::Draft < Literal::Struct
 
 		props.each { |name, value| self[name] = value }
 
-		type.from_props(to_h.reject { |_, value| Literal::Undefined == value })
+		yield self if block_given?
+
+		properties = type.literal_properties
+		attributes = {}
+
+		to_h.each do |name, value|
+			next if Literal::Undefined == value
+
+			if Literal::Draft === value && !(properties[name].type === value)
+				value = value.finalize
+			end
+
+			attributes[name] = value
+		end
+
+		type.from_props(attributes)
 	end
 end

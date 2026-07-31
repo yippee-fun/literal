@@ -22,6 +22,7 @@
 class Literal::Hash
 	class Generic
 		include Literal::Type
+		include Literal::Coercions::Composable
 
 		def initialize(key_type, value_type)
 			@key_type = key_type

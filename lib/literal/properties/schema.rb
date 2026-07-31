@@ -12,6 +12,14 @@ class Literal::Properties::Schema
 
 	attr_reader :properties_index
 
+	# The current sorted properties array. Its object identity changes if and
+	# only if the schema changes — `<<` replaces the array rather than
+	# mutating it, and `dup` copies it — so it can key caches of anything
+	# derived from the schema, such as generated draft classes.
+	def snapshot
+		@sorted_properties
+	end
+
 	def [](key)
 		@properties_index[key]
 	end
@@ -21,6 +29,8 @@ class Literal::Properties::Schema
 			@properties_index[value.name] = value
 			# ruby's sort is unstable, this trick makes it stable
 			n = 0
+			# Replacing (not mutating) the array is a contract: `snapshot`
+			# relies on its identity changing with every schema change.
 			@sorted_properties = @properties_index.values.sort_by! { |it| n += 1; [it, n] }
 		end
 
