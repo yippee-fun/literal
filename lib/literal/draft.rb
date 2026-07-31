@@ -81,7 +81,7 @@ class Literal::Draft < Literal::Struct
 				# Undefined first: union members are tried in order, and matching
 				# the unset sentinel by identity keeps deferred types in the
 				# relaxed member from materializing before a real value arrives.
-				Literal::Types._Union(Literal::Undefined, __relax__(property.type)),
+				Literal::Types._Union(Literal::Undefined, Literal::Types._DraftState(property.type)),
 				property.kind,
 				predicate: property.predicate,
 				default: Literal::Undefined,
@@ -100,35 +100,6 @@ class Literal::Draft < Literal::Struct
 			)
 		end
 
-		# Drafts relax the drafted type's requirements while a value is being
-		# built up: representation — a _Frozen constraint doesn't bind draft
-		# state — and finality — a slot typed as a Literal::Properties class
-		# also accepts a draft of it. Finalizing re-imposes both through the
-		# drafted type's own construction.
-		private def __relax__(type)
-			case type
-			when Literal::Types::DeferredType
-				# Wrapped rather than materialized: the deferred constant may not
-				# be defined yet at draft-definition time.
-				Literal::Types::DeferredType.new { __relax__(type.materialize) }
-			when Literal::Types::FrozenType
-				__relax__(type.type)
-			when Literal::Types::NilableType
-				Literal::Types._Nilable(__relax__(type.type))
-			when Literal::Types::UnionType
-				Literal::Types._Union(*type.types.map { |member| __relax__(member) }, *type.primitives)
-			when Literal::Properties
-				# A slot typed as a draft class already holds draft state; only
-				# final types get widened.
-				if Class === type && type <= Literal::Draft
-					type
-				else
-					Literal::Types._Union(type, Literal::Draft::Type.new(type))
-				end
-			else
-				type
-			end
-		end
 	end
 
 	# Matches any draft whose drafted type is a subtype of the given type —

@@ -189,6 +189,23 @@ module Literal::Types
 		)
 	end
 
+	# Matches what a slot typed as the given type may hold while drafting: the
+	# type with representation (`_Frozen`) and finality relaxed, so a
+	# `Literal::Properties` class also admits a draft of it.
+	# ```ruby
+	# _DraftState(_Frozen(_Array(String)))
+	# ```
+	def _DraftState(type)
+		DraftStateType.new(type)
+	end
+
+	# Nilable version of `_DraftState`.
+	def _DraftState?(...)
+		_Nilable(
+			_DraftState(...)
+		)
+	end
+
 	#  Matches if the value is an `Enumerable` and all its elements match the given type.
 	# ```ruby
 	# _Enumerable(String)
