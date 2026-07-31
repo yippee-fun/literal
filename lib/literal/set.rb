@@ -15,6 +15,7 @@
 class Literal::Set
 	class Generic
 		include Literal::Type
+		include Literal::Coercions::Composable
 
 		def initialize(type)
 			@type = type

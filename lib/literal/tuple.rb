@@ -13,6 +13,7 @@
 class Literal::Tuple
 	class Generic
 		include Literal::Type
+		include Literal::Coercions::Composable
 
 		def initialize(*types)
 			raise Literal::ArgumentError.new("Literal::Tuple type must have at least one type.") if types.empty?

@@ -21,6 +21,7 @@
 class Literal::Array
 	class Generic
 		include Literal::Type
+		include Literal::Coercions::Composable
 
 		def initialize(type)
 			@type = type

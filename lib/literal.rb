@@ -84,6 +84,14 @@ module Literal
 		end
 	end
 
+	def self.Coercion(&block)
+		Literal::Coercion.new(&block)
+	end
+
+	def self.Seal(&block)
+		Literal::Seal.new(&block)
+	end
+
 	def self.Array(type)
 		Literal::Array::Generic.new(type)
 	end

@@ -108,10 +108,11 @@ class Literal::DataStructure
 	end
 
 	# Assign final property values from a Hash keyed by Symbol property name,
-	# type checking each value but never coercing. Missing properties resolve
-	# the same way an omitted initializer parameter would. Keys that don't
-	# match a property are ignored — for marshalling, they're values for
-	# properties that have since been removed. Returns the number of keys
+	# type checking each value but never coercing. Seals still apply — they
+	# fix a value's final representation, not its input. Missing properties
+	# resolve the same way an omitted initializer parameter would. Keys that
+	# don't match a property are ignored — for marshalling, they're values
+	# for properties that have since been removed. Returns the number of keys
 	# that matched a property so callers can be stricter.
 	private def __literal_assign_props__(props, method_name)
 		properties = self.class.literal_properties
@@ -125,6 +126,10 @@ class Literal::DataStructure
 				value = props[name]
 			else
 				value = self.class.__send__(:missing_prop_value, property, self)
+			end
+
+			if (seal = property.seal)
+				value = seal.call(value)
 			end
 
 			Literal.check(value, property.type) do |context|
