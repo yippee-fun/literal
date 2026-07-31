@@ -100,7 +100,14 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_load(payload)
-		_version, attributes, was_frozen = payload
+		_version, attributes, was_frozen, frozen_values = payload
+
+		# Marshal.load rebuilds contained objects unfrozen, so restore the
+		# frozen state each value had when it was dumped — before the type
+		# check, which may require it. Version 1 payloads carry no list.
+		frozen_values&.each do |name|
+			attributes[name].freeze if attributes.key?(name)
+		end
 
 		__literal_assign_props__(attributes, "#marshal_load")
 
@@ -144,7 +151,20 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_dump
-		[1, to_h, frozen?].freeze
+		attributes = to_h
+
+		# Record which values are frozen so marshal_load can restore that
+		# state. Immediates are skipped — they always load frozen anyway.
+		frozen_values = attributes.keys.select do |name|
+			case (value = attributes[name])
+			when Integer, Float, Symbol, nil, true, false
+				false
+			else
+				Literal::FROZEN.bind_call(value)
+			end
+		end
+
+		[2, attributes, frozen?, frozen_values.freeze].freeze
 	end
 
 	def hash

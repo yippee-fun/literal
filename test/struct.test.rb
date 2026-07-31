@@ -124,6 +124,27 @@ test "marshalling a frozen struct" do
 	assert b.frozen?
 end
 
+class ::RootStructWithFrozenProp < Literal::Struct
+	prop :tags, _Frozen(_Array(String))
+	prop :list, _Array(String)
+end
+
+test "marshalling restores the frozen state of property values" do
+	a = RootStructWithFrozenProp.new(tags: ["a"].freeze, list: ["b"])
+
+	b = Marshal.load(Marshal.dump(a))
+
+	assert_equal b, a
+	assert b.tags.frozen?
+	refute b.list.frozen?
+end
+
+test "marshalling loads version 1 payloads" do
+	a = RootStruct.from_pack([1, { name: "Joel" }, false])
+
+	assert_equal a.name, "Joel"
+end
+
 test "as_pack/from_pack" do
 	a = RootStruct.new(name: "Joel")
 	a.freeze

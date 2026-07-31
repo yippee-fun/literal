@@ -5,6 +5,7 @@ require_relative "literal/version"
 
 module Literal
 	OBJECT_ID = BasicObject.instance_method(:__id__)
+	FROZEN = Kernel.instance_method(:frozen?)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")
