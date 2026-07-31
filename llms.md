@@ -14,6 +14,7 @@ Runtime type system for Ruby. A type = **any object responding to `===`** (`Stri
 - Duck: `_Interface(:m1, :m2)`, `_Callable`, `_Procable`, `_Lambda`, `_Predicate("desc") { |v| }`, `_Pattern(/(\d+)/) { |cap| }`
 - `_Frozen(T)`, `_JSONData` (JSON.parse output), `_Deferred { T }` (lazy const resolution; `.materialize`), `_TaggedUnion(tag: T, …)`, `_SameObject(o)` (identity)
 - `_Optional(T)` = `_Union(T, Literal::Undefined)` — omittable, ≠ nilable
+- `_DraftState(T)` — what a draft slot typed T accepts: `_Frozen` relaxed, Properties classes also admit their drafts
 
 Unions simplify at construction (`_Never` dropped, single member unwrapped, nil folded in). `Literal::Undefined`: truthy frozen sentinel = "absent", ≠ `nil`. `require "literal/kernel"` → bare `undefined`/`never`/`void`.
 
@@ -47,8 +48,8 @@ Rooted at the deepest ancestor the selection still satisfies (soundness) — a r
 
 Composable pipelines for `prop` blocks (`&x` via `to_proc`):
 
-- `Literal::Coercion { |v| }` — normalizes input; runs only at input boundaries (initializer, writers, draft assignment), never on final-value paths (`from_props`, `marshal_load`).
-- `Literal::Seal { |v| }` — fixes final representation (e.g. freeze); runs on every real store incl. `from_props`/`marshal_load`; must be idempotent, type-preserving. Drafts drop seals until finalize.
+- `Literal::Coercion { |v| }` — normalizes input; runs only at input boundaries (initializer, writers, draft assignment), never on final-value paths (`from_props`, `marshal_load`). Runs `instance_exec`'d against the object under construction, even when composed.
+- `Literal::Seal { |v| }` — fixes final representation (e.g. freeze); runs on every constructing store (initializer, writers, `from_props`) but not `marshal_load` (dump records frozen state, load restores it); must be idempotent, type-preserving. Drafts drop seals until finalize.
 - Compose `>>`/`<<`; coercion-after-seal raises; `coercion >> seal` → Seal carrying the coercion.
 - Built-ins (`Literal::Coercions`, included by Properties): `Immutable` (seal, shallow dup+freeze), `DeepImmutable` (seal, `Ractor.make_shareable` copy), `NilIfEmpty` (coercion, `""/[]/{}`→nil). Generics compose: `Literal::Array(String) >> Immutable`.
 
@@ -66,7 +67,7 @@ K.from(other)         # from_props(other.to_h.slice(*own props)) — e.g. rehydr
 
 ### Draft — `Literal::Draft(P)`
 
-Mutable builder mirroring a Properties class: every prop optional (default Undefined), types relaxed (`_Frozen` unwrapped; a Properties-typed slot also accepts a draft of it via `Draft::Type`). Coercions pass Undefined/nested drafts through. `draft.finalize(**overrides)` → real instance: overrides assigned through writers, Undefined dropped, nested drafts finalized depth-first (unless the slot wants a draft), then `P.from_props`. Pure — draft not consumed. Draft classes are types matching any draft of a subtype.
+Canonical per shape: repeated calls return the same class until P's props change (schema-keyed weak cache). Mutable builder mirroring a Properties class: every prop optional (default Undefined), types relaxed to `_DraftState(T)` (`_Deferred` stays lazy — forward refs fine). Coercions pass Undefined/nested drafts through. `draft.finalize(**overrides) { |d| … }` → real instance: overrides assigned through writers, block yielded for last touches, Undefined dropped, nested drafts finalized depth-first (unless the slot wants a draft), then `P.from_props`. Pure — draft not consumed. `DraftClass.build(*args, **kw) { |d| }` = `new` + `finalize`; every DataStructure has `P.build(...)` doing the same from the target class. Draft classes are types matching any draft of a subtype.
 
 ### Enum
 
