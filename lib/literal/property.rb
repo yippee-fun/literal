@@ -161,11 +161,26 @@ class Literal::Property
 			(@predicate ? @predicate.name : "public") <<
 			" def " <<
 			@name.name <<
-			"?\n" <<
-			"  !!@" <<
-			@name.name <<
-			"\n" <<
-			"end\n"
+			"?\n"
+
+		# The Undefined sentinel is truthy, so an unset optional property has
+		# to answer false explicitly. Properties that can never hold it skip
+		# the extra comparison.
+		if undefinable?
+			buffer <<
+				"  Literal::Undefined != @" <<
+				@name.name <<
+				" && !!@" <<
+				@name.name <<
+				"\n"
+		else
+			buffer <<
+				"  !!@" <<
+				@name.name <<
+				"\n"
+		end
+
+		buffer << "end\n"
 	end
 
 	def generate_initializer_handle_property(buffer = +"")

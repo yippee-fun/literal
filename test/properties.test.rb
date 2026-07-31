@@ -616,6 +616,17 @@ test "predicates" do
 	assert_equal disabled.enabled?, false
 end
 
+class WithOptionalPredicate
+	extend Literal::Properties
+
+	prop? :name, String, predicate: :public
+end
+
+test "predicates are false when an optional property is unset" do
+	assert_equal WithOptionalPredicate.new.name?, false
+	assert_equal WithOptionalPredicate.new(name: "Joel").name?, true
+end
+
 class WithWriters < Example
 	extend Literal::Properties
 
