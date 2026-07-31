@@ -64,7 +64,10 @@ class Literal::Draft < Literal::Struct
 
 			prop(
 				property.name,
-				Literal::Types._Union(__relax__(property.type), Literal::Undefined),
+				# Undefined first: union members are tried in order, and matching
+				# the unset sentinel by identity keeps deferred types in the
+				# relaxed member from materializing before a real value arrives.
+				Literal::Types._Union(Literal::Undefined, __relax__(property.type)),
 				property.kind,
 				predicate: property.predicate,
 				default: Literal::Undefined,
@@ -90,6 +93,10 @@ class Literal::Draft < Literal::Struct
 		# drafted type's own construction.
 		private def __relax__(type)
 			case type
+			when Literal::Types::DeferredType
+				# Wrapped rather than materialized: the deferred constant may not
+				# be defined yet at draft-definition time.
+				Literal::Types::DeferredType.new { __relax__(type.materialize) }
 			when Literal::Types::FrozenType
 				__relax__(type.type)
 			when Literal::Types::NilableType

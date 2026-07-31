@@ -273,3 +273,26 @@ test "draft coercions skip nested drafts" do
 	assert draft.address.equal?(nested)
 	assert_equal draft.finalize.address.street, "2 Side St"
 end
+
+class DraftDeferredNode < Literal::Data
+	prop :name, String
+	prop :child, _Nilable(_Deferred { DraftDeferredNode }), default: nil
+end
+
+test "deferred property types accept nested drafts" do
+	root = Literal::Draft(DraftDeferredNode).new(name: "root")
+	root.child = Literal::Draft(DraftDeferredNode).new(name: "leaf")
+
+	assert_equal root.finalize.child.name, "leaf"
+end
+
+test "drafting relaxes deferred types without materializing them" do
+	klass = Class.new(Literal::Data) do
+		prop :name, String
+		prop :other, _Nilable(_Deferred { NeverDefinedAnywhere }), default: nil
+	end
+
+	draft = Literal::Draft(klass).new(name: "a")
+
+	assert_equal draft.finalize.name, "a"
+end
