@@ -64,16 +64,92 @@ class Literal::Draft < Literal::Struct
 
 			prop(
 				property.name,
-				Literal::Types._Union(property.type, Literal::Undefined),
+				Literal::Types._Union(__relax__(property.type), Literal::Undefined),
 				property.kind,
 				predicate: property.predicate,
 				default: Literal::Undefined,
 				description: property.description,
 				&(original_coercion && proc { |value|
-					(Literal::Undefined == value) ? value : instance_exec(value, &original_coercion)
+					# Coercions normalize input for the drafted type. Unset slots and
+					# nested drafts aren't that input yet — the draft meets the
+					# coercion's output contract at finalize, through its own
+					# construction — so both pass through untouched.
+					if Literal::Undefined == value || Literal::Draft === value
+						value
+					else
+						instance_exec(value, &original_coercion)
+					end
 				})
 			)
 		end
+
+		# Drafts relax the drafted type's requirements while a value is being
+		# built up: representation — a _Frozen constraint doesn't bind draft
+		# state — and finality — a slot typed as a Literal::Properties class
+		# also accepts a draft of it. Finalizing re-imposes both through the
+		# drafted type's own construction.
+		private def __relax__(type)
+			case type
+			when Literal::Types::FrozenType
+				__relax__(type.type)
+			when Literal::Types::NilableType
+				Literal::Types._Nilable(__relax__(type.type))
+			when Literal::Types::UnionType
+				Literal::Types._Union(*type.types.map { |member| __relax__(member) }, *type.primitives)
+			when Literal::Properties
+				# A slot typed as a draft class already holds draft state; only
+				# final types get widened.
+				if Class === type && type <= Literal::Draft
+					type
+				else
+					Literal::Types._Union(type, Literal::Draft::Type.new(type))
+				end
+			else
+				type
+			end
+		end
+	end
+
+	# Matches any draft whose drafted type is a subtype of the given type —
+	# what `Literal::Draft(type).===` matches, without generating a draft
+	# class. Relaxed draft slots use this as their union member, which keeps
+	# recursive types (a Person with a Person property) from recursing forever
+	# at draft-class definition.
+	class Type
+		include Literal::Type
+
+		def initialize(type)
+			@type = type
+			freeze
+		end
+
+		attr_reader :type
+
+		def inspect
+			"Literal::Draft(#{@type.inspect})"
+		end
+
+		def ===(value)
+			Literal::Draft === value && (drafted = value.class.__type__) &&
+				Literal.subtype?(drafted, @type)
+		end
+
+		def >=(other, context: nil)
+			case other
+			when Literal::Draft::Type
+				Literal.subtype?(other.type, @type, context:)
+			when Class
+				if other <= Literal::Draft && (drafted = other.__type__)
+					Literal.subtype?(drafted, @type, context:)
+				else
+					false
+				end
+			else
+				false
+			end
+		end
+
+		freeze
 	end
 
 	# Build the drafted type from the properties that have been set. The
@@ -81,6 +157,11 @@ class Literal::Draft < Literal::Struct
 	# properties are enforced here. Any properties passed here are assigned
 	# to the draft first — through its writers, so they're coerced and type
 	# checked like any other assignment.
+	#
+	# Nested drafts finalize too, depth-first — unless the drafted type's
+	# property accepts the draft as-is, in which case the slot wanted a draft
+	# and it stays one. The draft itself is never mutated: finalizing twice
+	# builds two independent values.
 	def finalize(**props)
 		type = self.class.__type__
 
@@ -90,6 +171,19 @@ class Literal::Draft < Literal::Struct
 
 		props.each { |name, value| self[name] = value }
 
-		type.from_props(to_h.reject { |_, value| Literal::Undefined == value })
+		properties = type.literal_properties
+		attributes = {}
+
+		to_h.each do |name, value|
+			next if Literal::Undefined == value
+
+			if Literal::Draft === value && !(properties[name].type === value)
+				value = value.finalize
+			end
+
+			attributes[name] = value
+		end
+
+		type.from_props(attributes)
 	end
 end

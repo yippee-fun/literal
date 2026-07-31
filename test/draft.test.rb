@@ -168,3 +168,108 @@ test "drafts keep positional properties positional" do
 
 	assert_equal draft.finalize, klass.new(1, 2)
 end
+
+class DraftNestedAddress < Literal::Data
+	prop :street, String
+	prop :city, String, default: "London"
+end
+
+class DraftNestedPerson < Literal::Data
+	prop :name, String
+	prop :address, DraftNestedAddress
+	prop :fallback_address, _Nilable(DraftNestedAddress), default: nil
+end
+
+test "draft slots accept a draft of the property's type" do
+	person = Literal::Draft(DraftNestedPerson).new
+	address = Literal::Draft(DraftNestedAddress).new
+
+	person.address = address
+
+	assert person.address.equal?(address)
+	assert_raises(Literal::TypeError) { person.address = "not an address" }
+end
+
+test "draft slots accept drafts of subtypes of the property's type" do
+	child = Class.new(DraftNestedAddress)
+	person = Literal::Draft(DraftNestedPerson).new
+
+	person.address = Literal::Draft(child).new(street: "1 Main St")
+
+	assert_equal person.address.street, "1 Main St"
+end
+
+test "nested drafts are accepted through nilable types" do
+	person = Literal::Draft(DraftNestedPerson).new
+
+	person.fallback_address = Literal::Draft(DraftNestedAddress).new(street: "2 Side St")
+
+	assert_equal person.fallback_address.street, "2 Side St"
+end
+
+test "finalize builds nested drafts too, applying their defaults" do
+	person_draft = Literal::Draft(DraftNestedPerson).new(name: "Joel")
+	person_draft.address = Literal::Draft(DraftNestedAddress).new(street: "1 Main St")
+
+	person = person_draft.finalize
+
+	assert DraftNestedPerson === person
+	assert_equal person.address, DraftNestedAddress.new(street: "1 Main St")
+	assert_equal person.address.city, "London"
+end
+
+test "finalize raises when a nested draft is missing required properties" do
+	person_draft = Literal::Draft(DraftNestedPerson).new(name: "Joel")
+	person_draft.address = Literal::Draft(DraftNestedAddress).new
+
+	error = assert_raises(Literal::ArgumentError) { person_draft.finalize }
+
+	assert error.message.include?("Missing property :street")
+end
+
+test "finalize doesn't mutate the draft" do
+	person_draft = Literal::Draft(DraftNestedPerson).new(name: "Joel")
+	address_draft = Literal::Draft(DraftNestedAddress).new(street: "1 Main St")
+	person_draft.address = address_draft
+
+	first = person_draft.finalize
+	second = person_draft.finalize
+
+	assert person_draft.address.equal?(address_draft)
+	assert_equal first, second
+	refute first.address.equal?(second.address)
+end
+
+class DraftPendingHolder < Literal::Data
+	prop :pending, Literal::Draft(DraftNestedAddress)
+end
+
+test "a property typed as a draft class keeps its draft at finalize" do
+	holder_draft = Literal::Draft(DraftPendingHolder).new
+	pending = Literal::Draft(DraftNestedAddress).new(street: "1 Main St")
+	holder_draft.pending = pending
+
+	holder = holder_draft.finalize
+
+	assert holder.pending.equal?(pending)
+end
+
+test "draft coercions skip nested drafts" do
+	klass = Class.new(Literal::Struct) do
+		prop :address, DraftNestedAddress, reader: :public do |value|
+			(Hash === value) ? DraftNestedAddress.new(**value) : value
+		end
+	end
+
+	draft = Literal::Draft(klass).new
+
+	draft.address = { street: "1 Main St" }
+
+	assert DraftNestedAddress === draft.address
+
+	nested = Literal::Draft(DraftNestedAddress).new(street: "2 Side St")
+	draft.address = nested
+
+	assert draft.address.equal?(nested)
+	assert_equal draft.finalize.address.street, "2 Side St"
+end
