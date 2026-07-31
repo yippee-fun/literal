@@ -95,6 +95,9 @@ class Literal::Coercion
 	end
 
 	def __compose__(first, second)
-		proc { |value| second.call(first.call(value)) }
+		# instance_exec, not call: coercions run against the object being
+		# constructed, and each stage should see that context the same way an
+		# uncomposed block would.
+		proc { |value| instance_exec(instance_exec(value, &first), &second) }
 	end
 end
