@@ -34,6 +34,13 @@ test "hierarchy" do
 
 	assert_subtype _Constraint(Integer, 1..), Integer
 	refute_subtype _Constraint(Integer, 1..), Float
+
+	# Some property constraints prove class membership.
+	assert_subtype _Constraint(Comparable, integer?: true), Integer
+	assert_subtype _Constraint(Comparable, integer?: true), Numeric
+	assert_subtype _Constraint(nil?: true), NilClass
+	refute_subtype _Constraint(Comparable, integer?: true), Float
+	refute_subtype _Constraint(Comparable, odd?: true), Integer
 end
 
 test "error message with object constraints" do

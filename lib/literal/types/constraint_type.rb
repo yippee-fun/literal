@@ -83,12 +83,8 @@ class Literal::Types::ConstraintType
 	end
 
 	def <=(other, context: nil)
-		case other
-		when Module
-			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
-		else
-			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
-		end
+		@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) } ||
+			@property_constraints.any? { |property, type| property_entails_type?(property, type, other, context:) }
 	end
 
 	def record_literal_type_errors(context)
@@ -120,6 +116,19 @@ class Literal::Types::ConstraintType
 	private def inspect_property_constraints
 		if @property_constraints.length > 0
 			@property_constraints.map { |k, t| "#{k}: #{t.inspect}" }.join(", ")
+		end
+	end
+
+	# Some property constraints prove class membership: any value where integer?
+	# is true is an Integer, so _Constraint(10, integer?: true) <= Integer.
+	private def property_entails_type?(property, type, other, context:)
+		case [property, type]
+		in [:integer?, true]
+			Literal.subtype?(Integer, other, context:)
+		in [:nil?, true]
+			Literal.subtype?(NilClass, other, context:)
+		else
+			false
 		end
 	end
 
