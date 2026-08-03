@@ -3267,3 +3267,22 @@ test "a constrained nested collection class roundtrips" do
 		{ "type" => "array", "items" => { "type" => "array", "items" => { "type" => "string" } }, "minItems" => 1, "maxItems" => 1 },
 	)
 end
+
+test "const dispatch does not leak into the JSON data catch-all" do
+	# These must stay diagnostic errors, not degrade to a permissive `true`
+	# schema: _JSONData === x matches any JSON-shaped value, so without an
+	# opt-out the catch-all would swallow every const type the scalar
+	# serializers deliberately decline.
+	assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(1, 1.0)) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(1, type: _Union(1, 1.0)) }
+	assert_raises(Literal::ArgumentError) { Example.json_schema([1, 2]) }
+	assert_raises(Literal::ArgumentError) { Example.json_schema({ "a" => 1 }) }
+end
+
+test "union of boolean consts serializes as a boolean" do
+	type = _Union(true, false)
+
+	assert_equal Example.serialize(true, type:), true
+	assert_equal Example.deserialize(false, type:), false
+	assert_equal Example.json_schema(type), { "type" => "boolean" }
+end
