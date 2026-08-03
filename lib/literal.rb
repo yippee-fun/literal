@@ -257,7 +257,12 @@ module Literal
 					end
 				end
 			when Range
-				supertype.cover?(subtype)
+				case subtype
+				when Literal::Type
+					subtype.<=(supertype, context:)
+				else
+					supertype.cover?(subtype)
+				end
 			else
 				false
 			end

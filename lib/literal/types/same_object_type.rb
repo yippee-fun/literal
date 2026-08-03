@@ -26,5 +26,11 @@ class Literal::Types::SameObjectType
 		end
 	end
 
+	# The only value is @object itself, so this is a subtype of any type that
+	# admits it — including e.g. Integer for _SameObject(10), where bare 10 is not.
+	def <=(other, context: nil)
+		!!(other === @object)
+	end
+
 	freeze
 end
