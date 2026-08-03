@@ -51,7 +51,7 @@ class Literal::Types::MapType
 			other_shape = other.shape
 
 			@shape.all? do |k, v|
-				Literal.subtype?(other_shape[k], v, context:)
+				Literal.structural_subtype?(other_shape[k], v, context:)
 			end
 		else
 			false

@@ -28,7 +28,7 @@ class Literal::Types::EnumerableType
 	def >=(other, context: nil)
 		case other
 		when Literal::Types::EnumerableType
-			Literal.subtype?(other.type, @type, context:)
+			Literal.structural_subtype?(other.type, @type, context:)
 		else
 			false
 		end

@@ -61,7 +61,7 @@ class Literal::Array
 		def >=(other, context: nil)
 			case other
 			when Generic
-				Literal.subtype?(other.type, @type, context:)
+				Literal.structural_subtype?(other.type, @type, context:)
 			else
 				false
 			end

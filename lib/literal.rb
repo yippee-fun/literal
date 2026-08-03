@@ -176,6 +176,14 @@ module Literal
 		Thread.current[:literal_match_state] = nil if state&.empty?
 	end
 
+	# Like subtype?, but marks the check as descending into a component of a
+	# structural constructor (array element, hash key/value, tuple slot, etc.),
+	# which licenses coinductive assumptions on recursive types.
+	def self.structural_subtype?(type, supertype, context: nil)
+		context ||= SubtypeContext.new
+		context.structural { subtype?(type, supertype, context:) }
+	end
+
 	def self.subtype?(type, supertype, context: nil)
 		context ||= SubtypeContext.new
 		raw_key = [type.object_id, supertype.object_id]
@@ -184,7 +192,12 @@ module Literal
 		resolved_acquired = false
 
 		return context.fetch(raw_key) if context.memoized?(raw_key)
-		return false unless context.acquire(raw_key)
+
+		# Coinductive cycle handling: if we are already in the middle of proving this
+		# exact pair, assume it holds — provided the recursion has passed through a
+		# structural constructor (see SubtypeContext#assume). This is what makes
+		# subtyping between recursive (looping) types terminate with the right answer.
+		return context.assume(raw_key) unless context.acquire(raw_key)
 
 		raw_acquired = true
 
@@ -201,7 +214,7 @@ module Literal
 				return result
 			end
 
-			return false unless context.acquire(resolved_key)
+			return context.assume(resolved_key) unless context.acquire(resolved_key)
 
 			resolved_acquired = true
 		end

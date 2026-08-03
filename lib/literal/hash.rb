@@ -65,8 +65,8 @@ class Literal::Hash
 		def >=(other, context: nil)
 			case other
 			when Generic
-				Literal.subtype?(other.key_type, @key_type, context:) &&
-					Literal.subtype?(other.value_type, @value_type, context:)
+				Literal.structural_subtype?(other.key_type, @key_type, context:) &&
+					Literal.structural_subtype?(other.value_type, @value_type, context:)
 			else
 				false
 			end

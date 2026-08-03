@@ -42,9 +42,9 @@ class Literal::Types::HashType
 		case other
 		when Literal::Types::HashType
 			(
-				Literal.subtype?(other.key_type, @key_type, context:)
+				Literal.structural_subtype?(other.key_type, @key_type, context:)
 			) && (
-				Literal.subtype?(other.value_type, @value_type, context:)
+				Literal.structural_subtype?(other.value_type, @value_type, context:)
 			)
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }

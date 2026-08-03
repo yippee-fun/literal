@@ -21,3 +21,27 @@ test "literal values are subtypes of their module supertypes" do
 	assert_subtype date, Date
 	assert_subtype date, Object
 end
+
+include Literal::Types
+
+test "recursive types can be compared" do
+	json_data = nil
+	json_data = _Union(
+		String, Integer, Float, true, false, nil,
+		_Deferred { _Array(json_data) },
+		_Deferred { _Hash(String, json_data) },
+	)
+
+	strict_json_data = nil
+	strict_json_data = _Union(
+		String, Integer,
+		_Deferred { _Array(strict_json_data) },
+	)
+
+	assert_subtype json_data, json_data
+	assert_subtype strict_json_data, json_data
+	assert_subtype _Array(strict_json_data), _Array(json_data)
+
+	refute_subtype json_data, strict_json_data
+	refute_subtype _Array(json_data), _Array(strict_json_data)
+end

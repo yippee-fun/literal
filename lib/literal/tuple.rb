@@ -75,7 +75,7 @@ class Literal::Tuple
 
 				i, len = 0, types.size
 				while i < len
-					return false unless Literal.subtype?(other_types[i], types[i], context:)
+					return false unless Literal.structural_subtype?(other_types[i], types[i], context:)
 					i += 1
 				end
 
