@@ -26,8 +26,11 @@ class Literal::Types::DescendantType
 
 	def >=(other, context: nil)
 		case other
-		when Literal::Types::DescendantType, Literal::Types::ClassType
+		when Literal::Types::DescendantType
 			Literal.subtype?(other.type, @type, context:)
+		when Literal::Types::ClassType
+			# _Class(A) admits A itself, which _Descendant(A) excludes, so this must be strict.
+			!!(other.type < @type)
 		else
 			false
 		end

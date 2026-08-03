@@ -13,7 +13,11 @@ end
 test "hierarchy" do
 	assert_subtype  _Descendant(Array), _Descendant(Enumerable)
 	assert_subtype  _Descendant(Set), _Descendant(Enumerable)
+	assert_subtype _Class(Integer), _Descendant(Numeric)
 
 	refute_subtype _Descendant(Enumerable), _Descendant(Array)
 	refute_subtype _Descendant(String), _Descendant(Enumerable)
+
+	# _Class(Numeric) admits Numeric itself, which _Descendant(Numeric) excludes
+	refute_subtype _Class(Numeric), _Descendant(Numeric)
 end

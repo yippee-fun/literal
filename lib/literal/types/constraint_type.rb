@@ -68,7 +68,9 @@ class Literal::Types::ConstraintType
 
 			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		when Literal::Types::FrozenType
-			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
+			# The only property _Frozen can vouch for is frozen?.
+			@property_constraints.all? { |property, type| :frozen? == property && Literal.subtype?(true, type, context:) } &&
+				@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
 		when Literal::Types::UnionType
 			other.<=(self, context:)
 		when Module
@@ -141,7 +143,7 @@ class Literal::Types::ConstraintType
 		when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
 			true
 		else
-			defined?(::BigDecimal) && ::BigDecimal === value
+			!!(defined?(::BigDecimal) && ::BigDecimal === value)
 		end
 	end
 

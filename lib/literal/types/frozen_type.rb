@@ -46,6 +46,8 @@ class Literal::Types::FrozenType
 			end
 
 			false
+		when Module
+			ALWAYS_FROZEN.include?(other) && Literal.subtype?(other, @type, context:)
 		else
 			false
 		end
