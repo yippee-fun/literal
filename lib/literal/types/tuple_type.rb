@@ -56,7 +56,12 @@ class Literal::Types::TupleType
 	def >=(other, context: nil)
 		case other
 		when Literal::Types::TupleType
-			@types == other.types
+			other_types = other.types
+			return false unless @types.size == other_types.size
+
+			@types.each_with_index.all? do |type, i|
+				Literal.structural_subtype?(other_types[i], type, context:)
+			end
 		else
 			false
 		end
