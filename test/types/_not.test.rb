@@ -15,10 +15,12 @@ end
 
 test "hierarchy" do
 	assert_subtype _Not(Integer), _Not(Integer)
-	assert_subtype _Not(Integer), _Not(Numeric)
+	assert_subtype _Not(Numeric), _Not(Integer)
 	assert_subtype _Constraint(_Not(Integer), String), _Not(Integer)
 	assert_subtype _Intersection(_Not(Integer), String), _Not(Integer)
 
+	# 1.5 satisfies _Not(Integer) but not _Not(Numeric)
+	refute_subtype _Not(Integer), _Not(Numeric)
 	refute_subtype _Constraint(Integer, String), _Not(Integer)
 	refute_subtype _Intersection(Integer, String), _Not(Integer)
 end
