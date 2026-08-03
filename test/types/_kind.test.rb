@@ -35,3 +35,15 @@ test "===" do
 
 	assert union_kind === Integer
 end
+
+test "hierarchy" do
+	assert_subtype _Kind(Integer), _Kind(Integer)
+	assert_subtype _Kind(Integer), _Kind(Numeric)
+	assert_subtype _Kind(_String(length: 10)), _Kind(_String(length: 5..15))
+	assert_subtype _Class(Integer), _Kind(Numeric)
+	assert_subtype _Descendant(Numeric), _Kind(Numeric)
+
+	refute_subtype _Kind(Numeric), _Kind(Integer)
+	refute_subtype _Kind(Integer), _Kind(String)
+	refute_subtype _Kind(_Nilable(Integer)), _Kind(Numeric)
+end

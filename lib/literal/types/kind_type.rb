@@ -24,5 +24,14 @@ class Literal::Types::KindType
 		Literal.subtype?(object, @type)
 	end
 
+	def >=(other, context: nil)
+		case other
+		when Literal::Types::KindType, Literal::Types::ClassType, Literal::Types::DescendantType
+			Literal.subtype?(other.type, @type, context:)
+		else
+			false
+		end
+	end
+
 	freeze
 end
