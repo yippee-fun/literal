@@ -238,7 +238,11 @@ module Literal
 				when Module
 					supertype >= subtype
 				when Numeric
-					supertype >= subtype.class
+					# A numeric literal admits every value it is == to, and Ruby's numeric
+					# equality crosses classes (10 == 10.0 == 10r), so the tightest honest
+					# nominal bound is Numeric, not the literal's own class. Use
+					# _Integer(10) for an Integer-anchored literal.
+					supertype >= Numeric
 				when String
 					supertype >= String
 				when Symbol

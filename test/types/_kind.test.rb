@@ -27,7 +27,7 @@ test "===" do
 	assert _Kind(Module) === Module
 	refute _Kind(String) === Class
 
-	assert _Kind(_Array(Integer)) === _Array(1)
+	assert _Kind(_Array(Integer)) === _Array(_Integer(1))
 	assert _Kind(_Array(numeric_kind.type)) === _Array(1)
 
 	union_type = _Union(String, Integer)

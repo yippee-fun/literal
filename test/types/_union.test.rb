@@ -131,8 +131,12 @@ test "hierarchy" do
 
 	assert_subtype _Union(Integer), _Union(Numeric)
 	assert_subtype Integer, _Union(Numeric)
-	assert_subtype 1, _Union(Integer)
-	assert_subtype _Union(1, 2, 3), _Union(Integer)
+	assert_subtype 1, _Union(Numeric)
+	assert_subtype _Union(1, 2, 3), _Union(Numeric)
+
+	# The literal 1 admits 1.0 (via ==), so it is not bounded by Integer.
+	refute_subtype 1, _Union(Integer)
+	refute_subtype _Union(1, 2, 3), _Union(Integer)
 end
 
 test "===" do

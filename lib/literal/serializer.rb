@@ -14,7 +14,21 @@ class Literal::Serializer
 	# structural match; the default covers scalar serializers whose type is a
 	# plain Literal type.
 	def handles_type?(type)
-		Literal.subtype?(type, self.type)
+		Literal.subtype?(type, self.type) || const_type?(type)
+	end
+
+	# A const type — a literal value of this serializer's domain, or a union of
+	# such values — serializes by its canonical representation. The value-set of
+	# the type 1 is not bounded by Integer (1 admits 1.0 via ==), but the wire
+	# format of the value 1 is an integer all the same.
+	private def const_type?(type)
+		case type
+		when Literal::Types::UnionType
+			members = type.to_a
+			members.any? && members.all? { |member| self.type === member }
+		else
+			self.type === type
+		end
 	end
 
 	# The child types this serializer would recurse into when serializing a

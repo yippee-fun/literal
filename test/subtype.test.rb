@@ -24,6 +24,24 @@ end
 
 include Literal::Types
 
+test "numeric literals are bounded by Numeric, not their own class" do
+	# 10 admits 10.0, 10r and BigDecimal("10") via ==, so Integer is not a
+	# sound bound. Class-anchored spellings are.
+	assert_subtype 10, Numeric
+	assert_subtype 10, 5..15
+	assert_subtype 1.5, Numeric
+
+	refute_subtype 10, Integer
+	refute_subtype 1.5, Float
+
+	assert_subtype _Integer(10), Integer
+	assert_subtype _SameObject(10), Integer
+	assert_subtype _Constraint(10, integer?: true), Integer
+
+	refute_subtype _Constraint(10, integer?: false), Integer
+	refute_subtype _SameObject(10.0), Integer
+end
+
 test "recursive types can be compared" do
 	json_data = nil
 	json_data = _Union(
