@@ -24,6 +24,19 @@ test "hierarchy" do
 
 	refute_subtype _Constraint(Array, size: 1..3), _Constraint(Array, size: 1..2)
 	refute_subtype _Constraint(String, size: 1), _Constraint(String, size: 4)
+	assert_subtype 3.14, _Float(finite?: _Truthy)
+	refute_subtype Float::INFINITY, _Float(finite?: _Truthy)
+	assert_subtype _Float(1..10), _Float(finite?: _Truthy)
+	refute_subtype _Float(1..), _Float(finite?: _Truthy)
+	refute_subtype _Float(..10), _Float(finite?: _Truthy)
+
+	# finite? is a known boolean predicate on Numeric, so the exact-true and
+	# truthy spellings denote the same floats. On an unbounded receiver,
+	# finite? could return anything, so the fact doesn’t apply.
+	assert_subtype _Float(finite?: true), _Float(finite?: _Truthy)
+	assert_subtype _Float(finite?: _Truthy), _Float(finite?: true)
+	refute_subtype _Float(finite?: _Boolean), _Float(finite?: true)
+	refute_subtype _Constraint(Object, finite?: _Truthy), _Constraint(Object, finite?: true)
 	assert_subtype 3.14, _Float(finite?: true)
 	refute_subtype Float::INFINITY, _Float(finite?: true)
 	assert_subtype _Float(1..10), _Float(finite?: true)
@@ -35,12 +48,21 @@ test "hierarchy" do
 	assert_subtype _Constraint(Integer, 1..), Integer
 	refute_subtype _Constraint(Integer, 1..), Float
 
-	# Some property constraints prove class membership.
-	assert_subtype _Constraint(Comparable, integer?: true), Integer
-	assert_subtype _Constraint(Comparable, integer?: true), Numeric
-	assert_subtype _Constraint(nil?: true), NilClass
-	refute_subtype _Constraint(Comparable, integer?: true), Float
-	refute_subtype _Constraint(Comparable, odd?: true), Integer
+	# Some property constraints prove class membership, but only on receivers
+	# bounded by the fact’s receiver: an arbitrary object could patch
+	# integer? or nil? to return anything.
+	assert_subtype _Constraint(Numeric, integer?: true), Integer
+	assert_subtype _Constraint(Numeric, integer?: true), Numeric
+	assert_subtype _Constraint(Numeric, integer?: _Truthy), Integer
+	assert_subtype _Constraint(10, integer?: true), Integer
+	refute_subtype _Constraint(Comparable, integer?: true), Integer
+	refute_subtype _Constraint(nil?: true), NilClass
+	refute_subtype _Constraint(nil?: _Truthy), NilClass
+	refute_subtype _Constraint(Numeric, integer?: true), Float
+	refute_subtype _Constraint(Numeric, odd?: true), Integer
+
+	# A constraint admitting falsy results proves nothing.
+	refute_subtype _Constraint(Numeric, integer?: _Boolean), Integer
 end
 
 test "error message with object constraints" do

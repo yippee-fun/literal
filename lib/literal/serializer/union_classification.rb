@@ -4,7 +4,7 @@
 # members can actually hold values, and the integer and finite float pairing
 # that collapses to JSON "number".
 module Literal::Serializer::UnionClassification
-	FiniteFloatType = Literal::Types._Float(finite?: true)
+	FiniteFloatType = Literal::Types._Float(finite?: Literal::Types._Truthy)
 
 	# The members a value could actually inhabit. _Never members can end up in
 	# programmatically built unions, but no value or raw JSON ever belongs to

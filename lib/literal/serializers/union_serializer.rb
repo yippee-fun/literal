@@ -108,7 +108,7 @@ class Literal::Serializer::UnionType
 		number_member = members_by_json_type.fetch("number").find { |member| !finite_float_type?(member) }
 		return unless number_member
 
-		"Integer and #{number_member.inspect} both serialize to JSON number values, so raw values cannot be resolved to a member; only exactly _Float(finite?: true) can pair with Integer, collapsing the pair to a plain number"
+		"Integer and #{number_member.inspect} both serialize to JSON number values, so raw values cannot be resolved to a member; only exactly _Float(finite?: _Truthy) can pair with Integer, collapsing the pair to a plain number"
 	end
 
 	private def natural_constraint?(type)

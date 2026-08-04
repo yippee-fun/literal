@@ -3,7 +3,7 @@
 require "bigdecimal"
 
 class Literal::BigDecimalSerializer < Literal::Serializer
-	Type = _BigDecimal(finite?: true)
+	Type = _BigDecimal(finite?: _Truthy)
 
 	def type
 		Type
@@ -15,7 +15,7 @@ class Literal::BigDecimalSerializer < Literal::Serializer
 
 	def rejection_reason(type)
 		if BigDecimal == type
-			"it admits non-finite values like NaN — use _BigDecimal(finite?: true) instead"
+			"it admits non-finite values like NaN — use _BigDecimal(finite?: _Truthy) instead"
 		end
 	end
 

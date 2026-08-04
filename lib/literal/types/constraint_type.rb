@@ -59,7 +59,8 @@ class Literal::Types::ConstraintType
 			other_property_constraints = other.property_constraints
 			return false unless @property_constraints.all? do |k, v|
 				Literal.subtype?(other_property_constraints[k], v, context:) ||
-					other_object_constraints.any? { |constraint| constraint_property_subtype?(constraint, k, v, context:) }
+					other_object_constraints.any? { |constraint| constraint_property_subtype?(constraint, k, v, context:) } ||
+					boolean_predicate_subtype?(other, k, v, context:)
 			end
 
 			true
@@ -119,23 +120,46 @@ class Literal::Types::ConstraintType
 		end
 	end
 
-	# Some property constraints prove class membership: any value where integer?
-	# is true is an Integer, so _Constraint(10, integer?: true) <= Integer.
+	# Some property constraints prove class membership: any Numeric where
+	# integer? is truthy is an Integer, so _Constraint(10, integer?: _Truthy)
+	# <= Integer. The constraint must admit only truthy values and the
+	# receiver must be bounded by the fact's receiver, or it proves nothing.
 	private def property_entails_type?(property, type, other, context:)
-		case [property, type]
-		in [:integer?, true]
-			Literal.subtype?(Integer, other, context:)
-		in [:nil?, true]
-			Literal.subtype?(NilClass, other, context:)
-		else
-			false
+		facts = Literal::Types::PredicateFacts[property]
+		return false unless facts
+		return false unless Literal.subtype?(type, Literal::Types::TruthyType::Instance, context:)
+
+		facts.any? do |receiver, knowledge|
+			(entailed = knowledge[:entails]) &&
+				@object_constraints.any? { |constraint| Literal.subtype?(constraint, receiver, context:) } &&
+				Literal.subtype?(entailed, other, context:)
 		end
 	end
 
+	# A predicate known to return only booleans can only produce the booleans
+	# the other constraint admits, so the requirement reduces to admitting
+	# each of those.
+	private def boolean_predicate_subtype?(other, property, type, context:)
+		facts = Literal::Types::PredicateFacts[property]
+		return false unless facts
+
+		other_type = other.property_constraints[property]
+		return false unless other_type
+
+		return false unless facts.any? do |receiver, knowledge|
+			knowledge[:boolean] &&
+				other.object_constraints.any? { |constraint| Literal.subtype?(constraint, receiver, context:) }
+		end
+
+		[true, false].all? { |result| !(other_type === result) || type === result }
+	end
+
+	# A bounded Range proves finite? returns exactly true, satisfying any
+	# property constraint that admits true.
 	private def constraint_property_subtype?(constraint, property, type, context:)
-		case [constraint, property, type]
-		in [Range, :finite?, true]
-			finite_range?(constraint)
+		case [constraint, property]
+		in [Range, :finite?]
+			finite_range?(constraint) && Literal.subtype?(true, type, context:)
 		else
 			false
 		end

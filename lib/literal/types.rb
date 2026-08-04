@@ -40,9 +40,9 @@ module Literal::Types
 	end
 
 	# Matches if the value is a `BigDecimal` and matches the given constraints.
-	# Serialization requires finite values, so use `_BigDecimal(finite?: true)` rather than `BigDecimal` there.
+	# Serialization requires finite values, so use `_BigDecimal(finite?: _Truthy)` rather than `BigDecimal` there.
 	# ```ruby
-	# _BigDecimal(finite?: true)
+	# _BigDecimal(finite?: _Truthy)
 	# ```
 	def _BigDecimal(...)
 		_Constraint(BigDecimal, ...)

@@ -551,6 +551,11 @@ end
 
 test "float json schema" do
 	assert_equal(
+		Example.json_schema(_Float(finite?: _Truthy)),
+		{ "type" => "number" },
+	)
+
+	assert_equal(
 		Example.json_schema(_Float(finite?: true)),
 		{ "type" => "number" },
 	)
@@ -578,6 +583,11 @@ end
 
 test "big decimal json schema" do
 	assert_equal(
+		Example.json_schema(_BigDecimal(finite?: _Truthy)),
+		{ "type" => "string", "format" => "decimal" },
+	)
+
+	assert_equal(
 		Example.json_schema(_BigDecimal(finite?: true)),
 		{ "type" => "string", "format" => "decimal" },
 	)
@@ -588,12 +598,12 @@ test "big decimal json schema" do
 	)
 
 	assert_equal(
-		Example.json_schema(_BigDecimal(BigDecimal("1")..BigDecimal("10"), finite?: true)),
+		Example.json_schema(_BigDecimal(BigDecimal("1")..BigDecimal("10"), finite?: _Truthy)),
 		{ "type" => "string", "format" => "decimal" },
 	)
 
 	assert_equal(
-		Example.json_schema(_BigDecimal(BigDecimal("3.14"), finite?: true)),
+		Example.json_schema(_BigDecimal(BigDecimal("3.14"), finite?: _Truthy)),
 		{ "type" => "string", "format" => "decimal", "const" => "3.14" },
 	)
 
@@ -610,7 +620,7 @@ test "big decimal must be finite to be serializable" do
 
 	assert_equal(
 		error.message,
-		"Type BigDecimal cannot be serialized because it admits non-finite values like NaN — use _BigDecimal(finite?: true) instead.",
+		"Type BigDecimal cannot be serialized because it admits non-finite values like NaN — use _BigDecimal(finite?: _Truthy) instead.",
 	)
 end
 
@@ -1244,30 +1254,38 @@ end
 
 test "float serialization roundtrip" do
 	original = 3.14
-	type = _Float(finite?: true)
-	serialized = Example.serialize(original, type:)
 
-	assert_equal(serialized, 3.14)
-	assert_equal(Example.deserialize(serialized, type:), original)
+	[_Float(finite?: _Truthy), _Float(finite?: true)].each do |type|
+		serialized = Example.serialize(original, type:)
+
+		assert_equal(serialized, 3.14)
+		assert_equal(Example.deserialize(serialized, type:), original)
+	end
 end
 
 test "big decimal serialization roundtrip" do
 	original = BigDecimal("3.141592653589793238462643383279")
-	type = _BigDecimal(finite?: true)
-	serialized = Example.serialize(original, type:)
 
-	assert_equal(serialized, "3.141592653589793238462643383279")
-	assert_equal(Example.deserialize(serialized, type:), original)
+	[_BigDecimal(finite?: _Truthy), _BigDecimal(finite?: true)].each do |type|
+		serialized = Example.serialize(original, type:)
+
+		assert_equal(serialized, "3.141592653589793238462643383279")
+		assert_equal(Example.deserialize(serialized, type:), original)
+	end
 end
 
 test "big decimal deserialization coerces raw numbers" do
-	type = _BigDecimal(finite?: true)
+	type = _BigDecimal(finite?: _Truthy)
 
 	assert_equal(Example.deserialize(42, type:), BigDecimal(42))
 	assert_equal(Example.deserialize(3.14, type:), BigDecimal("3.14"))
 end
 
 test "big decimal serialization rejects non-finite values" do
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize(BigDecimal::INFINITY, type: _BigDecimal(finite?: _Truthy))
+	end
+
 	assert_raises(Literal::ArgumentError) do
 		Example.serialize(BigDecimal::INFINITY, type: _BigDecimal(finite?: true))
 	end
@@ -1853,7 +1871,7 @@ test "ambiguous union errors name the members that collide" do
 		Example.json_schema(_Union(Integer, _Float(1..10)))
 	end
 	assert error.message.include?("both serialize to JSON number values")
-	assert error.message.include?("_Float(finite?: true)")
+	assert error.message.include?("_Float(finite?: _Truthy)")
 
 	error = assert_raises(Literal::ArgumentError) do
 		Example.json_schema(_Union(_JSONData, Integer))
@@ -2114,9 +2132,8 @@ test "a union with a nilable member still catches genuine collisions" do
 end
 
 test "natural union number deserialization accepts integers" do
-	type = _Union(_Float(finite?: true), String)
-
-	assert_equal(Example.deserialize(1, type:), 1.0)
+	assert_equal(Example.deserialize(1, type: _Union(_Float(finite?: _Truthy), String)), 1.0)
+	assert_equal(Example.deserialize(1, type: _Union(_Float(finite?: true), String)), 1.0)
 end
 
 test "string and date union is not naturally discriminated" do
@@ -2126,18 +2143,20 @@ test "string and date union is not naturally discriminated" do
 end
 
 test "integer and finite float union serializes as number" do
-	type = _Union(Integer, _Float(finite?: true))
+	[_Union(Integer, _Float(finite?: _Truthy)), _Union(Integer, _Float(finite?: true))].each do |type|
+		assert_equal(Example.json_schema(type), { "type" => "number" })
+		assert_equal(Example.serialize(1, type:), 1)
+		assert_equal(Example.serialize(1.5, type:), 1.5)
+		assert_equal(Example.deserialize(1, type:), 1)
+		assert_equal(Example.deserialize(1.5, type:), 1.5)
+	end
 
-	assert_equal(Example.json_schema(type), { "type" => "number" })
+	assert_equal(Example.json_schema(_Union(_Float(finite?: _Truthy), Integer)), { "type" => "number" })
 	assert_equal(Example.json_schema(_Union(_Float(finite?: true), Integer)), { "type" => "number" })
-	assert_equal(Example.serialize(1, type:), 1)
-	assert_equal(Example.serialize(1.5, type:), 1.5)
-	assert_equal(Example.deserialize(1, type:), 1)
-	assert_equal(Example.deserialize(1.5, type:), 1.5)
 end
 
 test "integer and finite float union can be combined with other natural types" do
-	type = _Union(String, Integer, _Float(finite?: true))
+	type = _Union(String, Integer, _Float(finite?: _Truthy))
 
 	assert_equal(
 		Example.json_schema(type),
@@ -2158,7 +2177,7 @@ test "integer and finite float union can be combined with other natural types" d
 end
 
 test "range constrained integer and finite float union serializes as number" do
-	type = _Constraint(1..20, 3..10, _Union(Integer, _Float(finite?: true)))
+	type = _Constraint(1..20, 3..10, _Union(Integer, _Float(finite?: _Truthy)))
 
 	assert_equal(
 		Example.json_schema(type),
@@ -2176,7 +2195,7 @@ test "range constrained integer and finite float union serializes as number" do
 end
 
 test "exclusive range constrained integer and finite float union serializes as number" do
-	type = _Constraint(1...10, _Union(Integer, _Float(finite?: true)))
+	type = _Constraint(1...10, _Union(Integer, _Float(finite?: _Truthy)))
 
 	assert_equal(
 		Example.json_schema(type),
