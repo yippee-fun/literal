@@ -39,6 +39,7 @@ class Literal::Types::ConstraintType
 			# We intentionally don’t return early here becuase it triggers an allocation.
 			if result && !(t === value.public_send(a))
 				result = false
+				break
 			end
 		rescue NoMethodError => e
 			raise unless e.name == a && e.receiver == value
