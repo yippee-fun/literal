@@ -5,6 +5,12 @@ class Literal::Types::FrozenType
 	ALWAYS_FROZEN = Set[Symbol, Integer, Float, Numeric, true, false, nil].freeze
 
 	include Literal::Type
+	include Literal::Types::DraftTransparent
+
+	# Relaxing drops the wrapper: representation doesn't bind draft state.
+	def __relax__
+		yield @type
+	end
 
 	def initialize(type)
 		if ALWAYS_FROZEN.include?(type)

@@ -55,16 +55,11 @@ class Literal::Types::DraftStateType
 
 	private def __relax__(type)
 		case type
-		when Literal::Types::DeferredType
-			# Wrapped rather than materialized: the deferred constant may not
-			# be defined yet when the draft state type is built.
-			Literal::Types::DeferredType.new { __relax__(type.materialize) }
-		when Literal::Types::FrozenType
-			__relax__(type.type)
-		when Literal::Types::NilableType
-			Literal::Types._Nilable(__relax__(type.type))
-		when Literal::Types::UnionType
-			Literal::Types._Union(*type.types.map { |member| __relax__(member) }, *type.primitives)
+		when Literal::Types::DraftTransparent
+			# Each wrapper rebuilds itself around its relaxed children, so this
+			# walk and everything that must agree with it — see the module — share
+			# one definition of what a draft sees through.
+			type.__relax__ { |child| __relax__(child) }
 		when Literal::Properties
 			# A slot typed as a draft class already holds draft state; only
 			# final types get widened.

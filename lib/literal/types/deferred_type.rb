@@ -2,6 +2,7 @@
 
 class Literal::Types::DeferredType
 	include Literal::Type
+	include Literal::Types::DraftTransparent
 
 	UNMATERIALIZED = Object.new.freeze
 
@@ -32,6 +33,12 @@ class Literal::Types::DeferredType
 		@materialized = @block.call
 	ensure
 		@materializing = false
+	end
+
+	# Wrapped rather than materialized: the deferred constant may not be
+	# defined yet when the relaxed type is built.
+	def __relax__(&relax)
+		Literal::Types::DeferredType.new { relax.call(materialize) }
 	end
 
 	def ===(other)

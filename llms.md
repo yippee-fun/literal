@@ -117,6 +117,71 @@ result.handle do |on|
 end
 ```
 
+## Validations — `stipulate` / `.validate`
+
+Author-written invariants beyond what property types already guarantee (`min < max`, "not blank"). `stipulate` is on every `Literal::Properties` class — no mixin. The soft entry points need `from_props`, so they are on `Data`/`Struct`; `Literal::Object` and `Literal::Enum` enforce at construction and answer `#valid?` on an instance, but raise if given props.
+
+```ruby
+class Span < Literal::Data
+	prop :min, Integer
+	prop :max, Integer
+
+	stipulate(:min, "must not be negative") { |min| !min.negative? }
+	stipulate(:max, "must be greater than %{min}") { |min, max| max > min }
+end
+```
+
+**A stipulation is handed values, never the object.** Its predicate's **parameter names** name the properties it reads; it receives their values and returns truthy for pass. So it needs no readers (a shape may declare none), can't call the shape's methods, and reads identically on every path — there is no draft-vs-instance divergence to have. A single anonymous parameter — `it`, or a lone `_1` — reads the property the failure is filed against: `stipulate(:min, "must not be negative") { !it.negative? }`. Beyond that, every parameter must be named and a predicate takes at least one — multiple numbered parameters, Symbol procs, and zero-parameter predicates (which is what `it` reports on Ruby 3.3, so `it` needs 3.4+) are refused at declaration.
+
+`stipulate(prop, message) { … }` files a failure against `prop` — **one** property, even when the predicate reads several. Drop the symbol (`stipulate(message) { … }`) for a whole-value failure (`prop: nil`). `message` is a String; its `%{name}` slots are filled at failure time with the values the predicate judged: `"must be greater than %{min}"`. A slot may name only a property the stipulation reads, checked at declaration.
+
+The target property, every property read, and the message are all checked **at declaration time**, so a mistake raises where it was written rather than out of every later construction. Names resolve against the properties declared *so far*, so a stipulation reading a property declared below it raises.
+
+A stipulation is handed the caller's own values, given to judge and never to mutate — Ruby cannot enforce that, so a mutating predicate is a bug in the shape's own code, like a raising one. And a property named after a Ruby keyword (`:end`, `:class`) can never be read, since `{ |end| }` will not parse.
+
+**Dependence is derived, never declared.** Stipulations run in declaration order, inherited ones first. Every failure — a type check's, a missing value's, a nested value's own, or another rule's — **taints** the property it is filed against, and a rule that reads a tainted property is **skipped**, so no rule ever judges a value already known bad (and `%{name}` slots only ever splice type-valid values). Independent problems all surface together, even alongside another prop's type failure; a whole-value failure is filed against no property and taints nothing. Unknown or duplicated keys still hold *all* rules back — the shape did not understand the input, and a rule might otherwise judge a default quietly resolved for a mistyped key. A default, coercion or seal that raises after the input was rejected is swallowed (the report already names the cause); on sound input it propagates as it does out of `new`.
+
+**Rules are the invariant, not an advisory pass.** Every path that hands out an object enforces them once each value is assigned and type checked, raising `Literal::ValidationError` (`< StandardError`, `include Literal::Error`) carrying every failure collected: `new`, `[]`, `from_props`, `from`, `from_pack`, `marshal_load`, `build`, `Draft#finalize`, serializer `deserialize`. So **an object that exists satisfies its shape's rules** — which is why the input paths take a nested instance as `new` does, on the strength of its construction. Re-validating an instance (`instance.validate`, `#valid?`) asks whether it holds *now*, so it recurses into nested instances and reports drift inside them with the full path. The error carries `shape` and `errors`, deliberately *not* the offending object; its message renders the full `path`; the backtrace is trimmed to the caller.
+
+Emitted into the generated initializer only when the shape has stipulations, so a shape without them pays nothing. Declaring the first rule re-emits it, so declaration order in the class body doesn't matter and a subclass that adds only a rule still enforces it. An Enum's `stipulate` also checks every already-defined member — members idiomatically sit above the rules, and a member must satisfy them like any other instance. A member's customization block runs before the member registers: the rules re-run on the state the block left, uniqueness is judged on the final value, and a failure registers nothing. (A plain `Data`/`Struct` instance created mid-class-body before `stipulate` is untrackable and stays unchecked.) `stipulate` **refuses once a subclass exists** (as `prop` does) — otherwise the subclass would be less constrained than its parent while still passing as it. `slice` keeps a stipulation only when the property its error is filed against survives *and* every property it reads survives — both, since an error needs somewhere to go — A projection's stipulations are set after its class body ran, so its initializer *and* its writers are re-emitted; a projection that enforced only at construction could be mutated into a state it refuses to be built in.
+
+**Writers enforce too.** A writer runs the stipulations whose outcome **depends on** its property — the ones that *read* it, not the ones filed against it, since where an error goes has no bearing on whether it happens. The prospective value is judged **before it is stored**, so a stipulation that fails — or raises out of its own bug — leaves the object untouched: the write does not half-happen. A property no stipulation reads gets no check emitted, so it costs nothing, and the narrowed stipulation set is precomputed per class. Inherited writers enforce a subclass's stipulations, since the rules are read off the instance's own class at the time of the write. A validated writer returns the written value, as an unvalidated one does.
+
+So an object is valid **always**, not only at construction. Two consequences: a transition that needs two interdependent properties at once cannot go one write at a time — the intermediate state is what the stipulation forbids — so it goes through a draft or `from_props`, which judge the whole value together. And `#valid?` is now only for drift a writer cannot see: a held value mutated in place (`tags.clear`).
+
+### The two soft entry points
+
+Neither raises about the input, and neither constructs an invalid object — the work happens on a `Literal::Draft` and the value is built only once everything holds.
+
+```ruby
+Span.validate(min: 1, max: 0)            # same signature as `new`
+Span.validate_from_props({"min" => 1})   # untrusted input, Symbol or String keys
+```
+
+| | type errors | unknown keys | nested Hash | stipulations |
+|---|---|---|---|---|
+| `validate(...)` | **raise** (as `new`) | **raise** (`ArgumentError`) | **raise** | collected |
+| `draft.validate` / `instance.validate` | collected (drift) | — | — | collected |
+| `validate_from_props(hash)` | **collected** | **collected** | **built** | collected |
+
+`validate(...)` forwards to `Draft(self).new(...)`, whose signature matches the initializer's (positionals, splats, block included) and whose writers type check — so it's the form for a caller whose values are already right, asking whether the rules hold. It takes *only* what `new` takes: to validate a draft or instance you already have, ask it (`draft.validate`, `instance.validate`), since accepting one here would be ambiguous for a shape whose first positional property can hold one. `validate_from_props` is the API-body / MCP-argument form. Both answer a `Literal::Result`.
+
+A stipulation reading an undefinable (`prop?`) property that was not given does not apply — `Literal::Undefined` is not a value to judge. A nilable property given nothing holds `nil`, which is, and still is judged.
+
+An instance is re-checked in full, nested instances included (a `Literal::Struct` is mutable; a held value may be mutated in place), and answers *itself* on success. A subclass instance, or a draft of a subclass, validates as its own class. Instances and drafts get `#validate`/`#valid?`. A draft never enforces its drafted type's rules at its own construction — holding them in abeyance is what a draft is for.
+
+Pipeline order mirrors the initializer's: **default → coerce → seal → check**, seals applied exactly once per path. Coercions and defaults run against an instance of the shape carrying the values resolved before them — the receiver `new` gives them — so one that calls the shape's methods or reads an earlier property resolves the same value on every path. Nesting is bounded (64) so untrusted or cyclic input reports rather than exhausting the stack. Two spellings of one key (`:name` and `"name"`) are reported rather than silently collapsed.
+
+### The report
+
+`Literal::Validations::Error` = `prop` (`_Nilable(Symbol)`, the *top-level* property, or the key the caller named for an unknown one), `message`, `path` (`_Array(_Union(Symbol, Integer))`, the full route — fold on it to nest; Integer reserved for future collection indices). `Literal::Validations::Errors` serializes through `SerializationContext` like any Data; `to_h` is shallow, so not JSON-safe on its own.
+
+Messages speak a deliberately small public vocabulary — `"must be a string"`, `"must be an object"`, `"is missing"`, `"is not a known field"`, `"was given more than once"`, `"is nested too deeply"`, `"is not allowed"`. A union never enumerates its members; a `prop?` property is described through the Undefined sentinel, since that member is Literal's, not the author's. A message is written for a value the type check has **already refused**, so it must be total over anything a caller can send: a constrained property is read through `respond_to?` (as `ConstraintType` reads it) and worded only for a unit it knows — `length:` in characters, `size:` in items, either as a range (`"must be between 1 and 3 items"`) or an exact count (`"must be exactly 4 characters"`, `length: 1..` as `"must be filled"`). A constraint it cannot word falls back to the base type rather than inventing wording.
+
+A nested shape is anything that builds from props — `Data` or `Struct` — validated by its own stipulations, with its errors under the property that held it. Reached through exactly the wrappers a draft slot relaxes — `_Nilable`, `_Frozen`, `_Deferred`, and union members (`prop?` included) — in any order, so `draft.validate` agrees with `draft.finalize`. A deferred type materializes rather than reading as no shape at all: naming itself is the only way a shape can be recursive, which is also the only way input can cycle, which is what makes the depth cap load bearing. A Hash for a union reaching **two** shapes gets a plain type failure — which one it meant is not knowable.
+
+Not handled yet: a shape inside `_Array`/`_Hash` gets a plain type failure, not per-item validation. Blocked on `DraftStateType#__relax__` and `Draft#finalize` not recursing into container members; `Error#path` already admits the Integer indices it would need.
+
 ## Serialization (JSON data + JSON Schema)
 
 ```ruby

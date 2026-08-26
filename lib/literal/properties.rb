@@ -3,6 +3,8 @@
 module Literal::Properties
 	include Literal::Types
 
+	NO_STIPULATIONS = [].freeze
+
 	module DocString
 		# @!method initialize(...)
 	end
@@ -11,7 +13,149 @@ module Literal::Properties
 		super
 		base.include(Literal::Coercions)
 		base.include(DocString)
+		base.include(Literal::Validatable)
 		base.include(base.__send__(:__literal_extension__))
+	end
+
+	# Declare one validation stipulation. `prop` is the property a failure is
+	# filed against; omit it for a failure about the value as a whole. The
+	# predicate's parameter names name the properties it reads, and it is
+	# handed their values — to judge, never to mutate. A bare `it` reads the
+	# property the failure is filed against.
+	#
+	#   stipulate(:min, "must not be negative") { !it.negative? }
+	#   stipulate(:max, "must be greater than %{min}") { |min, max| max > min }
+	def stipulate(prop = nil, message, &predicate)
+		raise Literal::ArgumentError.new("stipulate requires a block") unless predicate
+
+		if frozen?
+			raise Literal::ArgumentError.new(
+				"Cannot declare validations on #{self}, because it is frozen."
+			)
+		end
+
+		# As `prop` refuses: a rule declared later would leave the subclass less
+		# constrained than its parent while still passing as it.
+		if (inheritor = subclasses.first)
+			raise Literal::ArgumentError.new(
+				"Cannot declare validations on #{self}, because #{inheritor} has already inherited them."
+			)
+		end
+
+		stipulation = Literal::Validations::Stipulation.new(owner: self, prop:, message:, predicate:)
+
+		# Before the rule installs, or a rescued failure would leave it live
+		# behind an instance that breaks it.
+		__literal_check_existing_instances__([stipulation])
+
+		__literal_set_stipulations__([*stipulations, stipulation].freeze)
+		__literal_emit_validated_methods__([stipulation])
+
+		stipulation
+	end
+
+	# The only way the stipulations change. The per-property table is derived
+	# from them, so it resets here and nowhere else can forget to.
+	private def __literal_set_stipulations__(stipulations)
+		@stipulations = stipulations
+		@stipulations_for = nil
+	end
+
+	# A new rule must hold of every instance that already exists, or an
+	# invalid one would sit behind the invariant nested validation trusts.
+	private def __literal_check_existing_instances__(stipulations)
+		instances = __literal_existing_instances__
+		return unless instances
+
+		properties = literal_properties
+
+		instances.each do |instance|
+			errors = Literal::Validations::Collector.new
+
+			stipulations.each do |stipulation|
+				stipulation.check(errors) { |name| instance.instance_variable_get(properties[name].__ivar__) }
+			end
+
+			next unless errors.any?
+
+			Literal::ValidationError.raise_trimmed(shape: self, errors: errors.to_errors)
+		end
+	end
+
+	# The instances that already exist when a rule is declared, or nil for a
+	# shape that cannot know its own — a plain Data or Struct built mid-class-
+	# body is untrackable. Literal::Enum answers its members.
+	private def __literal_existing_instances__
+		nil
+	end
+
+	# The initializer only checks when the shape has stipulations, so the first
+	# rule has to re-emit it; the writers of the properties these rules read
+	# are re-emitted for the same reason.
+	private def __literal_emit_validated_methods__(stipulations)
+		__define_literal_methods__(nil)
+
+		stipulations.flat_map(&:reads).uniq.each do |name|
+			property = literal_properties[name]
+			__define_literal_methods__(property) if property.writer
+		end
+
+		include(__literal_extension__)
+	end
+
+	# In declaration order: inherited first, then this shape's own. Resolved
+	# through the superclass like literal_properties, not copied by an
+	# inherited hook — a hook is silently lost when a class overrides
+	# `inherited` without calling super.
+	def stipulations
+		return @stipulations if defined?(@stipulations)
+
+		inherited = (Literal::Properties === superclass) ? superclass.stipulations : NO_STIPULATIONS
+
+		# A frozen class can still be asked, it just cannot cache. Memoizing is
+		# safe for the same reason `stipulate` refuses once a subclass exists:
+		# an ancestor's answer can never change after this class could read it.
+		return inherited if frozen?
+
+		@stipulations = inherited
+	end
+
+	# The stipulations whose outcome depends on one property — what its writer
+	# enforces on every assignment.
+	def stipulations_for(name)
+		return __literal_stipulations_for__(name) if frozen?
+
+		table = (@stipulations_for ||= {})
+		table[name] ||= __literal_stipulations_for__(name)
+	end
+
+	private def __literal_stipulations_for__(name)
+		stipulations.select { |stipulation| stipulation.depends_on?(name) }.freeze
+	end
+
+	private def __literal_validated_property__?(name)
+		stipulations_for(name).any?
+	end
+
+	# Takes exactly what `new` takes and answers a Literal::Result. A draft's
+	# writers type check, so a wrong type raises as it would from `new`; for
+	# input from outside, use `validate_from_props`. Accepting a draft or
+	# instance here would be ambiguous for a shape whose first positional
+	# property can hold one — ask it instead: `draft.validate`.
+	def validate(...)
+		Literal::Validations::Validator.validate(self, Literal::Draft(self).new(...))
+	end
+
+	# Every error in a Hash of props keyed by Symbol or String, including type
+	# errors — the form for input from outside, where nothing may raise.
+	def validate_from_props(props)
+		unless Hash === props
+			raise Literal::ArgumentError.new(
+				"#{name || inspect}.validate_from_props takes a Hash of properties, got #{props.class}"
+			)
+		end
+
+		Literal::Validations::Validator.validate(self, props)
 	end
 
 	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, description: nil, &coercion)
@@ -25,7 +169,7 @@ module Literal::Properties
 
 		# A block built from a Literal::Coercion or Literal::Seal carries its
 		# pipeline structure, which splits into the property's two slots.
-		if coercion&.respond_to?(:__literal_pipeline__)
+		if coercion.respond_to?(:__literal_pipeline__)
 			pipeline = coercion.__literal_pipeline__
 			coercion = pipeline.coercion_proc
 			seal = pipeline.seal_proc
@@ -144,7 +288,22 @@ module Literal::Properties
 				__define_literal_methods__(property)
 				include(__literal_extension__)
 			end
-		end
+		end.tap { |projection| projection.__send__(:__literal_slice_stipulations__, self, names) }
+	end
+
+	# A projection keeps the stipulations whose every property survives the
+	# slice. Inheritance alone would answer with the walked-to ancestor's,
+	# which is arbitrary — it depends on how many properties the slice kept.
+	protected def __literal_slice_stipulations__(origin, names)
+		kept = origin.stipulations.select { |stipulation| stipulation.applies_to?(names) }
+
+		__literal_set_stipulations__(kept.freeze)
+
+		# Every kept rule, not just the last: the class body emitted the
+		# initializer and writers before this ran, knowing none of them.
+		return if kept.empty?
+
+		__literal_emit_validated_methods__(kept)
 	end
 
 	def literal_properties
@@ -188,11 +347,16 @@ module Literal::Properties
 
 	private def __generate_literal_methods__(new_property, buffer = +"")
 		buffer << "# frozen_string_literal: true\n"
-		literal_properties.generate_initializer(buffer)
+		literal_properties.generate_initializer(buffer, validate: stipulations.any?)
 		literal_properties.generate_to_h(buffer)
-		new_property.generate_writer_method(buffer) if new_property.writer
-		new_property.generate_reader_method(buffer) if new_property.reader
-		new_property.generate_predicate_method(buffer) if new_property.predicate
+
+		# Nil when re-emitting for a new stipulation rather than a new property.
+		if new_property
+			new_property.generate_writer_method(buffer, validate: __literal_validated_property__?(new_property.name)) if new_property.writer
+			new_property.generate_reader_method(buffer) if new_property.reader
+			new_property.generate_predicate_method(buffer) if new_property.predicate
+		end
+
 		buffer
 	end
 end

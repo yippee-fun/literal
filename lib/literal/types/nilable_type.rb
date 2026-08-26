@@ -3,6 +3,7 @@
 # @api private
 class Literal::Types::NilableType
 	include Literal::Type
+	include Literal::Types::DraftTransparent
 
 	def initialize(type)
 		@type = type
@@ -10,6 +11,10 @@ class Literal::Types::NilableType
 	end
 
 	attr_reader :type
+
+	def __relax__
+		Literal::Types._Nilable(yield(@type))
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
