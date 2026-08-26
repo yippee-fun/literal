@@ -3,6 +3,7 @@
 class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
+	include Literal::Types::DraftTransparent
 
 	def initialize(queue)
 		raise Literal::ArgumentError.new("_Union type must have at least one type.") if queue.size < 1
@@ -37,6 +38,10 @@ class Literal::Types::UnionType
 	end
 
 	attr_reader :types, :primitives
+
+	def __relax__(&relax)
+		Literal::Types._Union(*@types.map(&relax), *@primitives)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

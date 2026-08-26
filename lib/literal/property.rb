@@ -63,6 +63,12 @@ class Literal::Property
 		@kind == :&
 	end
 
+	# The instance variable this property is stored in. Generated code writes
+	# `@name` literally; this is for the runtime paths that cannot.
+	def __ivar__
+		@__ivar__ ||= :"@#{@name.name}"
+	end
+
 	def default?
 		return true if splat? || double_splat?
 		nil != @default
@@ -136,7 +142,7 @@ class Literal::Property
 			"\n  value\nend\n"
 	end
 
-	def generate_writer_method(buffer = +"")
+	def generate_writer_method(buffer = +"", validate: false)
 		buffer <<
 			(@writer ? @writer.name : "public") <<
 			" def " <<
@@ -154,9 +160,18 @@ class Literal::Property
 			buffer << "  value = __property__.seal.call(value)\n"
 		end
 
+		buffer << "  __property__.check_writer(self, value)\n"
+
+		if validate
+			# Judged before it is written, against the prospective value standing
+			# in this property's place — so a rule that fails, or raises out of a
+			# bug, leaves the object untouched. A write must not half-happen.
+			buffer << "  __literal_check_rules__(:" << @name.name << ", value)\n"
+		end
+
+		buffer << "  @" << @name.name << " = value\n"
+
 		buffer <<
-			"  __property__.check_writer(self, value)\n" <<
-			"  @" << @name.name << " = value\n" <<
 			"rescue Literal::TypeError => error\n  error.set_backtrace(caller(1))\n  raise\n" <<
 			"end\n"
 	end

@@ -21,8 +21,8 @@ class Literal::Draft < Literal::Struct
 
 		# Build a finalized value in one call: constructs a draft (passing any
 		# arguments through), yields it to the block, and finalizes it.
-		def build(*args, **kwargs, &block)
-			new(*args, **kwargs).finalize(&block)
+		def build(*, **, &)
+			new(*, **).finalize(&)
 		end
 
 		# Draft classes are types: any draft of a subtype of our drafted type
@@ -94,12 +94,11 @@ class Literal::Draft < Literal::Struct
 					if Literal::Undefined == value || Literal::Draft === value
 						value
 					else
-						instance_exec(value, &original_coercion)
+						__context__.instance_exec(value, &original_coercion)
 					end
 				})
 			)
 		end
-
 	end
 
 	# Matches any draft whose drafted type is a subtype of the given type —
@@ -158,7 +157,20 @@ class Literal::Draft < Literal::Struct
 	#
 	# A block receives the draft after any props are assigned and before the
 	# value is built — for last touches like conditional assignment.
-	def finalize(**props)
+	def finalize(**props, &)
+		self.class.__type__.from_props(__finalize_attributes__(props, &))
+	end
+
+	# Finalize without enforcing the drafted type's rules or sealing again, for
+	# the validator, which has already done both against this draft. Private,
+	# or any caller could turn a failing draft into a value that breaks its
+	# shape's rules.
+	private def __finalize_unchecked__
+		type = self.class.__type__
+		type.__send__(:__literal_from_props__, __finalize_attributes__({}), seal: false)
+	end
+
+	private def __finalize_attributes__(props)
 		type = self.class.__type__
 
 		unless type.respond_to?(:from_props)
@@ -182,6 +194,64 @@ class Literal::Draft < Literal::Struct
 			attributes[name] = value
 		end
 
-		type.from_props(attributes)
+		attributes
+	end
+
+	# Answers a Literal::Result carrying the built value or the validation
+	# errors. The draft itself is never mutated.
+	def validate
+		type = self.class.__type__
+
+		unless type
+			raise Literal::ArgumentError.new("Cannot validate an untyped draft.")
+		end
+
+		Literal::Validations::Validator.validate(type, self)
+	end
+
+	def valid?
+		validate.success?
+	end
+
+	# For the validator, which has already coerced the value and checked it
+	# against the prop's real type, and must not do either twice.
+	def __store__(name, value)
+		property = self.class.literal_properties[name] ||
+			raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
+
+		instance_variable_set(property.__ivar__, value)
+	end
+
+	# A copy gets its own context: the memoized receiver below belongs to one
+	# draft, or validating the copy would write onto an object the original
+	# can still reach.
+	private def initialize_copy(source)
+		super
+		remove_instance_variable(:@__context__) if instance_variable_defined?(:@__context__)
+	end
+
+	# Coercions and defaults are written for the drafted type — they may call
+	# its own methods and read the properties assigned before them, exactly as
+	# they do in the generated initializer. So they run against an instance of
+	# the drafted type carrying the draft's values as they stand, synced on
+	# each use. One instance per draft, shared with the validator.
+	def __context__
+		context = (@__context__ ||= self.class.__type__.allocate)
+
+		self.class.__type__.literal_properties.each do |property|
+			value = instance_variable_get(property.__ivar__)
+
+			if Literal::Undefined == value
+				# An unset slot reads as unset — including one set and then reset,
+				# whose earlier sync must not linger.
+				if context.instance_variable_defined?(property.__ivar__)
+					context.remove_instance_variable(property.__ivar__)
+				end
+			else
+				context.instance_variable_set(property.__ivar__, value)
+			end
+		end
+
+		context
 	end
 end

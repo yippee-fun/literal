@@ -4,7 +4,9 @@ class Literal::Data < Literal::DataStructure
 	class << self
 		def [](...) = new(...)
 
-		def from_props(props)
+		# Frozen before its rules see it, so a rule judges a finished value
+		# exactly as it does on the initializer path.
+		private def __literal_from_props__(props, seal: true)
 			super.freeze
 		end
 

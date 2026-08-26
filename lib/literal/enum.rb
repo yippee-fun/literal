@@ -15,7 +15,15 @@ class Literal::Enum
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:)
 		end
 
+		# Members are idiomatically defined above the rules in the class body,
+		# so `stipulate` judges them before its rule installs.
+		private def __literal_existing_instances__
+			@members
+		end
+
 		def inherited(subclass)
+			super
+
 			subclass.instance_exec do
 				@values = {}
 				@members = []
@@ -98,6 +106,14 @@ class Literal::Enum
 
 			new_object = super(*, **, &nil)
 
+			# Before the member registers, so uniqueness and the shape's rules
+			# are judged on the state the block left — and a failure leaves
+			# nothing behind.
+			if block
+				new_object.instance_exec(&block)
+				new_object.__send__(:__literal_check_rules__) if stipulations.any?
+			end
+
 			if @values.key?(new_object.value)
 				raise ArgumentError.new("The value #{new_object.value} is already used by #{@values[new_object.value].name}.")
 			end
@@ -107,8 +123,6 @@ class Literal::Enum
 			new_object.instance_variable_set(:@__position__, @members.length)
 
 			@members << new_object
-
-			new_object.instance_exec(&block) if block
 
 			new_object
 		end
