@@ -273,17 +273,73 @@ test "an unknown key is reported alongside the props that are wrong" do
 	assert_equal [[:surprise, "is not a known field"], [:id, "must be a string"]], errors_for(result)
 end
 
-# An unknown key means this shape did not understand the input, so the rules
-# have nothing trustworthy to read.
-test "an unknown key holds the stipulations back" do
-	ran = false
+# An unknown key may be a typo of a prop that then quietly defaulted, so a
+# rule reading a defaulted value has nothing trustworthy to judge. The given
+# values are exactly what the caller sent, so rules over those still answer —
+# the caller learns every fixable thing at once.
+test "an unknown key holds back only the rules reading defaulted props" do
+	ran = []
 	klass = Class.new(Literal::Data) do
 		prop :name, String
+		prop :limit, Integer, default: 20
 	end
-	klass.stipulate(:name, "never reported") { |name| ran = true }
+	klass.stipulate(:name, "must be filled") { |name| ran << :name; !name.empty? }
+	klass.stipulate(:limit, "never reported") { |limit| ran << :limit; true }
 
-	assert klass.validate_from_props(name: "Ada", surprise: 1).failure?
+	result = klass.validate_from_props(name: "", surprise: 1)
+
+	assert_equal [[:surprise, "is not a known field"], [:name, "must be filled"]], errors_for(result)
+	assert_equal [:name], ran
+end
+
+test "an unknown key holds back a rule reading any defaulted prop" do
+	ran = false
+	klass = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer, default: 100
+	end
+	klass.stipulate(:max, "never reported") { |min, max| ran = true }
+
+	assert klass.validate_from_props(min: 5, surprise: 1).failure?
 	refute ran
+end
+
+test "a rule over a defaulted prop answers again once the prop is given" do
+	klass = Class.new(Literal::Data) do
+		prop :limit, Integer, default: 20
+	end
+	klass.stipulate(:limit, "must be at most 100") { |limit| limit <= 100 }
+
+	result = klass.validate_from_props(limit: 500, surprise: 1)
+
+	assert_equal [[:surprise, "is not a known field"], [:limit, "must be at most 100"]], errors_for(result)
+end
+
+# With every key understood, a default is a legitimate value like any other,
+# and the rules judge it.
+test "a rule judges a defaulted value when every key is understood" do
+	klass = Class.new(Literal::Data) do
+		prop :limit, Integer, default: -1
+	end
+	klass.stipulate(:limit, "must be positive", &:positive?)
+
+	assert_equal [[:limit, "must be positive"]], errors_for(klass.validate_from_props({}))
+end
+
+# Key confusion is judged per shape: a stray key inside a nested Hash taints
+# the prop that held it, and the parent's other rules still answer.
+test "an unknown key inside a nested shape stays there" do
+	nested = Class.new(Literal::Data) { prop :city, String }
+	klass = Class.new(Literal::Data) do
+		prop :address, nested
+		prop :name, String
+	end
+	klass.stipulate(:name, "must be filled") { |name| !name.empty? }
+
+	result = klass.validate_from_props(name: "", address: { city: "Berlin", junk: 1 })
+
+	assert_includes errors_for(result), [:address, "is not a known field"]
+	assert_includes errors_for(result), [:name, "must be filled"]
 end
 
 test "a string key that names no prop is reported as the symbol it interns to" do
@@ -309,15 +365,23 @@ test "a duplicated key's values are not judged" do
 	assert_equal [[:name, "was given more than once"]], errors_for(result)
 end
 
-test "a duplicated key holds the stipulations back" do
-	ran = false
+# A duplicate names the prop it collided on, so the ambiguity is confined:
+# the duplicate error taints that prop, silencing exactly the rules that
+# would read the value nobody can safely pick.
+test "a duplicated key silences only the rules that read it" do
+	ran = []
 	klass = Class.new(Literal::Data) do
 		prop :name, String
+		prop :age, Integer
 	end
-	klass.stipulate(:name, "never reported") { |name| ran = true }
+	klass.stipulate(:name, "never reported") { |name| ran << :name; true }
+	klass.stipulate(:age, "must be positive") { |age| ran << :age; age.positive? }
 
-	assert klass.validate_from_props({ "name" => "Ada", :name => "Ada" }).failure?
-	refute ran
+	result = klass.validate_from_props({ "name" => "Ada", :name => "Ada", :age => -1 })
+
+	assert_includes errors_for(result), [:name, "was given more than once"]
+	assert_includes errors_for(result), [:age, "must be positive"]
+	assert_equal [:age], ran
 end
 
 # --- input guarding ---

@@ -41,8 +41,12 @@ module Literal::Validations::Validator
 	def run_stipulations(shape, errors, only: nil, &read)
 		list = only ? shape.stipulations_for(only) : shape.stipulations
 
+		# A tainted read already failed its own judgment; a phantom read is a
+		# default resolved while an unknown key went unmatched — possibly a typo
+		# of the very prop that then defaulted. An unknown key makes defaults
+		# untrustworthy, never the given values, so rules over those still run.
 		list.each do |stipulation|
-			next if stipulation.reads.any? { |name| errors.tainted?(name) }
+			next if stipulation.reads.any? { |name| errors.tainted?(name) || errors.phantom?(name) }
 
 			stipulation.check(errors, &read)
 		end
@@ -84,10 +88,6 @@ module Literal::Validations::Validator
 				"#{shape.name || shape.inspect} cannot validate a #{input.class}; expected a Hash of properties, a draft of it, or an instance of it"
 			)
 		end
-
-		# An unknown key may be a typo of a known prop that then quietly
-		# defaulted, so no rule runs on key confusion.
-		return [draft, sound] unless errors.keys_understood?
 
 		draft_properties = draft.class.literal_properties
 		run_stipulations(shape, errors) do |name|
@@ -271,6 +271,8 @@ module Literal::Validations::Validator
 			errors.add(property.name, Literal::Validations::Message::MISSING)
 			return false
 		end
+
+		errors.defaulted(property.name)
 
 		# Only a Proc default reads the receiver, and the sync it triggers is
 		# not free.

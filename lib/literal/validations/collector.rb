@@ -4,7 +4,8 @@ class Literal::Validations::Collector
 	def initialize
 		@errors = []
 		@tainted = Set.new
-		@keys_understood = true
+		@defaulted = Set.new
+		@unknown_keys = false
 	end
 
 	attr_reader :errors
@@ -15,10 +16,16 @@ class Literal::Validations::Collector
 		@tainted.include?(name)
 	end
 
-	# False once a key named no prop or two spellings of one name collided —
-	# a rule may otherwise judge a default quietly resolved for a mistyped key.
-	def keys_understood?
-		@keys_understood
+	# A phantom value is the shape's own invention — a default resolved for an
+	# ungiven prop — standing where a mistyped key's value may have been meant
+	# to go. It exists only once a key named no prop: with every key understood,
+	# a default is legitimate and rules judge it like any other value.
+	def phantom?(name)
+		@unknown_keys && @defaulted.include?(name)
+	end
+
+	def defaulted(name)
+		@defaulted << name
 	end
 
 	def add(prop = nil, message)
@@ -26,12 +33,13 @@ class Literal::Validations::Collector
 	end
 
 	def add_unknown(key)
-		@keys_understood = false
+		@unknown_keys = true
 		add_about_key(key, Literal::Validations::Message::UNKNOWN)
 	end
 
+	# No flag: filing against the prop's own name taints it, which already
+	# holds back exactly the rules that would read the ambiguous value.
 	def add_duplicate(key)
-		@keys_understood = false
 		add_about_key(key, Literal::Validations::Message::DUPLICATE)
 	end
 
