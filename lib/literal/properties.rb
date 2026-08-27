@@ -21,7 +21,8 @@ module Literal::Properties
 	# filed against; omit it for a failure about the value as a whole. The
 	# predicate's parameter names — positional or keyword — name the properties
 	# it reads, and it is handed their values — to judge, never to mutate. A
-	# bare `it` reads the property the failure is filed against. A property
+	# bare `it` — or a Symbol proc, `stipulate(:count, "…", &:positive?)` —
+	# reads the property the failure is filed against. A property
 	# named after a reserved word is only spellable as a keyword, and its value
 	# only readable through the binding:
 	#

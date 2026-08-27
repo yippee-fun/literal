@@ -1596,6 +1596,33 @@ test "it fills the pinned property's message slot" do
 	assert error.message.include?("cannot be -3")
 end
 
+# A Symbol proc has no parameter names to read from, but it takes exactly one
+# value — so like `it`, it reads the property the failure is filed against.
+test "a Symbol proc reads the pinned property" do
+	klass = Class.new(Literal::Data) do
+		prop :count, Integer
+
+		stipulate(:count, "cannot be %{count}", &:positive?)
+	end
+
+	assert klass.new(count: 1).valid?
+	assert_equal [[:count, "cannot be 0"]], errors_for(klass.validate(count: 0))
+
+	error = assert_raises(Literal::ValidationError) { klass.new(count: -1) }
+	assert error.message.include?("cannot be -1")
+end
+
+test "a Symbol proc in a whole-value stipulation is refused" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Data) do
+			prop :name, String
+			stipulate("…", &:empty?)
+		end
+	end
+
+	assert(/whole-value/.match?(error.message))
+end
+
 # A whole-value stipulation pins no property, so an anonymous parameter has
 # nothing to read.
 test "it in a whole-value stipulation is refused" do

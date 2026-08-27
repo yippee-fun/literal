@@ -112,12 +112,13 @@ class Literal::Validations::Stipulation
 			)
 		end
 
-		# `it` or a lone `_1`: a single anonymous parameter reads the property
-		# the failure is filed against.
-		if parameters in [[:opt]] | [[:opt, :_1]]
+		# `it`, a lone `_1`, or a Symbol proc (`&:positive?`, which reflects as
+		# [[:req], [:rest]] — a shape no source-written signature has): a single
+		# anonymous read is the property the failure is filed against.
+		if parameters in [[:opt]] | [[:opt, :_1]] | [[:req], [:rest]]
 			unless @prop
 				raise Literal::ArgumentError.new(
-					"A whole-value stipulation has no property for `it` to read, so name what it reads: write `{ |min, max| ... }`"
+					"A whole-value stipulation has no property for an anonymous parameter to read, so name what it reads: write `{ |min, max| ... }`"
 				)
 			end
 
@@ -160,7 +161,7 @@ class Literal::Validations::Stipulation
 	private def __resolve__(name)
 		if name.nil? || NUMBERED.match?(name)
 			raise Literal::ArgumentError.new(
-				"A stipulation reading more than one property names each read with a parameter: write `{ |min, max| ... }`, not a Symbol proc or numbered parameters"
+				"A stipulation reading more than one property names each read with a parameter: write `{ |min, max| ... }`, not numbered or destructured parameters"
 			)
 		end
 
