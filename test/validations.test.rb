@@ -1622,6 +1622,104 @@ test "multiple numbered parameters are refused" do
 	assert(/numbered/.match?(error.message))
 end
 
+# A keyword parameter reads the property it names, exactly as a positional one
+# does — the values just arrive by name instead of by position.
+test "keyword parameters read the properties they name" do
+	klass = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+		stipulate(:max, "must be greater than %{min}") { |min:, max:| max > min }
+	end
+
+	assert klass.validate(min: 1, max: 5).success?
+	assert_equal [[:max, "must be greater than 5"]], errors_for(klass.validate(min: 5, max: 1))
+end
+
+test "positional and keyword parameters mix" do
+	klass = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+		stipulate(:max, "must be greater than %{min}") { |max, min:| max > min }
+	end
+
+	assert klass.validate(min: 1, max: 5).success?
+	assert_equal [[:max, "must be greater than 5"]], errors_for(klass.validate(min: 5, max: 1))
+end
+
+test "a keyword parameter with a default still reads its property" do
+	klass = Class.new(Literal::Data) do
+		prop :n, Integer
+		stipulate(:n, "must be positive") { |n: 0| n.positive? }
+	end
+
+	assert klass.validate(n: 1).success?
+	assert_equal [[:n, "must be positive"]], errors_for(klass.validate(n: -1))
+end
+
+# A property named after a reserved word cannot be a positional parameter at
+# all — `{ |end| ... }` does not parse. As a keyword it declares and binds,
+# and the body reads the value through the binding.
+test "a keyword parameter spells a reserved-word property" do
+	klass = Class.new(Literal::Data) do
+		prop :begin, Integer
+		prop :end, Integer
+
+		stipulate(:end, "must be after %{begin}") { |begin:, end:|
+			binding.local_variable_get(:end) > binding.local_variable_get(:begin)
+		}
+	end
+
+	assert klass.validate(begin: 1, end: 5).success?
+	assert_equal [[:end, "must be after 5"]], errors_for(klass.validate(begin: 5, end: 1))
+end
+
+test "a keyword parameter naming no property raises at declaration time" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Data) do
+			prop :name, String
+			stipulate(:name, "…") { |nope:| false }
+		end
+	end
+
+	assert error.message.include?(":nope")
+end
+
+# A `**` catch-all names nothing to read, like `*` and `&` before it.
+test "a keyword rest parameter is refused" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Data) do
+			prop :name, String
+			stipulate(:name, "…") { |**props| false }
+		end
+	end
+
+	assert(/cannot take :keyrest/.match?(error.message))
+end
+
+# The writer of a property a stipulation reads re-runs it, however the read is
+# spelled.
+test "a writer enforces a stipulation that reads by keyword" do
+	klass = Class.new(Literal::Object) do
+		prop :min, Integer, writer: :public
+		prop :max, Integer, writer: :public
+		stipulate(:max, "must be greater than %{min}") { |min:, max:| max > min }
+	end
+
+	instance = klass.new(min: 1, max: 5)
+	assert_raises(Literal::ValidationError) { instance.min = 10 }
+	assert_equal 1, instance.instance_variable_get(:@min)
+end
+
+test "a keyword read of an ungiven undefinable property does not apply" do
+	klass = Class.new(Literal::Data) do
+		prop? :nickname, String
+		stipulate(:nickname, "must be short") { |nickname:| nickname.size <= 5 }
+	end
+
+	assert klass.validate.success?
+	assert_equal [[:nickname, "must be short"]], errors_for(klass.validate(nickname: "Bartholomew"))
+end
+
 # A predicate with no parameters reads nothing, so it is a constant, not a
 # rule — and on Ruby 3.3 a bare `it` also reports no parameters, so accepting
 # zero would let it through to raise a NameError out of construction there.

@@ -19,12 +19,17 @@ module Literal::Properties
 
 	# Declare one validation stipulation. `prop` is the property a failure is
 	# filed against; omit it for a failure about the value as a whole. The
-	# predicate's parameter names name the properties it reads, and it is
-	# handed their values — to judge, never to mutate. A bare `it` reads the
-	# property the failure is filed against.
+	# predicate's parameter names — positional or keyword — name the properties
+	# it reads, and it is handed their values — to judge, never to mutate. A
+	# bare `it` reads the property the failure is filed against. A property
+	# named after a reserved word is only spellable as a keyword, and its value
+	# only readable through the binding:
 	#
 	#   stipulate(:min, "must not be negative") { !it.negative? }
 	#   stipulate(:max, "must be greater than %{min}") { |min, max| max > min }
+	#   stipulate(:end, "must be after %{begin}") { |begin:, end:|
+	#     binding.local_variable_get(:end) > binding.local_variable_get(:begin)
+	#   }
 	def stipulate(prop = nil, message, &predicate)
 		raise Literal::ArgumentError.new("stipulate requires a block") unless predicate
 

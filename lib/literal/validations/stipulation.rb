@@ -13,7 +13,8 @@ class Literal::Validations::Stipulation
 		@message = message
 		@predicate = predicate
 		__check_prop__(owner)
-		@reads = __reads__(owner)
+		@positional_reads, @keyword_reads = __reads__(owner)
+		@reads = (@positional_reads + @keyword_reads).freeze
 		__check_message__
 		# Our own frozen copy, or the caller can mutate the string after the
 		# check and a slot fails to fill on the first value that fails.
@@ -36,28 +37,38 @@ class Literal::Validations::Stipulation
 	end
 
 	def check(errors, &read)
-		values = []
+		positional = []
 
-		@reads.each do |name|
+		@positional_reads.each do |name|
 			value = read.call(name)
 
 			# An undefinable property that was not given holds no value, so the
 			# stipulation does not apply. A nilable one holds nil, and still does.
 			return true if Literal::Undefined == value
 
-			values << value
+			positional << value
 		end
 
-		return true if @predicate.call(*values)
+		keywords = {}
 
-		errors.add(@prop, message_for(values))
+		@keyword_reads.each do |name|
+			value = read.call(name)
+
+			return true if Literal::Undefined == value
+
+			keywords[name] = value
+		end
+
+		return true if @predicate.call(*positional, **keywords)
+
+		errors.add(@prop, message_for(positional, keywords))
 		false
 	end
 
-	private def message_for(values)
+	private def message_for(positional, keywords)
 		return @message unless TEMPLATE.match?(@message)
 
-		by_name = @reads.zip(values).to_h
+		by_name = @positional_reads.zip(positional).to_h.merge!(keywords)
 
 		@message.gsub(TEMPLATE) { by_name.fetch(Regexp.last_match(1).to_sym).to_s }
 	end
@@ -110,26 +121,40 @@ class Literal::Validations::Stipulation
 				)
 			end
 
-			return [@prop]
+			return [[@prop].freeze, [].freeze]
 		end
 
-		parameters.map do |kind, name|
-			unless kind in :req | :opt
+		positional = []
+		keywords = []
+
+		# A keyword parameter reads the same way a positional one does — it is
+		# how a reserved-word property stays spellable: `{ |end:| ... }` declares
+		# where `{ |end| ... }` cannot, and the body reads the value with
+		# `binding.local_variable_get(:end)`.
+		parameters.each do |kind, name|
+			case kind
+			in :req | :opt
+				positional << __check_read__(owner, properties, __resolve__(name))
+			in :keyreq | :key
+				keywords << __check_read__(owner, properties, name)
+			else
 				raise Literal::ArgumentError.new(
 					"A stipulation reads one property per parameter, so it cannot take #{kind.inspect}"
 				)
 			end
-
-			name = __resolve__(name)
-
-			unless properties[name]
-				raise Literal::ArgumentError.new(
-					"#{owner.name || 'This shape'} has no #{name.inspect} property for a stipulation to read"
-				)
-			end
-
-			name
 		end
+
+		[positional.freeze, keywords.freeze]
+	end
+
+	private def __check_read__(owner, properties, name)
+		unless properties[name]
+			raise Literal::ArgumentError.new(
+				"#{owner.name || 'This shape'} has no #{name.inspect} property for a stipulation to read"
+			)
+		end
+
+		name
 	end
 
 	private def __resolve__(name)
