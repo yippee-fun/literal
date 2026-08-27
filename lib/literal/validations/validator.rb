@@ -365,11 +365,19 @@ module Literal::Validations::Validator
 		duplicates
 	end
 
+	# Built by hand rather than with `transform_keys`, which answers in the
+	# input's own class — a HashWithIndifferentAccess would re-stringify the
+	# interned keys.
 	private def symbolize(props)
 		props.each_key do |key|
-			if String === key
-				return props.transform_keys { |k| (String === k) ? k.to_sym : k }
+			next unless String === key
+
+			symbolized = {}
+			props.each_pair do |k, v|
+				symbolized[(String === k) ? k.to_sym : k] = v
 			end
+
+			return symbolized
 		end
 
 		props

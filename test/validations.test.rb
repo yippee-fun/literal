@@ -1404,6 +1404,23 @@ test "accepts string keys at the top level" do
 	assert Person.validate_from_props(props).success?
 end
 
+# A HashWithIndifferentAccess's `transform_keys` answers another
+# HashWithIndifferentAccess, which re-stringifies the interned Symbols — so
+# interning has to build a plain Hash, or every field reads as unknown.
+test "accepts a HashWithIndifferentAccess at the top level" do
+	props = ActiveSupport::HashWithIndifferentAccess.new(
+		id: "per_1", name: "Ada", account: { name: "Initech" },
+	)
+
+	assert Person.validate_from_props(props).success?
+end
+
+test "accepts a HashWithIndifferentAccess inside a nested prop" do
+	props = valid_props(account: ActiveSupport::HashWithIndifferentAccess.new(name: "Initech"))
+
+	assert Person.validate_from_props(props).success?
+end
+
 test "reports an unknown key inside a nested Hash under the prop that held it" do
 	result = Person.validate_from_props(valid_props(account: { name: "Initech", junk: 1 }))
 
