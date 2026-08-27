@@ -322,7 +322,28 @@ module Literal::Properties
 
 	private def __define_literal_methods__(new_property)
 		code =	__generate_literal_methods__(new_property)
+		__literal_silence_redefinitions__(new_property) if new_property
 		__literal_extension__.module_eval(code)
+	end
+
+	# Re-emitting a property's methods — a writer picking up a new stipulation —
+	# would warn under `-w`. A method aliased to itself is marked, and Ruby stays
+	# quiet when a marked method is redefined; the generated initializer, to_h,
+	# hash and == silence themselves the same way inline.
+	private def __literal_silence_redefinitions__(property)
+		extension = __literal_extension__
+		name = property.name.name
+
+		names = []
+		names << :"#{name}=" if property.writer
+		names << property.name if property.reader
+		names << :"#{name}?" if property.predicate
+
+		names.each do |method_name|
+			if extension.method_defined?(method_name) || extension.private_method_defined?(method_name)
+				extension.alias_method(method_name, method_name)
+			end
+		end
 	end
 
 	private def __literal_extension__

@@ -764,3 +764,39 @@ test "#to_h" do
 	empty = Empty.new
 	assert_equal empty.to_h, {}
 end
+
+# Each prop re-emits the shared methods — the initializer, to_h, and a Data's
+# hash and == — and a stipulation re-emits the writers it reads. Every one of
+# those redefinitions must be pre-aliased, or `-w` drowns the caller in
+# "method redefined" warnings.
+test "generated methods redefine without warnings" do
+	warnings = []
+	capturing = true
+	interceptor = Module.new do
+		define_method(:warn) do |message, **kwargs|
+			capturing ? warnings << message : super(message, **kwargs)
+		end
+	end
+
+	Warning.singleton_class.prepend(interceptor)
+	verbose, $VERBOSE = $VERBOSE, true
+
+	begin
+		Class.new(Literal::Data) do
+			prop :x, Integer, reader: :public
+			prop :y, Integer, reader: :public
+		end
+
+		Class.new(Literal::Object) do
+			prop :min, Integer, writer: :public, reader: :private, predicate: :public
+			prop :max, Integer, writer: :public
+
+			stipulate(:max, "must be greater than %{min}") { |min, max| max > min }
+		end
+	ensure
+		$VERBOSE = verbose
+		capturing = false
+	end
+
+	assert_equal [], warnings.grep(/method redefined/)
+end

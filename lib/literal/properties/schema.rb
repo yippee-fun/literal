@@ -99,7 +99,8 @@ class Literal::Properties::Schema
 	end
 
 	def generate_hash(buffer = +"")
-		buffer << "def hash\n  [self.class,\n"
+		buffer << "alias hash hash\n" \
+			"def hash\n  [self.class,\n"
 
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
@@ -113,7 +114,8 @@ class Literal::Properties::Schema
 	end
 
 	def generate_eq(buffer = +"")
-		buffer << "def ==(other)\n"
+		buffer << "alias == ==\n" \
+			"def ==(other)\n"
 		buffer << "  return false unless self.class == other.class\n"
 
 		sorted_properties = @sorted_properties
