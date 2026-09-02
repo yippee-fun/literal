@@ -17,33 +17,40 @@ module Literal::Properties
 		base.include(base.__send__(:__literal_extension__))
 	end
 
-	# Declare one check. `prop` is the property a failure is filed against;
-	# omit it for a failure about the value as a whole. The block is handed
-	# values — to judge, never to mutate — and its keyword parameters name the
-	# properties it reads. The property the failure is filed against may be
-	# read positionally instead: a bare `it`, a Symbol proc
-	# (`check(:count, "…", &:positive?)`), or a parameter of its name. A
-	# property named after a reserved word is only spellable as a keyword, and
-	# its value only readable through the binding:
+	# The short form of `checks`: one predicate, one message, filed against
+	# `prop` — or against the value as a whole when `prop` is omitted. The
+	# block's keyword parameters name the properties it reads, exactly as in
+	# `checks`; an anonymous block — a bare `it`, or a Symbol proc
+	# (`check(:count, "…", &:positive?)`) — reads the property the failure is
+	# filed against. The message's `%{}` slots fill from the reads. A property
+	# named after a reserved word is only spellable as a keyword, and its value
+	# only readable through the binding:
 	#
 	#   check(:min, "must not be negative") { !it.negative? }
-	#   check(:max, "must be greater than %{min}") { |max, min:| max > min }
+	#   check(:max, "must be greater than %{min}") { |max:, min:| max > min }
 	#   check("must span something") { |min:, max:| min < max }
 	#   check(:end, "must be after %{begin}") { |begin:, end:|
 	#     binding.local_variable_get(:end) > binding.local_variable_get(:begin)
 	#   }
+	#
+	# Each is the same as a `checks` block that adds the message unless the
+	# predicate holds.
 	def check(prop = nil, message, &block)
 		raise Literal::ArgumentError.new("check requires a block") unless block
 
 		__literal_add_check__(Literal::Checks::Check.new(owner: self, prop:, message:, block:))
 	end
 
-	# Declare a check that files its own failures. The block takes a reporter
-	# first, then the properties it reads as keywords, and calls `add` with the
-	# property and message — or the message alone for the value as a whole:
+	# Declare a check. The block takes a reporter first, then the properties it
+	# reads as keywords — handed values, to judge, never to mutate — and calls
+	# `add` with the property and message, or the message alone for the value
+	# as a whole. Declare as many as the shape needs; a subclass adds to its
+	# parent's. Checks are independent: each runs once its reads hold their
+	# types, whatever the others found.
 	#
 	#   checks do |errors, min:, max:|
 	#     errors.add(:min, "must not be greater than max (#{max})") if min > max
+	#     errors.add("must span something") if min == max
 	#   end
 	def checks(&block)
 		raise Literal::ArgumentError.new("checks requires a block") unless block
