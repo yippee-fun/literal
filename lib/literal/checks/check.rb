@@ -7,11 +7,10 @@
 # answer. Its keyword parameters name the properties it reads.
 #
 # The predicate form (`check`) carries the property a failure is filed against
-# and the message; the block may take that property positionally. The
-# reporting form (`checks`) carries neither: the block takes a reporter first
-# and files whatever it finds.
+# and the message; an anonymous block (`it`, `_1`, a Symbol proc) reads that
+# property alone. The reporting form (`checks`) carries neither: the block
+# takes a reporter first and files whatever it finds.
 class Literal::Checks::Check
-	NUMBERED = /\A_\d+\z/
 	TEMPLATE = /%\{([[:word:]]+)\}/
 
 	def initialize(owner:, block:, prop: nil, message: nil, reporting: false)
@@ -21,8 +20,8 @@ class Literal::Checks::Check
 		@block = block
 		@reporting = reporting
 		__check_prop__
-		@positional, @keyword_reads = __reads__
-		@reads = [*(@prop if @positional), *@keyword_reads].uniq.freeze
+		@anonymous, @keyword_reads = __reads__
+		@reads = [*(@prop if @anonymous), *@keyword_reads].uniq.freeze
 
 		unless @reporting
 			__check_message__
@@ -60,7 +59,7 @@ class Literal::Checks::Check
 			return
 		end
 
-		if @positional
+		if @anonymous
 			value = read.call(@prop)
 			return if Literal::Undefined == value
 			return if @block.call(value, **keywords)
@@ -120,46 +119,30 @@ class Literal::Checks::Check
 		@reporting ? __reporting_reads__(parameters) : __predicate_reads__(parameters)
 	end
 
-	# `it` (which Ruby 3.4 reflects as [[:opt, nil]] and 3.5 as [[:opt]]), a
-	# lone `_1`, or a Symbol proc (`&:positive?`, which reflects as
-	# [[:req], [:rest]] — a shape no source-written signature has) reads the
-	# property the failure is filed against, as does a positional parameter of
-	# that property's name.
+	# An anonymous block — `it` (which Ruby 3.4 reflects as [[:opt, nil]] and
+	# 3.5 as [[:opt]]), a lone `_1`, or a Symbol proc (`&:positive?`, which
+	# reflects as [[:req], [:rest]] — a shape no source-written signature has)
+	# reads the property the failure is filed against. Every named read is a
+	# keyword, the pinned property included, so a block never mixes the two.
 	private def __predicate_reads__(parameters)
 		if parameters in [[:opt]] | [[:opt, nil]] | [[:opt, :_1]] | [[:req], [:rest]]
-			__require_pinned__
+			unless @prop
+				raise Literal::ArgumentError.new(
+					"A whole-value check has no property for an anonymous block to read, so name what it reads: write `{ |min:, max:| ... }`"
+				)
+			end
+
 			return [true, [].freeze]
 		end
 
-		positional = false
-		keywords = []
-
-		parameters.each_with_index do |(kind, name), index|
+		keywords = parameters.map do |kind, name|
 			case kind
-			in :req | :opt
-				unless index.zero?
-					raise Literal::ArgumentError.new(
-						"A check reads other properties as keywords: write `{ |min, max:| ... }`, not `{ |min, max| ... }`"
-					)
-				end
-
-				__require_pinned__
-
-				if name.nil? || NUMBERED.match?(name)
-					raise Literal::ArgumentError.new(
-						"A check's positional parameter is the property the failure is filed against, so name it #{@prop.inspect}: write `{ |#{@prop}, other:| ... }`"
-					)
-				end
-
-				unless name == @prop
-					raise Literal::ArgumentError.new(
-						"A check's positional parameter is the property the failure is filed against, so it is named #{@prop.inspect}, not #{name.inspect}"
-					)
-				end
-
-				positional = true
 			in :keyreq | :key
-				keywords << __check_read__(name)
+				__check_read__(name)
+			in :req | :opt
+				raise Literal::ArgumentError.new(
+					"A check reads its properties as keywords: write `{ |min:, max:| ... }`, not `{ |min, max| ... }`; a bare `it` reads the property the failure is filed against"
+				)
 			else
 				raise Literal::ArgumentError.new(
 					"A check reads one property per parameter, so it cannot take #{kind.inspect}"
@@ -167,15 +150,7 @@ class Literal::Checks::Check
 			end
 		end
 
-		[positional, keywords.freeze]
-	end
-
-	private def __require_pinned__
-		return if @prop
-
-		raise Literal::ArgumentError.new(
-			"A whole-value check has no property for a positional parameter to read, so name what it reads: write `{ |min:, max:| ... }`"
-		)
+		[false, keywords.freeze]
 	end
 
 	# The first parameter is the reporter; every read is a keyword, which is

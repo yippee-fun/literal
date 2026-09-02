@@ -791,7 +791,7 @@ test "generated methods redefine without warnings" do
 			prop :min, Integer, writer: :public, reader: :private, predicate: :public
 			prop :max, Integer, writer: :public
 
-			check(:max, "must be greater than %{min}") { |max, min:| max > min }
+			check(:max, "must be greater than %{min}") { |max:, min:| max > min }
 		end
 	ensure
 		$VERBOSE = verbose

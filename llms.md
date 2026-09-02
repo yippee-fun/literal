@@ -126,20 +126,22 @@ class Span < Literal::Data
 	prop :min, Integer
 	prop :max, Integer
 
-	check(:min, "must not be negative") { !it.negative? }
-	check(:max, "must be greater than %{min}") { |max, min:| max > min }
-	check("must span something") { |min:, max:| min < max }
-
 	checks do |errors, min:, max:|
 		errors.add(:max, "must be at least #{min + 1}") unless max > min
 		errors.add("must span something") unless min < max
 	end
+
+	check(:min, "must not be negative") { !it.negative? }
+	check(:max, "must be greater than %{min}") { |max:, min:| max > min }
+	check("must span something") { |min:, max:| min < max }
 end
 ```
 
-**A block is handed values, never the object.** Its **keyword parameters name the properties it reads**, so it needs no readers (a shape may declare none), can't call the shape's methods, and reads identically on every path. `check(prop, message) { … }` files one failure against `prop` — **one** property, however many it reads — its block returning truthy for pass; drop the symbol (`check(message) { … }`) for a failure about the value as a whole (`prop: nil`). The message's `%{name}` slots are filled at failure time with the values judged, and may name only a property the check reads. `checks { |errors, …| }` takes a `Literal::Checks::Reporter` first and files its own, interpolating for itself: `errors.add(:max, "…")`, or `errors.add("…")` for the whole value; a name the shape hasn't raises, since nobody could read that error.
+`checks` is the API. **A block is handed values, never the object.** Its **keyword parameters name the properties it reads**, so it needs no readers (a shape may declare none), can't call the shape's methods, and reads identically on every path. It takes a `Literal::Checks::Reporter` first and files whatever it finds, interpolating its messages for itself: `errors.add(:max, "…")`, or `errors.add("…")` for the whole value; a name the shape hasn't raises, since nobody could read that error. Declare as many as the shape needs — a subclass adds to its parent's, and each is independent, answering whatever the others found.
 
-The pinned property may be read **positionally**: a bare `it`, a lone `_1`, a Symbol proc (`check(:count, "must be positive", &:positive?)`), or a first positional parameter, which must carry that property's name. Every other read is a keyword — `{ |max, min:| }`, never `{ |max, min| }`. A whole-value `check` has no pinned property, so nothing to read positionally; a `checks` block spends its positional on the reporter and takes at least one keyword. `*`/`**`/`&` catch-alls are refused, as are zero-parameter blocks — which is what a bare `it` reports on Ruby 3.3, so there the block must take a parameter. A property named after a reserved word is only spellable as a keyword, its value only readable through the binding: `check(:end, "must be after %{begin}") { |begin:, end:| binding.local_variable_get(:end) > binding.local_variable_get(:begin) }`.
+`check(prop, message) { predicate }` is its short form for the common one-predicate, one-message case: the same as a `checks` block that adds `message` against `prop` unless the predicate holds. It files **one** failure against `prop` — **one** property, however many it reads — its block returning truthy for pass; drop the symbol (`check(message) { … }`) for a failure about the value as a whole (`prop: nil`). The message's `%{name}` slots are filled at failure time with the values judged, and may name only a property the check reads.
+
+Every **named** read is a keyword, the pinned property included — `{ |max:, min:| }`, never `{ |max, min| }`. The only positional form is **anonymous**, and reads the pinned property: a bare `it`, a lone `_1`, or a Symbol proc (`check(:count, "must be positive", &:positive?)`). A whole-value `check` pins no property, so an anonymous block there has nothing to read and is refused; a `checks` block spends its positional on the reporter and takes at least one keyword. `*`/`**`/`&` catch-alls are refused, as are zero-parameter blocks — which is what a bare `it` reports on Ruby 3.3, so there the block must take a parameter. A property named after a reserved word is only spellable as a keyword, its value only readable through the binding: `check(:end, "must be after %{begin}") { |begin:, end:| binding.local_variable_get(:end) > binding.local_variable_get(:begin) }`.
 
 The pinned property, every read, and the message are checked **at declaration**, against the properties declared *so far* — so a typo, or a read of a property declared below, raises where it was written rather than out of every later construction. A block is given values to judge and never to mutate; Ruby can't enforce that, so a mutating block is a bug in the shape's own code, like a raising one.
 

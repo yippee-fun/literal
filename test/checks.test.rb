@@ -17,7 +17,7 @@ class Account < Literal::Data
 	prop :name, String
 	prop :tier, _Nilable(String)
 
-	check(:name, "must not be blank") { |name| !name.strip.empty? }
+	check(:name, "must not be blank") { |name:| !name.strip.empty? }
 end
 
 # A nested Data with no checks of its own.
@@ -30,7 +30,7 @@ class Node < Literal::Data
 	prop :n, Integer
 	prop :child, _Nilable(_Deferred { Node })
 
-	check(:n, "must be positive") { |n| n > 0 }
+	check(:n, "must be positive") { |n:| n > 0 }
 end
 
 class Person < Literal::Data
@@ -42,7 +42,7 @@ class Person < Literal::Data
 	prop :role, String, default: -> { "member" }
 	prop :tags, _Array(String), default: -> { [] }
 
-	check(:name, "must be between 1 and 10 characters") { |name| (1..10).cover?(name.size) }
+	check(:name, "must be between 1 and 10 characters") { |name:| (1..10).cover?(name.size) }
 
 	check("name can't be Joe when account is ACME") { |name:, account:| !(name == "Joe" && account.name == "ACME") }
 end
@@ -152,7 +152,7 @@ end
 test "checks a draft of a subclass by the subclass" do
 	child = Class.new(Account) do
 		prop :code, String
-		check(:code, "must not be blank") { |code| !code.empty? }
+		check(:code, "must not be blank") { |code:| !code.empty? }
 	end
 
 	draft = Literal::Draft(child).new(name: "Initech", code: "")
@@ -288,8 +288,8 @@ test "an unknown key holds back only the checks reading defaulted props" do
 		prop :name, String
 		prop :limit, Integer, default: 20
 	end
-	klass.check(:name, "must be filled") { |name| ran << :name; !name.empty? }
-	klass.check(:limit, "never reported") { |limit| ran << :limit; true }
+	klass.check(:name, "must be filled") { |name:| ran << :name; !name.empty? }
+	klass.check(:limit, "never reported") { |limit:| ran << :limit; true }
 
 	result = Literal::Draft(klass).check(name: "", surprise: 1)
 
@@ -303,7 +303,7 @@ test "an unknown key holds back a check reading any defaulted prop" do
 		prop :min, Integer
 		prop :max, Integer, default: 100
 	end
-	klass.check(:max, "never reported") { |max, min:| ran = true }
+	klass.check(:max, "never reported") { |max:, min:| ran = true }
 
 	assert Literal::Draft(klass).check(min: 5, surprise: 1).failure?
 	refute ran
@@ -313,7 +313,7 @@ test "a check over a defaulted prop answers again once the prop is given" do
 	klass = Class.new(Literal::Data) do
 		prop :limit, Integer, default: 20
 	end
-	klass.check(:limit, "must be at most 100") { |limit| limit <= 100 }
+	klass.check(:limit, "must be at most 100") { |limit:| limit <= 100 }
 
 	result = Literal::Draft(klass).check(limit: 500, surprise: 1)
 
@@ -339,7 +339,7 @@ test "an unknown key inside a nested shape stays there" do
 		prop :address, nested
 		prop :name, String
 	end
-	klass.check(:name, "must be filled") { |name| !name.empty? }
+	klass.check(:name, "must be filled") { |name:| !name.empty? }
 
 	result = Literal::Draft(klass).check(name: "", address: { city: "Berlin", junk: 1 })
 
@@ -379,8 +379,8 @@ test "a duplicated key silences only the checks that read it" do
 		prop :name, String
 		prop :age, Integer
 	end
-	klass.check(:name, "never reported") { |name| ran << :name; true }
-	klass.check(:age, "must be positive") { |age| ran << :age; age.positive? }
+	klass.check(:name, "never reported") { |name:| ran << :name; true }
+	klass.check(:age, "must be positive") { |age:| ran << :age; age.positive? }
 
 	result = Literal::Draft(klass).check({ "name" => "Ada", :name => "Ada", :age => -1 })
 
@@ -423,7 +423,7 @@ end
 test "a writer refuses a value that breaks a check, and leaves the old one" do
 	klass = Class.new(Literal::Struct) do
 		prop :name, String
-		check(:name, "must be filled") { |name| !name.empty? }
+		check(:name, "must be filled") { |name:| !name.empty? }
 	end
 	object = klass.new(name: "Ada")
 
@@ -436,7 +436,7 @@ end
 test "Draft.check takes a drifted instance as new would" do
 	child_class = Class.new(Literal::Struct) do
 		prop :tags, _Array(String), reader: :public
-		check(:tags, "must not be empty") { |tags| !tags.empty? }
+		check(:tags, "must not be empty") { |tags:| !tags.empty? }
 	end
 	parent_class = Class.new(Literal::Struct) do
 		prop :child, child_class
@@ -461,10 +461,10 @@ end
 test "an inherited writer enforces the subclass's checks" do
 	base = Class.new(Literal::Struct) do
 		prop :name, String
-		check(:name, "base says blank") { |name| !name.empty? }
+		check(:name, "base says blank") { |name:| !name.empty? }
 	end
 	sub = Class.new(base) do
-		check(:name, "sub says short") { |name| name.size >= 3 }
+		check(:name, "sub says short") { |name:| name.size >= 3 }
 	end
 
 	instance = sub.new(name: "Ada")
@@ -893,7 +893,7 @@ test "a type failure returns without running a check" do
 	ran = false
 	klass = Class.new(Literal::Data) do
 		prop :name, String
-		check(:name, "never reported") { |name| ran = true }
+		check(:name, "never reported") { |name:| ran = true }
 	end
 
 	assert Literal::Draft(klass).check(name: 1).failure?
@@ -904,7 +904,7 @@ test "a missing required prop returns without running a check" do
 	ran = false
 	klass = Class.new(Literal::Data) do
 		prop :a, String
-		check(:a, "never reported") { |a| ran = true }
+		check(:a, "never reported") { |a:| ran = true }
 	end
 
 	result = Literal::Draft(klass).check({})
@@ -926,7 +926,7 @@ test "a check reads an omitted nilable prop as the nil the object will hold" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 		prop :nickname, _Nilable(String)
-		check(:nickname, "never reported") { |nickname| seen = nickname; true }
+		check(:nickname, "never reported") { |nickname:| seen = nickname; true }
 	end
 
 	assert Literal::Draft(klass).new(name: "Ada").check.success?
@@ -940,8 +940,8 @@ test "every check over one property reports, and the whole-value one too" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 
-		check(:name, "one") { |name| false }
-		check(:name, "two") { |name| false }
+		check(:name, "one") { |name:| false }
+		check(:name, "two") { |name:| false }
 		check("three") { |name:| false }
 	end
 
@@ -958,8 +958,8 @@ test "a check reads a property an earlier check reported against" do
 		prop :min, Integer
 		prop :max, Integer
 
-		check(:max, "must be greater than %{min}") { |max, min:| max > min }
-		check(:max, "must not be one") { |max| seen = max; max != 1 }
+		check(:max, "must be greater than %{min}") { |max:, min:| max > min }
+		check(:max, "must not be one") { |max:| seen = max; max != 1 }
 	end
 
 	assert_equal(
@@ -977,8 +977,8 @@ test "a writer reports every check that reads the written property" do
 		prop :min, Integer
 		prop :max, Integer
 
-		check(:max, "must be greater than %{min}") { |max, min:| max > min }
-		check(:max, "must not be written past 9") { |max, min:| seen = [min, max]; min < 10 }
+		check(:max, "must be greater than %{min}") { |max:, min:| max > min }
+		check(:max, "must not be written past 9") { |max:, min:| seen = [min, max]; min < 10 }
 	end
 	object = klass.new(min: 1, max: 5)
 	seen = :never
@@ -997,7 +997,7 @@ test "a whole-value failure sits alongside a property's own" do
 		prop :name, String
 
 		check("one") { |name:| false }
-		check(:name, "two") { |name| false }
+		check(:name, "two") { |name:| false }
 	end
 
 	errors = Literal::Draft(klass).new(name: "Ada").check.error!.errors.map { |error| [error.prop, error.message] }
@@ -1010,9 +1010,9 @@ test "checks run in declaration order, and their failures come back in it" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 
-		check(:name, "one") { |name| order << :first; false }
-		check(:name, "two") { |name| order << :second }
-		check(:name, "three") { |name| order << :third; false }
+		check(:name, "one") { |name:| order << :first; false }
+		check(:name, "two") { |name:| order << :second }
+		check(:name, "three") { |name:| order << :third; false }
 	end
 
 	errors = Literal::Draft(klass).new(name: "Ada").check.error!.errors.map(&:message)
@@ -1025,8 +1025,8 @@ test "construction reports every failing check, not just the first" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 
-		check(:name, "one") { |name| false }
-		check(:name, "two") { |name| false }
+		check(:name, "one") { |name:| false }
+		check(:name, "two") { |name:| false }
 	end
 
 	error = assert_raises(Literal::CheckError) { klass.new(name: "Ada") }
@@ -1059,7 +1059,7 @@ test "a property check and a whole-value check each answer for themselves" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 
-		check(:name, "must be filled") { |name| !name.empty? }
+		check(:name, "must be filled") { |name:| !name.empty? }
 		check("must not be Jo") { |name:| name != "Jo" }
 	end
 
@@ -1118,6 +1118,38 @@ test "one reporting check files as many failures as it finds" do
 	)
 end
 
+# A shape declares as many as it needs, and they are checks like any other: all
+# of them run, whatever the others found, and their failures come back in
+# declaration order.
+test "every reporting check on a shape runs and reports in declaration order" do
+	ran = []
+	klass = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+
+		checks do |errors, min:|
+			ran << :first
+			errors.add(:min, "must not be negative") if min.negative?
+		end
+
+		checks do |errors, min:, max:|
+			ran << :second
+			errors.add(:max, "must be greater than min") unless max > min
+		end
+
+		checks do |errors, max:|
+			ran << :third
+			errors.add("cannot describe a negative span") if max.negative?
+		end
+	end
+
+	assert_equal(
+		[[:min, "must not be negative"], [:max, "must be greater than min"], [nil, "cannot describe a negative span"]],
+		errors_for(Literal::Draft(klass).new(min: -1, max: -2).check)
+	)
+	assert_equal [:first, :second, :third], ran
+end
+
 # `add` answers nil, so a block whose last statement is a conditional `add`
 # cannot be mistaken for a predicate returning false.
 test "add answers nil" do
@@ -1154,7 +1186,7 @@ test "a predicate check and a reporting check both report in one result" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 
-		check(:name, "must be filled") { |name| !name.strip.empty? }
+		check(:name, "must be filled") { |name:| !name.strip.empty? }
 
 		checks do |errors, name:|
 			errors.add(:name, "must not be padded") if name != name.strip
@@ -1296,27 +1328,27 @@ end
 
 # --- what a check reads ---
 
-# A check names the properties it reads by its parameter names, and is
+# A check names the properties it reads by its keyword parameters, and is
 # handed their values — never the object — so it asks nothing of the shape.
 test "a predicate is handed the values of the properties it names" do
 	seen = nil
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 		prop :age, Integer
-		check(:name, "never reported") { |name, age:| seen = [name, age]; true }
+		check(:name, "never reported") { |name:, age:| seen = [name, age]; true }
 	end
 
 	assert Literal::Draft(klass).new(name: "Ada", age: 36).check.success?
 	assert_equal ["Ada", 36], seen
 end
 
-# The single-property case needs no name at all: an unnamed parameter — what `it`
-# gives — reads the property the failure is reported against.
-test "it reads the property the error is reported against" do
+# The one-property case names it and nothing else, and files the failure
+# against the same property it read.
+test "a keyword reads the property the error is reported against" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 		prop :age, Integer
-		check(:age, "must be an adult") { |age| age >= 18 }
+		check(:age, "must be an adult") { |age:| age >= 18 }
 	end
 
 	assert_equal [[:age, "must be an adult"]], errors_for(Literal::Draft(klass).new(name: "Ada", age: 12).check)
@@ -1329,7 +1361,7 @@ test "a predicate reads two properties and reports against one" do
 	klass = Class.new(Literal::Data) do
 		prop :min, Integer
 		prop :max, Integer
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 
 	assert_equal [[:max, "must be greater than min"]], errors_for(Literal::Draft(klass).new(min: 5, max: 1).check)
@@ -1342,7 +1374,7 @@ test "a message interpolates the values the predicate judged" do
 	klass = Class.new(Literal::Data) do
 		prop :min, Integer
 		prop :max, Integer
-		check(:max, "must be greater than %{min}") { |max, min:| max > min }
+		check(:max, "must be greater than %{min}") { |max:, min:| max > min }
 	end
 
 	assert_equal [[:max, "must be greater than 5"]], errors_for(Literal::Draft(klass).new(min: 5, max: 1).check)
@@ -1363,7 +1395,7 @@ end
 test "a message without slots keeps its percent signs" do
 	klass = Class.new(Literal::Data) do
 		prop :rate, Integer
-		check(:rate, "must be under 100%") { |rate| rate < 100 }
+		check(:rate, "must be under 100%") { |rate:| rate < 100 }
 	end
 
 	assert_equal [[:rate, "must be under 100%"]], errors_for(Literal::Draft(klass).new(rate: 150).check)
@@ -1373,7 +1405,7 @@ end
 test "a slot fills a non-ASCII property name" do
 	klass = Class.new(Literal::Data) do
 		prop :größe, Integer
-		check(:größe, "%{größe} is too big") { |größe| größe < 10 }
+		check(:größe, "%{größe} is too big") { |größe:| größe < 10 }
 	end
 
 	assert_equal [[:größe, "42 is too big"]], errors_for(Literal::Draft(klass).new(:größe => 42).check)
@@ -1384,7 +1416,7 @@ end
 test "an interpolated value is not itself interpreted" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
-		check(:name, "%{name} is reserved") { |name| name != "\\1 %{name}" }
+		check(:name, "%{name} is reserved") { |name:| name != "\\1 %{name}" }
 	end
 
 	assert_equal [[:name, "\\1 %{name} is reserved"]], errors_for(Literal::Draft(klass).new(name: "\\1 %{name}").check)
@@ -1397,7 +1429,7 @@ test "a message mutated after declaration keeps its checked form" do
 
 	klass = Class.new(Literal::Data) do
 		prop :count, Integer
-		check(:count, message) { |count| count > 0 }
+		check(:count, message) { |count:| count > 0 }
 	end
 
 	message << " (max %{max})"
@@ -1425,7 +1457,7 @@ test "a shape with no readers is still checked" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String, reader: false
 		prop :age, Integer, reader: false
-		check(:age, "must be an adult") { |age, name:| name.empty? || age >= 18 }
+		check(:age, "must be an adult") { |age:, name:| name.empty? || age >= 18 }
 	end
 
 	refute klass.new(name: "Ada", age: 36).respond_to?(:name)
@@ -1435,7 +1467,7 @@ end
 test "a check reads a defaulted prop as the value the object will carry" do
 	klass = Class.new(Literal::Data) do
 		prop :limit, Integer, default: -> { 10 }
-		check(:limit, "saw %{limit}") { |limit| limit < 5 }
+		check(:limit, "saw %{limit}") { |limit:| limit < 5 }
 	end
 
 	assert_equal [[:limit, "saw 10"]], Literal::Draft(klass).new.check.error!.errors.map { |error| [error.prop, error.message] }
@@ -1516,7 +1548,7 @@ test "a check never reads a nested value that failed its own checks" do
 	ran = false
 	outer = Class.new(Literal::Data) do
 		prop :account, Account
-		check(:account, "never reported") { |account| ran = true }
+		check(:account, "never reported") { |account:| ran = true }
 	end
 
 	result = Literal::Draft(outer).check(account: { name: "" })
@@ -1530,7 +1562,7 @@ test "a check reads a nested value that passed its own checks" do
 	seen = :never_ran
 	outer = Class.new(Literal::Data) do
 		prop :account, Account
-		check(:account, "must not be Initech") { |account| seen = account; account.name != "Initech" }
+		check(:account, "must not be Initech") { |account:| seen = account; account.name != "Initech" }
 	end
 
 	result = Literal::Draft(outer).check(account: { name: "Initech" })
@@ -1547,7 +1579,7 @@ test "a nested check failure silences this level's readers of it" do
 		prop :name, String
 		prop :code, String
 
-		check(:code, "bad code") { |code| code != "bad" }
+		check(:code, "bad code") { |code:| code != "bad" }
 	end
 
 	outer = Class.new(Literal::Data) do
@@ -1568,7 +1600,7 @@ test "a nested type failure does hold the checks back, leaving nothing to read" 
 	ran = false
 	outer = Class.new(Literal::Data) do
 		prop :account, Account
-		check(:account, "never reported") { |account| ran = true }
+		check(:account, "never reported") { |account:| ran = true }
 	end
 
 	result = Literal::Draft(outer).check(account: { name: 42 })
@@ -1584,7 +1616,7 @@ test "a nested check failure skips the checks that read it, not the rest" do
 		prop :name, String
 
 		check("never reported") { |account:| ran = account; false }
-		check(:name, "too short") { |name| name.size > 3 }
+		check(:name, "too short") { |name:| name.size > 3 }
 	end
 
 	result = Literal::Draft(klass).check(account: { name: "" }, name: "Jo")
@@ -1687,7 +1719,7 @@ end
 test "a nested prop's coercion runs before nested checking" do
 	inner = Class.new(Literal::Data) do
 		prop :name, String
-		check(:name, "must not be blank") { |name| !name.empty? }
+		check(:name, "must not be blank") { |name:| !name.empty? }
 	end
 	outer = Class.new(Literal::Data) do
 		prop(:inner, inner) { |value| (Hash === value) ? inner.new(name: value[:wire_name].to_s) : value }
@@ -1706,7 +1738,7 @@ end
 test "a nested prop's coercion may hand nested checking a Hash" do
 	inner = Class.new(Literal::Data) do
 		prop :name, String
-		check(:name, "must not be blank") { |name| !name.empty? }
+		check(:name, "must not be blank") { |name:| !name.empty? }
 	end
 	outer = Class.new(Literal::Data) do
 		prop(:inner, inner) { |value| (Hash === value) ? value.transform_keys(&:to_sym) : value }
@@ -1841,7 +1873,10 @@ test "a Symbol proc in a whole-value check is refused" do
 		end
 	end
 
-	assert(/whole-value/.match?(error.message))
+	assert_equal(
+		"A whole-value check has no property for an anonymous block to read, so name what it reads: write `{ |min:, max:| ... }`",
+		error.message
+	)
 end
 
 # A whole-value check pins no property, so an anonymous parameter has
@@ -1854,10 +1889,14 @@ test "it in a whole-value check is refused" do
 		end
 	end
 
-	assert(/whole-value/.match?(error.message))
+	assert_equal(
+		"A whole-value check has no property for an anonymous block to read, so name what it reads: write `{ |min:, max:| ... }`",
+		error.message
+	)
 end
 
-# Beyond a lone `_1`, a numbered parameter names nothing to read.
+# Beyond a lone `_1`, a numbered parameter is a second positional, which names
+# nothing to read.
 test "a numbered parameter beyond a lone _1 is refused" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new(Literal::Data) do
@@ -1867,45 +1906,48 @@ test "a numbered parameter beyond a lone _1 is refused" do
 		end
 	end
 
-	assert(/name it :max/.match?(error.message))
-end
-
-# The only positional a check may take is the property the failure is filed
-# against, so a named one that names something else is refused where it is
-# written rather than reading a value it did not ask for.
-test "a positional parameter naming another property is refused" do
-	error = assert_raises(Literal::ArgumentError) do
-		Class.new(Literal::Data) do
-			prop :min, Integer
-			prop :max, Integer
-			check(:max, "…") { |min| min > 0 }
-		end
-	end
-
 	assert_equal(
-		"A check's positional parameter is the property the failure is filed against, so it is named :max, not :min",
+		"A check reads its properties as keywords: write `{ |min:, max:| ... }`, not `{ |min, max| ... }`; a bare `it` reads the property the failure is filed against",
 		error.message
 	)
 end
 
-# Which leaves nothing for a second positional to be.
-test "a positional parameter after the first is refused" do
+# Every named read is a keyword, the pinned property included — so a positional
+# that carries a name is refused where it is written, rather than quietly
+# reading by position what it looks like it reads by name.
+test "a named positional parameter is refused" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new(Literal::Data) do
 			prop :min, Integer
-			prop :max, Integer
-			check(:max, "…") { |max, min| max > min }
+			check(:min, "…") { |min| min > 0 }
 		end
 	end
 
 	assert_equal(
-		"A check reads other properties as keywords: write `{ |min, max:| ... }`, not `{ |min, max| ... }`",
+		"A check reads its properties as keywords: write `{ |min:, max:| ... }`, not `{ |min, max| ... }`; a bare `it` reads the property the failure is filed against",
 		error.message
 	)
 end
 
-# A whole-value check pins no property, so a positional has nothing to read
-# whether or not it is named.
+# Including the pinned property: it is read by name like every other read, or
+# anonymously and not at all by name.
+test "a positional parameter alongside a keyword is refused" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Data) do
+			prop :min, Integer
+			prop :max, Integer
+			check(:max, "…") { |max, min:| max > min }
+		end
+	end
+
+	assert_equal(
+		"A check reads its properties as keywords: write `{ |min:, max:| ... }`, not `{ |min, max| ... }`; a bare `it` reads the property the failure is filed against",
+		error.message
+	)
+end
+
+# A whole-value check reads by keyword like any other, so a positional is
+# refused there for the same reason.
 test "a named positional in a whole-value check is refused" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new(Literal::Data) do
@@ -1915,13 +1957,13 @@ test "a named positional in a whole-value check is refused" do
 	end
 
 	assert_equal(
-		"A whole-value check has no property for a positional parameter to read, so name what it reads: write `{ |min:, max:| ... }`",
+		"A check reads its properties as keywords: write `{ |min:, max:| ... }`, not `{ |min, max| ... }`; a bare `it` reads the property the failure is filed against",
 		error.message
 	)
 end
 
-# A keyword parameter reads the property it names, exactly as a positional one
-# does — the values just arrive by name instead of by position.
+# A keyword parameter reads the property it names, in whatever order the block
+# writes them — the values arrive by name.
 test "keyword parameters read the properties they name" do
 	klass = Class.new(Literal::Data) do
 		prop :min, Integer
@@ -1933,15 +1975,42 @@ test "keyword parameters read the properties they name" do
 	assert_equal [[:max, "must be greater than 5"]], errors_for(Literal::Draft(klass).new(min: 5, max: 1).check)
 end
 
-test "positional and keyword parameters mix" do
+# The pinned property is a read like any other, named or not as the check
+# pleases.
+test "the pinned property is read as a keyword" do
 	klass = Class.new(Literal::Data) do
 		prop :min, Integer
 		prop :max, Integer
-		check(:max, "must be greater than %{min}") { |max, min:| max > min }
+		check(:max, "must be greater than %{min}") { |max:, min:| max > min }
 	end
 
 	assert Literal::Draft(klass).new(min: 1, max: 5).check.success?
 	assert_equal [[:max, "must be greater than 5"]], errors_for(Literal::Draft(klass).new(min: 5, max: 1).check)
+end
+
+# So its own slot fills from that read, exactly as another property's does.
+test "a keyword read of the pinned property fills its message slot" do
+	klass = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+		check(:max, "%{max} must be greater than %{min}") { |max:, min:| max > min }
+	end
+
+	assert_equal [[:max, "1 must be greater than 5"]], errors_for(Literal::Draft(klass).new(min: 5, max: 1).check)
+end
+
+# And a slot for the pinned property is only fillable when the check reads it,
+# so one that does not is refused like any other unread name.
+test "a slot for a pinned property the check does not read raises at declaration time" do
+	error = assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Data) do
+			prop :min, Integer
+			prop :max, Integer
+			check(:max, "must exceed %{max}") { |min:| min > 0 }
+		end
+	end
+
+	assert(/does not read :max/.match?(error.message))
 end
 
 test "a keyword parameter with a default still reads its property" do
@@ -1954,9 +2023,9 @@ test "a keyword parameter with a default still reads its property" do
 	assert_equal [[:n, "must be positive"]], errors_for(Literal::Draft(klass).new(n: -1).check)
 end
 
-# A property named after a reserved word cannot be a positional parameter at
-# all — `{ |end| ... }` does not parse. As a keyword it declares and binds,
-# and the body reads the value through the binding.
+# A property named after a reserved word is only spellable as a keyword —
+# `{ |end| ... }` does not even parse. As a keyword it declares and binds, and
+# the body reads the value through the binding.
 test "a keyword parameter spells a reserved-word property" do
 	klass = Class.new(Literal::Data) do
 		prop :begin, Integer
@@ -2052,13 +2121,13 @@ end
 class Base < Literal::Data
 	prop :name, String
 
-	check(:name, "base says blank") { |name| !name.empty? }
+	check(:name, "base says blank") { |name:| !name.empty? }
 end
 
 class Sub < Base
 	prop :extra, _Nilable(String)
 
-	check(:name, "sub says short") { |name| name.size >= 3 }
+	check(:name, "sub says short") { |name:| name.size >= 3 }
 end
 
 class SubSub < Sub
@@ -2096,6 +2165,39 @@ test "a subclass checks the props it added as well as the ones it inherited" do
 	assert_equal [[:extra, "must be a string"]], Literal::Draft(Sub).check(name: "Ada", extra: 42).error!.errors.map { |error| [error.prop, error.message] }
 end
 
+# Both forms inherit the same way: a subclass adds to whatever its parent
+# declared, in either form, and the parent stays as constrained as it was.
+test "a subclass adds both forms on top of its parent's" do
+	parent = Class.new(Literal::Data) do
+		prop :name, String
+
+		check(:name, "parent says uppercase") { |name:| name == name.downcase }
+
+		checks do |errors, name:|
+			errors.add(:name, "parent says padded") if name != name.strip
+		end
+	end
+
+	child = Class.new(parent) do
+		check(:name, "child says short") { |name:| name.size >= 5 }
+
+		checks do |errors, name:|
+			errors.add(:name, "child says digits") if name.match?(/\d/)
+		end
+	end
+
+	assert_equal(
+		["parent says uppercase", "parent says padded", "child says short", "child says digits"],
+		Literal::Draft(child).new(name: " A1").check.error!.errors.map(&:message)
+	)
+	assert_equal(
+		["parent says uppercase", "parent says padded"],
+		Literal::Draft(parent).new(name: " A1").check.error!.errors.map(&:message)
+	)
+	assert_equal 2, parent.literal_checks.size
+	assert_equal 4, child.literal_checks.size
+end
+
 # A frozen class can still be asked for its checks, it just cannot cache them —
 # lazy resolution must not turn the first checked write on a frozen subclass
 # into a FrozenError.
@@ -2103,7 +2205,7 @@ test "a frozen subclass still enforces on write" do
 	parent = Class.new(Literal::Struct) do
 		prop :min, Integer
 		prop :max, Integer
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 	child = Class.new(parent)
 	object = child.new(min: 1, max: 5)
@@ -2128,7 +2230,7 @@ test "check on a frozen shape raises at the declaration" do
 	klass.freeze
 
 	error = assert_raises(Literal::ArgumentError) do
-		klass.check(:count, "must be positive") { |count| count > 0 }
+		klass.check(:count, "must be positive") { |count:| count > 0 }
 	end
 
 	assert(/^Cannot declare checks on .*, because it is frozen\.$/.match?(error.message))
@@ -2143,7 +2245,7 @@ test "check on a shape a subclass has inherited raises at the declaration" do
 	Class.new(klass)
 
 	error = assert_raises(Literal::ArgumentError) do
-		klass.check(:count, "must be positive") { |count| count > 0 }
+		klass.check(:count, "must be positive") { |count:| count > 0 }
 	end
 
 	assert(/^Cannot declare checks on .*, because .* has already inherited them\.$/.match?(error.message))
@@ -2156,7 +2258,7 @@ end
 test "checks survive an inherited override that forgets super" do
 	parent = Class.new(Literal::Struct) do
 		prop :min, Integer
-		check(:min, "must not be negative") { |min| !min.negative? }
+		check(:min, "must not be negative") { |min:| !min.negative? }
 
 		def self.inherited(subclass); end
 	end
@@ -2225,7 +2327,7 @@ test "a slot whose seal raised reads as unset, not as the input's value" do
 		prop :a, Integer
 		prop :b, String, &Literal.Seal { |value| raise "boom" if value == "boom"; value }
 
-		check(:b, "must not be %{b}") { |b| b != "boom" }
+		check(:b, "must not be %{b}") { |b:| b != "boom" }
 	end
 
 	draft = Literal::Draft(klass).new(b: "boom")
@@ -2281,7 +2383,7 @@ test "a writer enforces a check that reads its property, wherever the error is f
 	klass = Class.new(Literal::Struct) do
 		prop :min, Integer
 		prop :max, Integer
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 	span = klass.new(min: 1, max: 5)
 
@@ -2305,7 +2407,7 @@ test "a property no check depends on gets no check in its writer" do
 	klass = Class.new(Literal::Struct) do
 		prop :n, Integer
 		prop :note, String
-		check(:n, "must be positive") { |n| n > 0 }
+		check(:n, "must be positive") { |n:| n > 0 }
 	end
 	object = klass.new(n: 1, note: "x")
 
@@ -2324,7 +2426,7 @@ test "a transition that needs two properties at once goes through from_props" do
 	klass = Class.new(Literal::Struct) do
 		prop :min, Integer
 		prop :max, Integer
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 	span = klass.new(min: 1, max: 5)
 
@@ -2342,7 +2444,7 @@ test "a raising predicate leaves the written property untouched" do
 	klass = Class.new(Literal::Struct) do
 		prop :min, _Nilable(Integer)
 		prop :max, Integer
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 	span = klass.new(min: 1, max: 5)
 
@@ -2357,7 +2459,7 @@ end
 test "a checked writer returns the written value" do
 	klass = Class.new(Literal::Struct) do
 		prop :n, Integer
-		check(:n, "must be positive") { |n| n > 0 }
+		check(:n, "must be positive") { |n:| n > 0 }
 	end
 	object = klass.new(n: 1)
 
@@ -2373,7 +2475,7 @@ test "a check reading an undefinable prop does not apply when it was not given" 
 	klass = Class.new(Literal::Data) do
 		prop :a, Integer
 		prop? :b, Integer
-		check(:b, "must be positive") { |b| b > 0 }
+		check(:b, "must be positive") { |b:| b > 0 }
 	end
 
 	assert_equal Literal::Undefined, klass.new(a: 1).b
@@ -2386,7 +2488,7 @@ end
 test "a check reading a nilable prop applies to the nil" do
 	klass = Class.new(Literal::Data) do
 		prop :n, _Nilable(Integer)
-		check(:n, "must be given") { |n| !n.nil? }
+		check(:n, "must be given") { |n:| !n.nil? }
 	end
 
 	assert_equal [[:n, "must be given"]], errors_for(Literal::Draft(klass).check({}))
@@ -2398,7 +2500,7 @@ test "a check is handed the caller's own values" do
 	seen = nil
 	klass = Class.new(Literal::Data) do
 		prop :tags, _Array(String)
-		check(:tags, "must not be empty") { |tags| seen = tags; !tags.empty? }
+		check(:tags, "must not be empty") { |tags:| seen = tags; !tags.empty? }
 	end
 	tags = ["a"]
 
@@ -2412,7 +2514,7 @@ end
 test "a nested Literal::Struct is checked by its own checks" do
 	inner = Class.new(Literal::Struct) do
 		prop :n, Integer
-		check(:n, "must be positive") { |n| n > 0 }
+		check(:n, "must be positive") { |n:| n > 0 }
 	end
 	outer = Class.new(Literal::Data) { prop :inner, inner }
 
@@ -2482,7 +2584,7 @@ end
 test "a nested subclass draft checks as its own class" do
 	employee = Class.new(Account) do
 		prop :dept, String
-		check(:dept, "must not be blank") { |dept| !dept.strip.empty? }
+		check(:dept, "must not be blank") { |dept:| !dept.strip.empty? }
 	end
 	outer = Class.new(Literal::Data) { prop :account, Account }
 
@@ -2551,7 +2653,7 @@ test "a message that is not a String raises at declaration time" do
 		error = assert_raises(Literal::ArgumentError) do
 			Class.new(Literal::Data) do
 				prop :min, Integer
-				check(:min, message) { |min| min > 0 }
+				check(:min, message) { |min:| min > 0 }
 			end
 		end
 
@@ -2567,7 +2669,7 @@ test "a message slot naming a property the check does not read raises at declara
 		Class.new(Literal::Data) do
 			prop :min, Integer
 			prop :max, Integer
-			check(:min, "must be under %{max}") { |min| min > 0 }
+			check(:min, "must be under %{max}") { |min:| min > 0 }
 		end
 	end
 
@@ -2598,7 +2700,7 @@ end
 test "a shape that cannot be built from props cannot be checked from them" do
 	klass = Class.new(Literal::Object) do
 		prop :name, String
-		check(:name, "must be filled") { |name| !name.empty? }
+		check(:name, "must be filled") { |name:| !name.empty? }
 
 		def self.name = "Widget"
 	end
@@ -2667,7 +2769,7 @@ test "an enum member that breaks a check raises at its definition" do
 	assert_raises(Literal::CheckError) do
 		Class.new(Literal::Enum(Integer)) do
 			prop :code, Integer
-			check(:code, "must be positive") { |code| code > 0 }
+			check(:code, "must be positive") { |code:| code > 0 }
 
 			def self.name = "Grade"
 			const_set(:A, new(1, code: -1))
@@ -2687,7 +2789,7 @@ test "check enforces existing enum members retroactively" do
 			def self.name = "Grade"
 			const_set(:A, new(1, code: -1))
 
-			check(:code, "must be positive") { |code| code > 0 }
+			check(:code, "must be positive") { |code:| code > 0 }
 		end
 	end
 end
@@ -2703,7 +2805,7 @@ test "a check refused by an enum member installs nothing" do
 		const_set(:A, new(1, code: -1))
 
 		begin
-			check(:code, "must be positive") { |code| code > 0 }
+			check(:code, "must be positive") { |code:| code > 0 }
 		rescue Literal::CheckError
 			# The refusal is the point; what matters is what it left behind.
 		end
@@ -2719,7 +2821,7 @@ test "check accepts existing enum members that satisfy it" do
 		def self.name = "Grade"
 		const_set(:A, new(1, code: 1))
 
-		check(:code, "must be positive") { |code| code > 0 }
+		check(:code, "must be positive") { |code:| code > 0 }
 	end
 
 	assert_equal 1, klass::A.code
@@ -2736,7 +2838,7 @@ test "a member block that breaks a check raises and registers nothing" do
 
 			def self.name = "Grade"
 
-			check(:code, "must be positive") { |code| code > 0 }
+			check(:code, "must be positive") { |code:| code > 0 }
 
 			new(1, code: 1) do
 				@code = -1
@@ -2753,7 +2855,7 @@ test "a member block that keeps the checks registers the member" do
 
 		def self.name = "Grade"
 
-		check(:code, "must be positive") { |code| code > 0 }
+		check(:code, "must be positive") { |code:| code > 0 }
 
 		const_set(:A, new(1, code: 1) do
 			@code = 2
@@ -2792,7 +2894,7 @@ test "a retroactive member failure reports from the caller's code" do
 			def self.name = "Grade"
 			const_set(:A, new(1, code: -1))
 
-			check(:code, "must be positive") { |code| code > 0 }
+			check(:code, "must be positive") { |code:| code > 0 }
 		end
 	end
 
@@ -2804,8 +2906,8 @@ test "the error carries every failure collected, not just the first" do
 		prop :a, Integer
 		prop :b, Integer
 
-		check(:a, "first") { |a| false }
-		check(:b, "second") { |b| false }
+		check(:a, "first") { |a:| false }
+		check(:b, "second") { |b:| false }
 	end
 
 	error = assert_raises(Literal::CheckError) { klass.new(a: 1, b: 2) }
@@ -2835,7 +2937,7 @@ end
 test "a check declared after the props is still enforced" do
 	klass = Class.new(Literal::Data) do
 		prop :n, Integer
-		check(:n, "must be positive") { |n| n > 0 }
+		check(:n, "must be positive") { |n:| n > 0 }
 	end
 
 	assert_raises(Literal::CheckError) { klass.new(n: -1) }
@@ -2846,7 +2948,7 @@ end
 test "a subclass that adds only a check enforces it, and its parent does not" do
 	parent = Class.new(Literal::Data) { prop :n, Integer }
 	child = Class.new(parent) do
-		check(:n, "must be positive") { |n| n > 0 }
+		check(:n, "must be positive") { |n:| n > 0 }
 	end
 
 	assert_raises(Literal::CheckError) { child.new(n: -1) }
@@ -2891,7 +2993,7 @@ test "a shape answers its checks and what each of them reads" do
 		prop :min, Integer
 		prop :max, Integer
 
-		check(:max, "must be greater than %{min}") { |max, min:| max > min }
+		check(:max, "must be greater than %{min}") { |max:, min:| max > min }
 		checks { |errors, min:| errors.add("…") if min.negative? }
 	end
 
@@ -2907,6 +3009,25 @@ test "a shape answers its checks and what each of them reads" do
 	assert_equal [:min], reporting.reads
 end
 
+# The property a failure is filed against is not read unless the check asks for
+# it — anonymously, or by name like any other read.
+test "a check reads the pinned property only when it asks for it" do
+	klass = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+
+		check(:max, "must not be negative") { |min:| !min.negative? }
+		check(:max, "must be positive", &:positive?)
+	end
+
+	keyword, anonymous = klass.literal_checks
+
+	assert_equal [:min], keyword.reads
+	assert_equal [:max], anonymous.reads
+	refute keyword.depends_on?(:max)
+	assert_equal [anonymous], klass.literal_checks_for(:max)
+end
+
 # What a writer needs: the checks an assignment can change the outcome of,
 # which is the ones that read the property — never the ones merely filed
 # against it.
@@ -2916,7 +3037,7 @@ test "a shape answers the checks that depend on one property" do
 		prop :max, Integer
 		prop :note, String
 
-		check(:max, "must be greater than %{min}") { |max, min:| max > min }
+		check(:max, "must be greater than %{min}") { |max:, min:| max > min }
 	end
 
 	check = klass.literal_checks.fetch(0)
@@ -2941,8 +3062,8 @@ test "slice keeps the checks whose properties all survive" do
 		prop :min, Integer
 		prop :max, Integer
 
-		check(:min, "must not be negative") { |min| !min.negative? }
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:min, "must not be negative") { |min:| !min.negative? }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 
 	sliced = klass.slice(:min)
@@ -2957,8 +3078,8 @@ test "a projection enforces the checks it kept" do
 		prop :min, Integer
 		prop :max, Integer
 
-		check(:min, "must not be negative") { |min| !min.negative? }
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:min, "must not be negative") { |min:| !min.negative? }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 
 	sliced = klass.slice(:min)
@@ -2974,8 +3095,8 @@ test "slice drops the checks whose properties went" do
 		prop :name, String
 		prop :code, String
 
-		check(:code, "must not be blank") { |code| !code.empty? }
-		check(:name, "must be filled") { |name| !name.empty? }
+		check(:code, "must not be blank") { |code:| !code.empty? }
+		check(:name, "must be filled") { |name:| !name.empty? }
 	end
 
 	sliced = klass.slice(:name)
@@ -2993,7 +3114,7 @@ test "a projection's writers enforce the checks it kept" do
 		prop :min, Integer, writer: :public
 		prop :max, Integer, writer: :public
 
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 
 	sliced = klass.slice(:min, :max)
@@ -3020,7 +3141,7 @@ test "a projection that drops a property still enforces in its writers" do
 		prop :max, Integer, writer: :public
 		prop :note, String
 
-		check(:max, "must be greater than min") { |max, min:| max > min }
+		check(:max, "must be greater than min") { |max:, min:| max > min }
 	end
 
 	sliced = klass.slice(:min, :max)
