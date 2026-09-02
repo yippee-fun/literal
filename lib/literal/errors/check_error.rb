@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-# Raised when every value fits its property's type but the shape's own
-# `stipulate` rules do not hold. Deliberately does not carry the offending
-# object: rules are the shape's invariant, so an object that breaks them is
-# never handed out.
-class Literal::ValidationError < StandardError
+# Raised when every value fits its property's type but the shape's own checks
+# do not hold. Deliberately does not carry the offending object: checks are the
+# shape's invariant, so an object that breaks them is never handed out.
+class Literal::CheckError < StandardError
 	include Literal::Error
 
 	INTERNALS = File.expand_path("../..", __dir__).freeze
@@ -30,7 +29,7 @@ class Literal::ValidationError < StandardError
 	attr_reader :shape, :errors
 
 	def message
-		buffer = +"Invalid #{@shape.name || @shape.inspect}\n"
+		buffer = +"Unsound #{@shape.name || @shape.inspect}\n"
 
 		@errors.errors.each do |error|
 			label = error.path.join(".")

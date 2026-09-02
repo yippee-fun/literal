@@ -15,8 +15,8 @@ class Literal::Enum
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:)
 		end
 
-		# Members are idiomatically defined above the rules in the class body,
-		# so `stipulate` judges them before its rule installs.
+		# Members are idiomatically defined above the checks in the class body,
+		# so `check` judges them before it installs.
 		private def __literal_existing_instances__
 			@members
 		end
@@ -106,12 +106,12 @@ class Literal::Enum
 
 			new_object = super(*, **, &nil)
 
-			# Before the member registers, so uniqueness and the shape's rules
+			# Before the member registers, so uniqueness and the shape's checks
 			# are judged on the state the block left — and a failure leaves
 			# nothing behind.
 			if block
 				new_object.instance_exec(&block)
-				new_object.__send__(:__literal_check_rules__) if stipulations.any?
+				new_object.__send__(:__literal_run_checks__) if literal_checks.any?
 			end
 
 			if @values.key?(new_object.value)

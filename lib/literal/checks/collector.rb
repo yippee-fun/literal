@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Literal::Validations::Collector
+class Literal::Checks::Collector
 	def initialize
 		@errors = []
 		@tainted = Set.new
@@ -19,7 +19,7 @@ class Literal::Validations::Collector
 	# A phantom value is the shape's own invention — a default resolved for an
 	# ungiven prop — standing where a mistyped key's value may have been meant
 	# to go. It exists only once a key named no prop: with every key understood,
-	# a default is legitimate and rules judge it like any other value.
+	# a default is legitimate and checks judge it like any other value.
 	def phantom?(name)
 		@unknown_keys && @defaulted.include?(name)
 	end
@@ -34,13 +34,13 @@ class Literal::Validations::Collector
 
 	def add_unknown(key)
 		@unknown_keys = true
-		add_about_key(key, Literal::Validations::Message::UNKNOWN)
+		add_about_key(key, Literal::Checks::Message::UNKNOWN)
 	end
 
 	# No flag: filing against the prop's own name taints it, which already
-	# holds back exactly the rules that would read the ambiguous value.
+	# holds back exactly the checks that would read the ambiguous value.
 	def add_duplicate(key)
-		add_about_key(key, Literal::Validations::Message::DUPLICATE)
+		add_about_key(key, Literal::Checks::Message::DUPLICATE)
 	end
 
 	def merge(nested_errors, under:)
@@ -50,7 +50,7 @@ class Literal::Validations::Collector
 	def any? = @errors.any?
 
 	def to_errors
-		Literal::Validations::Errors.new(errors: @errors)
+		Literal::Checks::Errors.new(errors: @errors)
 	end
 
 	private def add_about_key(key, message)
@@ -75,6 +75,6 @@ class Literal::Validations::Collector
 
 	private def push(prop, message, path)
 		@tainted << prop if prop
-		@errors << Literal::Validations::Error.new(prop:, message:, path:)
+		@errors << Literal::Checks::Error.new(prop:, message:, path:)
 	end
 end

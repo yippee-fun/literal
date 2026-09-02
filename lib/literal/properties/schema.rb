@@ -56,7 +56,7 @@ class Literal::Properties::Schema
 		@sorted_properties.empty?
 	end
 
-	def generate_initializer(buffer = +"", validate: false)
+	def generate_initializer(buffer = +"", checked: false)
 		buffer << "alias initialize initialize\n" \
 			"def initialize("
 		generate_initializer_params(buffer)
@@ -70,10 +70,10 @@ class Literal::Properties::Schema
 		generate_after_initializer(buffer)
 
 		# After every value is assigned, after after_initialize, and after the
-		# freeze a Data appends — so a rule judges a finished object and cannot
-		# normalize it. Emitted only when the shape has rules, so a shape without
+		# freeze a Data appends — so a check judges a finished object and cannot
+		# normalize it. Emitted only when the shape has checks, so a shape without
 		# them pays nothing.
-		buffer << "  __literal_check_rules__\n" if validate
+		buffer << "  __literal_run_checks__\n" if checked
 
 		buffer << "end\n"
 	end

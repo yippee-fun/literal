@@ -42,14 +42,14 @@ class Literal::DataStructure
 
 	def self.from_props(props)
 		instance = __literal_from_props__(props)
-		instance.__send__(:__literal_check_rules__)
+		instance.__send__(:__literal_run_checks__)
 		instance
 	end
 
-	# from_props without the shape's rules, for a caller that has already run
-	# them — Literal::Validations::Validator, which collects them against a
+	# from_props without the shape's checks, for a caller that has already run
+	# them — Literal::Checks::Checker, which collects them against a
 	# draft rather than raising. Every other path must go through from_props, or
-	# an object that breaks its shape's rules could be handed out.
+	# an object that breaks its shape's checks could be handed out.
 	#
 	# `seal: false` is for values that are already final, having been sealed by
 	# that caller — seals fix a representation once, not once per hop.
@@ -137,8 +137,8 @@ class Literal::DataStructure
 		freeze if was_frozen
 
 		# Restoring a dumped object is still construction: an object that breaks
-		# the shape's rules must not come back to life either.
-		__literal_check_rules__
+		# the shape's checks must not come back to life either.
+		__literal_run_checks__
 	end
 
 	# Assign final property values from a Hash keyed by Symbol property name,
