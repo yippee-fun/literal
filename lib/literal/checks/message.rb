@@ -11,17 +11,17 @@ require "date"
 # and constraint qualifiers. Any other type — a union, a custom class — reads
 # as NOT_ALLOWED, so a message never names or enumerates type structure that
 # may not be public.
-module Literal::Validations::Message
+module Literal::Checks::Message
 	extend self
 
 	MISSING = "is missing"
 	NOT_ALLOWED = "is not allowed"
 
-	# A key the shape has no prop for. Not "unexpected" — a rule may later want
+	# A key the shape has no prop for. Not "unexpected" — a check may later want
 	# that for a field this shape knows but will not take here.
 	UNKNOWN = "is not a known field"
 
-	# Nested past the depth validate will follow.
+	# Nested past the depth a check will follow.
 	TOO_DEEP = "is nested too deeply"
 
 	# Two spellings of one name, so which value was meant is not knowable.
@@ -74,7 +74,7 @@ module Literal::Validations::Message
 			describe_constraint(type, value)
 		when Literal::Types::DeferredType
 			# How a shape names itself. Materialized here for the same reason the
-			# validator materializes it — otherwise every recursive prop reads as
+			# checker materializes it — otherwise every recursive prop reads as
 			# NOT_ALLOWED. Answers nothing while materializing, rather than
 			# recurring into itself.
 			materialized = type.materialize
@@ -199,7 +199,7 @@ module Literal::Validations::Message
 	# What the value answers for a constrained property, or nil when it cannot
 	# answer at all. That is how Literal::Types::ConstraintType reads it too, so
 	# a value with no `#length` is told what was wanted rather than raising out
-	# of validate — which a message, written for input the type check has already
+	# of a check — which a message, written for input the type check has already
 	# refused, must never do.
 	private def measure(value, property)
 		value.public_send(property) if value.respond_to?(property)

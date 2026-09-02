@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # @api private
-module Literal::Validations::Validator
+module Literal::Checks::Checker
 	extend self
 
 	# Its own object: any real value, Literal::Undefined included, is something
@@ -17,43 +17,48 @@ module Literal::Validations::Validator
 	NO_DUPLICATES = {}.freeze
 	private_constant :NO_DUPLICATES
 
-	def validate(shape, input)
+	# Answers a Literal::Result carrying the built value or every error found.
+	# `input` is a draft of the shape or a Hash of props from outside.
+	def check(shape, input)
 		shape = subject_shape(shape, input)
 
-		unless shape === input || shape.respond_to?(:from_props)
+		unless shape.respond_to?(:from_props)
 			raise Literal::ArgumentError.new(
-				"#{shape.name || shape.inspect} cannot validate props, because it cannot be built from them; validate an instance of it instead"
+				"#{shape.name || shape.inspect} cannot be checked, because it cannot be built from props"
 			)
 		end
 
-		errors = Literal::Validations::Collector.new
+		errors = Literal::Checks::Collector.new
 		draft, sound = run(shape, input, errors, 0)
-		result_type = Literal::Result(shape, Literal::Validations::Errors)
+		result_type = Literal::Result(shape, Literal::Checks::Errors)
 
 		return result_type.failure(errors.to_errors) if !sound || errors.any?
 
-		result_type.success((shape === input) ? input : draft.__send__(:__finalize_unchecked__))
+		result_type.success(draft.__send__(:__finalize_unchecked__))
 	end
 
-	# `only` narrows to the stipulations whose outcome depends on one property —
-	# what a writer needs, since the ones it cannot have affected held before
-	# the write and hold after it.
-	def run_stipulations(shape, errors, only: nil, &read)
-		list = only ? shape.stipulations_for(only) : shape.stipulations
+	# `only` narrows to the checks whose outcome depends on one property — what
+	# a writer needs, since the ones it cannot have affected held before the
+	# write and hold after it.
+	def run_checks(shape, errors, only: nil, &read)
+		list = only ? shape.literal_checks_for(only) : shape.literal_checks
 
-		# A tainted read already failed its own judgment; a phantom read is a
-		# default resolved while an unknown key went unmatched — possibly a typo
-		# of the very prop that then defaulted. An unknown key makes defaults
-		# untrustworthy, never the given values, so rules over those still run.
-		list.each do |stipulation|
-			next if stipulation.reads.any? { |name| errors.tainted?(name) || errors.phantom?(name) }
-
-			stipulation.check(errors, &read)
+		# A tainted read failed the type pass, or holds a nested value that failed
+		# its own checks and so is no value to hand on; a phantom read is a default
+		# resolved while an unknown key went unmatched — possibly a typo of the
+		# very prop that then defaulted. An unknown key makes defaults
+		# untrustworthy, never the given values, so checks over those still run.
+		# Chosen before any check runs: checks do not depend on one another, so
+		# one failing holds no other back.
+		runnable = list.reject do |check|
+			check.reads.any? { |name| errors.tainted?(name) || errors.phantom?(name) }
 		end
+
+		runnable.each { |check| check.run(shape, errors, &read) }
 	end
 
-	# A subclass instance, or a draft of a subclass, validates as its own class,
-	# so the errors and the rebuilt value match what it is.
+	# A draft of a subclass checks as its own class, so the errors and the
+	# built value match what it is.
 	private def subject_shape(shape, input)
 		case input
 		when Literal::Draft
@@ -63,13 +68,11 @@ module Literal::Validations::Validator
 				actual = drafted&.name || drafted&.inspect || "an untyped draft"
 
 				raise Literal::ArgumentError.new(
-					"#{expected}.validate expected a draft of #{expected}, got a draft of #{actual}"
+					"Expected a draft of #{expected}, got a draft of #{actual}"
 				)
 			end
 
 			input.class.__type__
-		when shape
-			input.class
 		else
 			shape
 		end
@@ -79,18 +82,16 @@ module Literal::Validations::Validator
 		draft, sound = case input
 		when Literal::Draft
 			check_draft(shape, input, errors, depth)
-		when shape
-			check_instance(shape, input, errors, depth)
 		when Hash
 			check_types(shape, input, errors, depth)
 		else
 			raise Literal::ArgumentError.new(
-				"#{shape.name || shape.inspect} cannot validate a #{input.class}; expected a Hash of properties, a draft of it, or an instance of it"
+				"#{shape.name || shape.inspect} cannot check a #{input.class}; expected a Hash of properties or a draft of it"
 			)
 		end
 
 		draft_properties = draft.class.literal_properties
-		run_stipulations(shape, errors) do |name|
+		run_checks(shape, errors) do |name|
 			ivar = draft_properties[name].__ivar__
 			draft.instance_variable_defined?(ivar) ? draft.instance_variable_get(ivar) : Literal::Undefined
 		end
@@ -135,50 +136,13 @@ module Literal::Validations::Validator
 			raise unless errors.any?
 
 			# On the dup path the slot still holds the input's unjudged value,
-			# which no rule may read.
+			# which no check may read.
 			ivar = property.__ivar__
 			draft.remove_instance_variable(ivar) if draft.instance_variable_defined?(ivar)
 			sound = false
 		end
 
 		[draft, sound]
-	end
-
-	# Values are re-checked without coercing again — a held value may have been
-	# mutated in place — and a nested instance is re-validated rather than
-	# trusted, since drift is exactly what the caller is asking after.
-	private def check_instance(shape, instance, errors, depth)
-		draft = Literal::Draft(shape).new
-
-		each_property(shape, draft, errors) do |property|
-			value = instance.instance_variable_get(property.__ivar__)
-
-			if (nested = nested_type(property, value))
-				assign_nested(draft, property, nested, value, errors, depth)
-			elsif Literal::DataStructure === value
-				revalidate_nested(draft, property, value, errors, depth)
-			else
-				store(draft, property, value, errors, seal: false)
-			end
-		end
-	end
-
-	# Only reached from check_instance: the input paths trust a built instance,
-	# since `new` does.
-	private def revalidate_nested(draft, property, value, errors, depth)
-		if depth >= MAX_DEPTH
-			errors.add(property.name, Literal::Validations::Message::TOO_DEEP)
-			return false
-		end
-
-		nested_errors = Literal::Validations::Collector.new
-		_nested_draft, sound = run(value.class, value, nested_errors, depth + 1)
-
-		errors.merge(nested_errors.errors, under: property.name)
-
-		return false unless sound
-
-		store(draft, property, value, errors, seal: false)
 	end
 
 	private def check_types(shape, props, errors, depth)
@@ -236,26 +200,24 @@ module Literal::Validations::Validator
 	# coercion actually produced.
 	private def coerce(draft, property, value, errors)
 		property.coerce(value, context: draft.__context__)
-	rescue Literal::ValidationError => error
-		# The coercion built a nested value that broke its own rules; those
+	rescue Literal::CheckError => error
+		# The coercion built a nested value that broke its own checks; those
 		# surface under this prop with their paths.
 		errors.merge(error.errors.errors, under: property.name)
 		COERCION_FAILED
 	rescue TypeError, ArgumentError
-		errors.add(property.name, Literal::Validations::Message.for(property.type, value))
+		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
 		COERCION_FAILED
 	end
 
-	# The seal runs before the check because it fixes a value's final
+	# The seal runs before the type check because it fixes a value's final
 	# representation, and that representation is what the prop's type describes;
 	# checking first would reject every value a sealed prop can hold.
-	# `seal: false` is for a value that is already final — one read off a built
-	# instance.
-	private def store(draft, property, value, errors, seal: true)
-		value = property.seal.call(value) if seal && property.seal
+	private def store(draft, property, value, errors)
+		value = property.seal.call(value) if property.seal
 
 		unless property.type === value
-			errors.add(property.name, Literal::Validations::Message.for(property.type, value))
+			errors.add(property.name, Literal::Checks::Message.for(property.type, value))
 			return false
 		end
 
@@ -263,12 +225,12 @@ module Literal::Validations::Validator
 		true
 	end
 
-	# The resolved default is coerced, sealed and checked like a supplied value,
-	# but not nested-resolved: a default is the shape's own code, not the
-	# outside input validate is lenient with.
+	# The resolved default is coerced, sealed and type checked like a supplied
+	# value, but not nested-resolved: a default is the shape's own code, not the
+	# outside input the check is lenient with.
 	private def assign_missing(shape, draft, property, errors)
 		if property.required?
-			errors.add(property.name, Literal::Validations::Message::MISSING)
+			errors.add(property.name, Literal::Checks::Message::MISSING)
 			return false
 		end
 
@@ -287,18 +249,24 @@ module Literal::Validations::Validator
 		store(draft, property, value, errors)
 	end
 
+	# Depth first: the nested shape's own checks run and it is built before the
+	# outer checks read it, so a check reads the same finished value in every
+	# path. A nested value that failed its checks is not built at all — an object
+	# that exists satisfies its shape's checks — so the slot stays empty and
+	# taints, and an outer check reading it is held back like one reading a type
+	# failure.
 	private def assign_nested(draft, property, nested, value, errors, depth)
 		if depth >= MAX_DEPTH
-			errors.add(property.name, Literal::Validations::Message::TOO_DEEP)
+			errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
 			return false
 		end
 
-		nested_errors = Literal::Validations::Collector.new
+		nested_errors = Literal::Checks::Collector.new
 		nested_draft, sound = run(nested, value, nested_errors, depth + 1)
 
 		errors.merge(nested_errors.errors, under: property.name)
 
-		return false unless sound
+		return false if !sound || nested_errors.any?
 
 		# Through store, so the prop's own seal and type still answer for the
 		# value the nested shape built.
@@ -323,13 +291,13 @@ module Literal::Validations::Validator
 			return nil unless Class === drafted
 
 			# The draft's own class, not the declared shape it fits: a subclass
-			# draft validates as its full self.
+			# draft checks as its full self.
 			(nested_shapes(property.type).any? { |shape| drafted <= shape }) ? drafted : nil
 		end
 	end
 
 	# Walks the DraftTransparent wrappers — the same set relaxing sees through —
-	# so `draft.validate` agrees with `draft.finalize`. `literal_child_types`
+	# so `draft.check` agrees with `draft.finalize`. `literal_child_types`
 	# materializes a deferred type: naming itself is the only way a shape can be
 	# recursive, and an unmaterialized one would read as no shape at all.
 	private def nested_shapes(type, shapes = [])

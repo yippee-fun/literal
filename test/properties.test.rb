@@ -766,7 +766,7 @@ test "#to_h" do
 end
 
 # Each prop re-emits the shared methods — the initializer, to_h, and a Data's
-# hash and == — and a stipulation re-emits the writers it reads. Every one of
+# hash and == — and a check re-emits the writers it reads. Every one of
 # those redefinitions must be pre-aliased, or `-w` drowns the caller in
 # "method redefined" warnings.
 test "generated methods redefine without warnings" do
@@ -791,7 +791,7 @@ test "generated methods redefine without warnings" do
 			prop :min, Integer, writer: :public, reader: :private, predicate: :public
 			prop :max, Integer, writer: :public
 
-			stipulate(:max, "must be greater than %{min}") { |min, max| max > min }
+			check(:max, "must be greater than %{min}") { |max, min:| max > min }
 		end
 	ensure
 		$VERBOSE = verbose

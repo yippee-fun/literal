@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Literal::Validations::Error < Literal::Data
+class Literal::Checks::Error < Literal::Data
 	prop :prop, _Nilable(Symbol)
 	prop :message, String
 	# Integer is admitted now so that indexed paths into collections can come

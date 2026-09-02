@@ -25,6 +25,33 @@ class Literal::Draft < Literal::Struct
 			new(*, **).finalize(&)
 		end
 
+		# The soft path for a Hash of props from outside, keyed by Symbol or
+		# String, where nothing may raise: every error is reported, type errors
+		# included, and a Literal::Result carries the built value or the errors.
+		# A draft's own writers type check, so for props already in hand build
+		# the draft and ask it: `Literal::Draft(Shape).new(...).check`.
+		def check(props)
+			unless Hash === props
+				raise Literal::ArgumentError.new(
+					"#{name || inspect}.check takes a Hash of properties, got #{props.class}"
+				)
+			end
+
+			Literal::Checks::Checker.check(__checked_type__, props)
+		end
+
+		def __checked_type__
+			__type__ || raise(Literal::ArgumentError.new("Cannot check an untyped draft."))
+		end
+
+		# A draft holds its type's checks in abeyance, so it declares none of its
+		# own. (`check` is the soft path above, not the declaration.)
+		def checks(&)
+			raise Literal::ArgumentError.new(
+				"Cannot declare checks on a draft; declare them on #{__type__ || 'the drafted type'}."
+			)
+		end
+
 		# Draft classes are types: any draft of a subtype of our drafted type
 		# matches, regardless of which Literal::Draft() call built its class.
 		def ===(value)
@@ -161,10 +188,10 @@ class Literal::Draft < Literal::Struct
 		self.class.__type__.from_props(__finalize_attributes__(props, &))
 	end
 
-	# Finalize without enforcing the drafted type's rules or sealing again, for
-	# the validator, which has already done both against this draft. Private,
+	# Finalize without enforcing the drafted type's checks or sealing again, for
+	# the checker, which has already done both against this draft. Private,
 	# or any caller could turn a failing draft into a value that breaks its
-	# shape's rules.
+	# shape's checks.
 	private def __finalize_unchecked__
 		type = self.class.__type__
 		type.__send__(:__literal_from_props__, __finalize_attributes__({}), seal: false)
@@ -197,23 +224,18 @@ class Literal::Draft < Literal::Struct
 		attributes
 	end
 
-	# Answers a Literal::Result carrying the built value or the validation
-	# errors. The draft itself is never mutated.
-	def validate
-		type = self.class.__type__
-
-		unless type
-			raise Literal::ArgumentError.new("Cannot validate an untyped draft.")
-		end
-
-		Literal::Validations::Validator.validate(type, self)
+	# Answers a Literal::Result carrying the built value or every error found:
+	# the type errors and, once the types hold, the shape's checks. The draft
+	# itself is never mutated.
+	def check
+		Literal::Checks::Checker.check(self.class.__checked_type__, self)
 	end
 
-	def valid?
-		validate.success?
+	def sound?
+		check.success?
 	end
 
-	# For the validator, which has already coerced the value and checked it
+	# For the checker, which has already coerced the value and checked it
 	# against the prop's real type, and must not do either twice.
 	def __store__(name, value)
 		property = self.class.literal_properties[name] ||
@@ -223,7 +245,7 @@ class Literal::Draft < Literal::Struct
 	end
 
 	# A copy gets its own context: the memoized receiver below belongs to one
-	# draft, or validating the copy would write onto an object the original
+	# draft, or checking the copy would write onto an object the original
 	# can still reach.
 	private def initialize_copy(source)
 		super
@@ -234,7 +256,7 @@ class Literal::Draft < Literal::Struct
 	# its own methods and read the properties assigned before them, exactly as
 	# they do in the generated initializer. So they run against an instance of
 	# the drafted type carrying the draft's values as they stand, synced on
-	# each use. One instance per draft, shared with the validator.
+	# each use. One instance per draft, shared with the checker.
 	def __context__
 		context = (@__context__ ||= self.class.__type__.allocate)
 

@@ -142,7 +142,7 @@ class Literal::Property
 			"\n  value\nend\n"
 	end
 
-	def generate_writer_method(buffer = +"", validate: false)
+	def generate_writer_method(buffer = +"", checked: false)
 		buffer <<
 			(@writer ? @writer.name : "public") <<
 			" def " <<
@@ -162,11 +162,11 @@ class Literal::Property
 
 		buffer << "  __property__.check_writer(self, value)\n"
 
-		if validate
+		if checked
 			# Judged before it is written, against the prospective value standing
-			# in this property's place — so a rule that fails, or raises out of a
+			# in this property's place — so a check that fails, or raises out of a
 			# bug, leaves the object untouched. A write must not half-happen.
-			buffer << "  __literal_check_rules__(:" << @name.name << ", value)\n"
+			buffer << "  __literal_run_checks__(:" << @name.name << ", value)\n"
 		end
 
 		buffer << "  @" << @name.name << " = value\n"
