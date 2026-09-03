@@ -155,3 +155,17 @@ test "mixed property types with defaults and nilables" do
 	assert_equal WithOptionals.optional_positional_property_names, [:optional_pos, :optional_name]
 	assert_equal WithOptionals.optional_keyword_property_names, [:optional_kw, :tags, :created_at]
 end
+
+class WithConst
+	extend Literal::Properties
+	extend Literal::Properties::Introspection
+
+	const :kind, "example"
+	prop :name, String
+end
+
+test "consts are neither required nor keyword properties" do
+	assert_equal WithConst.required_property_names, [:name]
+	assert_equal WithConst.keyword_property_names, [:name]
+	assert_equal WithConst.positional_property_names, []
+end

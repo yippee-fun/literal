@@ -381,3 +381,22 @@ test "Literal::Struct.build builds through a draft" do
 	assert_equal value.name, "John"
 	assert_equal value.id, 1
 end
+
+class DraftConstExample < Literal::Data
+	const :kind, "example"
+	prop :name, String
+end
+
+test "drafts carry consts as consts" do
+	draft = Literal::Draft(DraftConstExample).new
+
+	assert_equal draft.kind, "example"
+	refute draft.respond_to?(:kind=)
+	assert_equal draft.finalize(name: "Joel").kind, "example"
+end
+
+test "checking reports a const given a different value" do
+	assert Literal::Draft(DraftConstExample).check({ name: "Joel" }).success?
+	assert Literal::Draft(DraftConstExample).check({ name: "Joel", kind: "example" }).success?
+	refute Literal::Draft(DraftConstExample).check({ name: "Joel", kind: "other" }).success?
+end
