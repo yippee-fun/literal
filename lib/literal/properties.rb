@@ -172,6 +172,10 @@ module Literal::Properties
 		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, description:, &coercion)
 	end
 
+	def const(name, value, reader: false, description: nil)
+		prop(name, value, :const, reader:, writer: false, default: value, description:)
+	end
+
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		seal = nil
 
@@ -211,6 +215,20 @@ module Literal::Properties
 
 		unless Literal::Property::KIND_OPTIONS.include?(kind)
 			raise Literal::ArgumentError.new("The kind must be one of #{Literal::Property::KIND_OPTIONS.map(&:inspect).join(', ')}.")
+		end
+
+		if :const == kind
+			if default in nil | Proc
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be a frozen object, not nil or a Proc.")
+			end
+
+			if writer
+				raise Literal::ArgumentError.new("A const cannot have a writer.")
+			end
+
+			if coercion || seal
+				raise Literal::ArgumentError.new("A const cannot have a coercion or a seal.")
+			end
 		end
 
 		unless description.nil? || String === description

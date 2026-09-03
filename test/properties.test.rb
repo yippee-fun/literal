@@ -800,3 +800,40 @@ test "generated methods redefine without warnings" do
 
 	assert_equal [], warnings.grep(/method redefined/)
 end
+
+test "consts are assigned at initialization and are not initializer parameters" do
+	example = Class.new(Example) do
+		const :kind, "example", reader: :public
+		prop :name, String
+	end
+
+	instance = example.new(name: "Joel")
+
+	assert_equal instance.kind, "example"
+	refute instance.respond_to?(:kind=)
+	assert_raises(ArgumentError) { example.new(name: "Joel", kind: "other") }
+end
+
+test "a const value must be a frozen object, not nil or a Proc" do
+	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, +"unfrozen" } }
+	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, nil } }
+	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, -> { "example" } } }
+end
+
+test "a const cannot have a writer or a coercion" do
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Example) { prop :kind, "example", :const, writer: :public, default: "example" }
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Example) { prop(:kind, "example", :const, default: "example") { |value| value } }
+	end
+end
+
+test "a const cannot be redefined as a parameter" do
+	parent = Class.new(Example) { const :kind, "example" }
+
+	error = assert_raises(Literal::ArgumentError) { Class.new(parent) { prop :kind, String } }
+
+	assert error.message.include?("must match the inherited kind :const")
+end

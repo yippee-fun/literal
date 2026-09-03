@@ -101,6 +101,10 @@ class Literal::Draft < Literal::Struct
 		end
 
 		private def __draft_property__(property)
+			if property.const?
+				return const(property.name, property.default, description: property.description)
+			end
+
 			original_coercion = property.coercion
 
 			prop(

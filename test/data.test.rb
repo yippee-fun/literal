@@ -436,3 +436,21 @@ test "indexed access raises for invalid key types" do
 	person = Person.new(name: "John")
 	assert_raises(TypeError) { person[0] }
 end
+
+class ConstCircle < Literal::Data
+	const :kind, "circle"
+	prop :radius, Integer
+end
+
+test "consts appear in to_h and ==" do
+	circle = ConstCircle.new(radius: 1)
+
+	assert_equal circle.to_h, { radius: 1, kind: "circle" }
+	assert_equal circle, ConstCircle.new(radius: 1)
+end
+
+test "from_props fills an omitted const and checks a given one" do
+	assert_equal ConstCircle.from_props(radius: 1).kind, "circle"
+	assert_equal ConstCircle.from_props(radius: 1, kind: "circle").kind, "circle"
+	assert_raises(Literal::TypeError) { ConstCircle.from_props(radius: 1, kind: "square") }
+end
