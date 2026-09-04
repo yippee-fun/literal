@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 class Literal::Property
-	ORDER = { :positional => 0, :* => 1, :keyword => 2, :** => 3, :& => 4 }.freeze
+	ORDER = { :positional => 0, :* => 1, :keyword => 2, :** => 3, :& => 4, :const => 5 }.freeze
 	RUBY_KEYWORDS = %i[alias and begin break case class def do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield].to_h { |k| [k, "__#{k}__"] }.freeze
 
 	VISIBILITY_OPTIONS = Set[false, :private, :protected, :public].freeze
 	VISIBILITY_ORDER = { false => 0, :private => 1, :protected => 2, :public => 3 }.freeze
-	KIND_OPTIONS = Set[:positional, :*, :keyword, :**, :&].freeze
+	KIND_OPTIONS = Set[:positional, :*, :keyword, :**, :&, :const].freeze
 
 	include Comparable
 
@@ -61,6 +61,10 @@ class Literal::Property
 
 	def block?
 		@kind == :&
+	end
+
+	def const?
+		@kind == :const
 	end
 
 	# The instance variable this property is stored in. Generated code writes
@@ -204,8 +208,14 @@ class Literal::Property
 	end
 
 	def generate_initializer_handle_property(buffer = +"")
-		buffer << "  # " << @name.name << "\n" <<
-			"  __property__ = __properties__[:" << @name.name << "]\n"
+		buffer << "  # " << @name.name << "\n"
+
+		if const?
+			buffer << "  @" << @name.name << " = __properties__[:" << @name.name << "].default\n"
+			return buffer
+		end
+
+		buffer << "  __property__ = __properties__[:" << @name.name << "]\n"
 
 		if @kind == :keyword && ruby_keyword?
 			generate_initializer_escape_keyword(buffer)
