@@ -48,7 +48,10 @@ class Literal::SerializationContext
 	CacheLimit = 2048
 
 	def initialize(*serializers, defaults: true)
-		serializers = [*serializers, *DefaultSerializers] if defaults
+		if defaults
+			remaining_defaults = DefaultSerializers.reject { |default| serializers.any? { |supplied| supplied <= default } }
+			serializers = [*serializers, *remaining_defaults]
+		end
 
 		@type = _Deferred { @type }
 		@kind = _Deferred { @kind }
