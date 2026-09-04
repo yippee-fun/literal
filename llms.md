@@ -186,13 +186,13 @@ Type-failure messages speak a deliberately small public vocabulary — `"must be
 ## Serialization (JSON data + JSON Schema)
 
 ```ruby
-ctx = Literal::SerializationContext.new  # frozen; custom serializers/codecs may be passed first
+ctx = Literal::SerializationContext.new  # frozen; custom serializers/codecs passed first; one whose class is or descends from a default replaces that default
 ctx.serialize(v, type: T)                # → JSON data (strict-checks both sides)
 ctx.deserialize(raw, type: T)
 ctx.json_schema(T)                       # $defs for recursion
 ```
 
-First-match over ordered serializer list, shallow `handles_type?`; recursion/cycle legality central (cycles must pass a referenceable node → `$ref`). Custom scalar mapping: subclass `Literal::Serializer::Codec` — `type` (class), `encoded_type` (nullary fixed wire type), `encode(v)`, `decode(raw)`; children handled by encoded type's serializer. Parameterized generics need the full `Literal::Serializer` protocol.
+First-match over ordered serializer list, shallow `handles_type?`; recursion/cycle legality central (cycles must pass a referenceable node → `$ref`). Custom scalar mapping: subclass `Literal::Serializer::Codec` — `type` (class), `encoded_type` (nullary fixed wire type), `encode(v)`, `decode(raw)`; children handled by encoded type's serializer. Parameterized generics need the full `Literal::Serializer` protocol. `Literal::TimeSerializer.with(precision: 3, utc: true)` returns a configured subclass (`precision:` nil = adaptive, or 0..9 fixed fraction digits; `utc:` converts to UTC, output ends in `Z`) that replaces the default TimeSerializer when passed to the context.
 
 Notables: DataStructures = closed objects via props/`from_props`; enums = backing value; `_Optional` props omitted on write, restored to Undefined on read (never defaulted); untagged unions must be natural (members distinguishable by JSON type or object shape); `_TaggedUnion` writes `"$type"` discriminator (merged into object members, else `{"$type":, "value":}`); non-string-keyed Hashes → arrays of pairs; `description:` → schema.
 

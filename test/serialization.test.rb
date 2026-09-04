@@ -335,6 +335,14 @@ class SerializationTask < Literal::Data
 	prop :priority, SerializationPriority
 end
 
+class SerializationCustomTimeSerializer < Literal::TimeSerializer
+end
+
+class SerializationStamped < Literal::Data
+	prop :at, Time
+	prop :maybe, _Nilable(Time)
+end
+
 Example = Literal::SerializationContext.new
 
 test "serialization context includes default serializers" do
@@ -347,6 +355,120 @@ test "serialization context defaults can be disabled" do
 
 	assert context.kind === String
 	refute context.kind === Integer
+end
+
+test "serialization context replaces the default of a supplied serializer's class" do
+	context = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3, utc: true))
+
+	assert_equal context.serializers.count { |serializer| Literal::TimeSerializer === serializer }, 1
+	assert_equal context.serializers.length, Literal::SerializationContext::DefaultSerializers.length
+	assert context.kind === Time
+	assert context.kind === DateTime
+end
+
+test "serialization context replaces the default of a supplied subclass" do
+	context = Literal::SerializationContext.new(SerializationCustomTimeSerializer)
+
+	assert_equal context.serializers.count { |serializer| Literal::TimeSerializer === serializer }, 1
+	assert SerializationCustomTimeSerializer === context.serializers.first
+end
+
+test "serialization context keeps every default when supplied a plain default class" do
+	context = Literal::SerializationContext.new(Literal::TimeSerializer)
+	time = Time.new(2025, 1, 13, 20, 30, 45.123456789r, "+01:00")
+
+	assert_equal context.serializers.map(&:class).sort_by(&:name), Literal::SerializationContext::DefaultSerializers.sort_by(&:name)
+	assert_equal context.serialize(time, type: Time), Example.serialize(time, type: Time)
+end
+
+test "serialization context keeps every default when supplied a codec" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec)
+
+	assert_equal context.serializers.length, Literal::SerializationContext::DefaultSerializers.length + 1
+	assert_equal context.serializers.count { |serializer| Literal::TimeSerializer === serializer }, 1
+end
+
+test "serialization context without defaults ignores the replacement rule" do
+	context = Literal::SerializationContext.new(Literal::TimeSerializer.with(utc: true), defaults: false)
+
+	assert_equal context.serializers.length, 1
+	refute context.kind === String
+end
+
+test "time serializer precision and utc" do
+	time = Time.new(2024, 1, 15, 10, 20, 30.123456, "-08:00")
+	whole = Time.new(2024, 1, 15, 10, 20, 30, "-08:00")
+	datetime = DateTime.new(2024, 1, 15, 10, 20, 30 + (123_456r / 1_000_000), "-08:00")
+
+	utc = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3, utc: true))
+	nine = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 9))
+	zero = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 0))
+	local = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3))
+
+	assert_equal utc.serialize(time, type: Time), "2024-01-15T18:20:30.123Z"
+	assert_equal utc.serialize(datetime, type: DateTime), "2024-01-15T18:20:30.123Z"
+	assert_equal nine.serialize(whole, type: Time), "2024-01-15T10:20:30.000000000-08:00"
+	assert_equal zero.serialize(time, type: Time), "2024-01-15T10:20:30-08:00"
+	assert_equal local.serialize(time, type: Time), "2024-01-15T10:20:30.123-08:00"
+
+	assert_equal utc.deserialize("2024-01-15T18:20:30.123Z", type: Time), Time.new(2024, 1, 15, 10, 20, 30.123r, "-08:00")
+	assert_equal utc.deserialize("2024-01-15T18:20:30.123Z", type: DateTime), DateTime.new(2024, 1, 15, 18, 20, 30 + (123r / 1000), "+00:00")
+
+	assert_equal Example.serialize(time, type: Time), "2024-01-15T10:20:30.123456000-08:00"
+	assert_equal Example.serialize(whole, type: Time), "2024-01-15T10:20:30-08:00"
+	assert_equal Example.serialize(time, type: Time), Literal::SerializationContext.new(Literal::TimeSerializer.with).serialize(time, type: Time)
+end
+
+test "time serializer precision must be nil or an integer in 0..9" do
+	[10, -1, 3.5, "3"].each do |precision|
+		assert_raises(ArgumentError) { Literal::TimeSerializer.with(precision:) }
+		assert_raises(ArgumentError) { Literal::TimeSerializer.new(Example, precision:) }
+	end
+
+	Literal::TimeSerializer.with(precision: 0)
+	Literal::TimeSerializer.with(precision: 9)
+end
+
+test "configured time serializer subclass has a readable name" do
+	serializer = Literal::TimeSerializer.with(precision: 3, utc: true)
+
+	assert_equal serializer.name, "Literal::TimeSerializer.with(precision: 3, utc: true)"
+	assert_equal serializer.inspect, "Literal::TimeSerializer.with(precision: 3, utc: true)"
+	assert_equal serializer.to_s, "Literal::TimeSerializer.with(precision: 3, utc: true)"
+end
+
+test "configured time serializer applies inside structures, arrays, maps and nilables" do
+	context = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3, utc: true))
+	time = Time.new(2024, 1, 15, 10, 20, 30.123456, "-08:00")
+	stamped = SerializationStamped.new(at: time, maybe: nil)
+
+	assert_equal context.serialize(stamped, type: SerializationStamped), { "at" => "2024-01-15T18:20:30.123Z", "maybe" => nil }
+	assert_equal context.serialize([time], type: _Array(Time)), ["2024-01-15T18:20:30.123Z"]
+	assert_equal context.serialize({ "a" => time }, type: _Hash(String, Time)), { "a" => "2024-01-15T18:20:30.123Z" }
+	assert_equal context.serialize({ at: time }, type: _Map(at: Time)), { "at" => "2024-01-15T18:20:30.123Z" }
+	assert_equal context.serialize(time, type: _Nilable(Time)), "2024-01-15T18:20:30.123Z"
+	assert_equal context.serialize(nil, type: _Nilable(Time)), nil
+end
+
+test "configured time serializer formats json schema consts" do
+	context = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3, utc: true))
+	time = Time.new(2024, 1, 15, 10, 20, 30.123456, "-08:00")
+	datetime = DateTime.new(2024, 1, 15, 10, 20, 30, "-08:00")
+
+	assert_equal(
+		context.json_schema(time),
+		{ "type" => "string", "format" => "date-time", "const" => "2024-01-15T18:20:30.123Z" },
+	)
+
+	assert_equal(
+		context.json_schema(_Constraint(DateTime, datetime)),
+		{ "type" => "string", "format" => "date-time", "const" => "2024-01-15T18:20:30.000Z" },
+	)
+
+	assert_equal(
+		context.json_schema(SerializationStamped)["properties"]["at"],
+		{ "type" => "string", "format" => "date-time" },
+	)
 end
 
 test "string length range serialization" do
