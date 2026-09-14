@@ -4,6 +4,7 @@ module Literal::Properties
 	include Literal::Types
 
 	NO_CHECKS = [].freeze
+	FINALIZE_LOCK = Mutex.new
 
 	module DocString
 		# @!method initialize(...)
@@ -118,11 +119,15 @@ module Literal::Properties
 		nil
 	end
 
-	# The initializer only runs checks when the shape has them, so the first
-	# check has to re-emit it; the writers of the properties these checks read
-	# are re-emitted for the same reason.
+	# The initializer only runs checks when the shape has them, so a check
+	# declared after the shape finalized — Literal::Enum declares its checks
+	# below its members — regenerates it; the writers of the properties these
+	# checks read are re-emitted for the same reason.
 	private def __literal_emit_checked_methods__(checks)
-		__define_literal_methods__(nil)
+		if @__literal_finalized__
+			@__literal_finalized__ = false
+			__literal_finalize__
+		end
 
 		checks.flat_map(&:reads).uniq.each do |name|
 			property = literal_properties[name]
@@ -215,6 +220,10 @@ module Literal::Properties
 
 		unless description.nil? || String === description
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
+		end
+
+		if @__literal_finalized__
+			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it has already been instantiated or frozen.")
 		end
 
 		queue = subclasses
@@ -328,10 +337,48 @@ module Literal::Properties
 		Literal::Property
 	end
 
-	private def __define_literal_methods__(new_property)
-		code =	__generate_literal_methods__(new_property)
-		__literal_silence_redefinitions__(new_property) if new_property
-		__literal_extension__.module_eval(code)
+	private def __define_literal_methods__(property)
+		buffer = +"# frozen_string_literal: true\n"
+		property.generate_writer_method(buffer, checked: __literal_checked_property__?(property.name)) if property.writer
+		property.generate_reader_method(buffer) if property.reader
+		property.generate_predicate_method(buffer) if property.predicate
+
+		__literal_silence_redefinitions__(property)
+		__literal_extension__.module_eval(buffer)
+	end
+
+	# The initializer and to_h span the whole schema, so they are emitted once,
+	# when the shape is first used, rather than once per `prop`. The extension's
+	# stubs call this and redispatch; allocation and freezing reach it directly.
+	# A finalized shape is closed to `prop`.
+	def __literal_finalize__
+		return if @__literal_finalized__
+
+		FINALIZE_LOCK.synchronize do
+			return if @__literal_finalized__
+
+			buffer = +"# frozen_string_literal: true\n"
+			__generate_literal_methods__(buffer)
+			__literal_extension__.module_eval(buffer)
+			include(__literal_extension__)
+
+			@__literal_finalized__ = true
+		end
+	end
+
+	private def __generate_literal_methods__(buffer)
+		literal_properties.generate_initializer(buffer, checked: literal_checks.any?)
+		literal_properties.generate_to_h(buffer)
+	end
+
+	def allocate
+		__literal_finalize__
+		super
+	end
+
+	def freeze
+		__literal_finalize__
+		super
 	end
 
 	# Re-emitting a property's methods — a writer picking up a new check —
@@ -358,34 +405,25 @@ module Literal::Properties
 		if defined?(@__literal_extension__)
 			@__literal_extension__
 		else
+			owner = self
+
+			# Stubs until the shape finalizes: each finalizes it, which replaces
+			# them, then redispatches to the generated method.
 			@__literal_extension__ = Module.new do
-				def initialize
-					after_initialize if respond_to?(:after_initialize, true)
+				define_method(:initialize) do |*args, **kwargs, &block|
+					owner.__literal_finalize__
+					initialize(*args, **kwargs, &block)
 				end
 
-				def to_h
-					{}
+				define_method(:to_h) do
+					owner.__literal_finalize__
+					to_h
 				end
 
-				alias to_hash to_h
+				alias_method :to_hash, :to_h
 
 				set_temporary_name "Literal::Properties(Extension)" if respond_to?(:set_temporary_name)
 			end
 		end
-	end
-
-	private def __generate_literal_methods__(new_property, buffer = +"")
-		buffer << "# frozen_string_literal: true\n"
-		literal_properties.generate_initializer(buffer, checked: literal_checks.any?)
-		literal_properties.generate_to_h(buffer)
-
-		# Nil when re-emitting for a new check rather than a new property.
-		if new_property
-			new_property.generate_writer_method(buffer, checked: __literal_checked_property__?(new_property.name)) if new_property.writer
-			new_property.generate_reader_method(buffer) if new_property.reader
-			new_property.generate_predicate_method(buffer) if new_property.predicate
-		end
-
-		buffer
 	end
 end

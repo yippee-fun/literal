@@ -1491,17 +1491,15 @@ test "a draft with nothing assigned checks when every prop can default" do
 	assert_equal "member", Literal::Draft(klass).new.check.value!.role
 end
 
-test "uses the current prop shape after the class changes" do
+test "refuses a prop once a draft has built an instance" do
 	klass = Class.new(Literal::Data) do
 		prop :name, String
 	end
 
 	assert Literal::Draft(klass).new(name: "Ada").check.success?
 
-	klass.prop :age, Integer
-
-	person = Literal::Draft(klass).new(name: "Ada", age: 42).check.value!
-	assert_equal 42, person.age
+	error = assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
+	assert error.message.include?("already been instantiated")
 end
 
 # --- nested ---

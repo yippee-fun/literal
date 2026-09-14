@@ -174,6 +174,67 @@ test "properties can be added while no descendant has inherited the schema" do
 	assert_equal instance.to_h, { a: "1", b: "2" }
 end
 
+test "properties cannot be added once the class has been instantiated" do
+	klass = Class.new(Example) do
+		prop :a, String
+	end
+
+	klass.new(a: "1")
+
+	error = assert_raises(Literal::ArgumentError) { klass.prop :b, String }
+	assert error.message.include?("already been instantiated or frozen")
+end
+
+test "properties cannot be added once the class has been frozen" do
+	klass = Class.new(Example) do
+		prop :a, String
+	end
+
+	klass.freeze
+
+	error = assert_raises(Literal::ArgumentError) { klass.prop :b, String }
+	assert error.message.include?("already been instantiated or frozen")
+
+	assert_equal klass.new(a: "1").to_h, { a: "1" }
+end
+
+test "properties cannot be added once an instance has been built from props" do
+	klass = Class.new(Literal::Data) do
+		prop :a, String
+	end
+
+	klass.from_props(a: "1")
+
+	assert_raises(Literal::ArgumentError) { klass.prop :b, String }
+end
+
+test "a check declared after instantiation is enforced by the initializer" do
+	klass = Class.new(Literal::Data) do
+		prop :a, Integer
+	end
+
+	klass.new(a: 1)
+	klass.check(:a, "must be positive", &:positive?)
+
+	assert_raises(Literal::CheckError) { klass.new(a: 0) }
+	assert_equal klass.new(a: 2).to_h, { a: 2 }
+end
+
+# Marshal allocates without dispatching to Class#allocate, so an object can be
+# loaded into a shape that has never been constructed in this process.
+test "an object loaded before its shape was first used has its generated methods" do
+	klass = Class.new(Literal::Struct) do
+		prop :a, String
+	end
+
+	loaded = Class.instance_method(:allocate).bind_call(klass)
+	loaded.marshal_load([2, { a: "1" }, false, []])
+
+	assert_equal loaded.to_h, { a: "1" }
+	assert_equal loaded, klass.new(a: "1")
+	refute_equal loaded, klass.new(a: "2")
+end
+
 test "frozen defaults are type checked when the property is defined" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new(Example) do
@@ -785,14 +846,14 @@ test "generated methods redefine without warnings" do
 		Class.new(Literal::Data) do
 			prop :x, Integer, reader: :public
 			prop :y, Integer, reader: :public
-		end
+		end.new(x: 1, y: 2)
 
 		Class.new(Literal::Object) do
 			prop :min, Integer, writer: :public, reader: :private, predicate: :public
 			prop :max, Integer, writer: :public
 
 			check(:max, "must be greater than %{min}") { |max:, min:| max > min }
-		end
+		end.new(min: 1, max: 2)
 	ensure
 		$VERBOSE = verbose
 		capturing = false
