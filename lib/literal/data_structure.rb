@@ -120,6 +120,7 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_load(payload)
+		self.class.__literal_finalize__
 		_version, attributes, was_frozen, frozen_values = payload
 
 		# Marshal.load rebuilds contained objects unfrozen, so restore the
@@ -205,7 +206,7 @@ class Literal::DataStructure
 
 	alias_method :eql?, :==
 
-	def self.__generate_literal_methods__(new_property, buffer = +"")
+	def self.__generate_literal_methods__(buffer)
 		super
 		literal_properties.generate_hash(buffer)
 		literal_properties.generate_eq(buffer)
