@@ -183,9 +183,15 @@ class Literal::Enum
 			when self
 				value
 			when Symbol
-				self[value] || begin
-					const_get(value)
+				member = self[value] || begin
+					const_get(value, false)
 				rescue NameError
+					nil
+				end
+
+				if self === member
+					member
+				else
 					raise ArgumentError.new(
 						"Can't coerce #{value.inspect} into a #{inspect}."
 					)
