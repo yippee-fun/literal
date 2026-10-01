@@ -157,6 +157,9 @@ class Literal::Tuple
 	end
 
 	def []=(index, value)
+		# Checked explicitly because TruffleRuby's Array#[]= ignores frozen arrays.
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
+
 		size = @__value__.size
 		normalized = index
 

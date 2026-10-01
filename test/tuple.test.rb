@@ -241,22 +241,19 @@ test "#dup does not share storage with the original" do
 	assert_equal tuple.to_a, ["a", 1]
 end
 
-# TruffleRuby 40 lets []= modify a frozen Array.
-if RUBY_ENGINE != "truffleruby"
-	test "#freeze freezes the underlying storage" do
-		tuple = Literal::Tuple(String, Integer).new("a", 1).freeze
+test "#freeze freezes the underlying storage" do
+	tuple = Literal::Tuple(String, Integer).new("a", 1).freeze
 
-		assert tuple.frozen?
-		assert_raises(FrozenError) { tuple[1] = 2 }
-	end
+	assert tuple.frozen?
+	assert_raises(FrozenError) { tuple[1] = 2 }
+end
 
-	test "#clone of a frozen tuple is frozen" do
-		tuple = Literal::Tuple(String, Integer).new("a", 1).freeze
-		copy = tuple.clone
+test "#clone of a frozen tuple is frozen" do
+	tuple = Literal::Tuple(String, Integer).new("a", 1).freeze
+	copy = tuple.clone
 
-		assert copy.frozen?
-		assert_raises(FrozenError) { copy[1] = 2 }
-	end
+	assert copy.frozen?
+	assert_raises(FrozenError) { copy[1] = 2 }
 end
 
 # Enumerable
