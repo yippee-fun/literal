@@ -18,6 +18,10 @@ class Literal::Struct < Literal::DataStructure
 				&coercion
 			)
 		end
+
+		def const(name, value, reader: :public, description: nil)
+			super
+		end
 	end
 
 	def []=(key, value)

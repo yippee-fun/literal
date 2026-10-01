@@ -3502,3 +3502,52 @@ test "union of boolean consts serializes as a boolean" do
 	assert_equal Example.deserialize(false, type:), false
 	assert_equal Example.json_schema(type), { "type" => "boolean" }
 end
+
+class SerializationConstShape < Literal::Data
+	const :kind, "shape"
+	prop :sides, Integer
+end
+
+test "consts serialize, deserialize and emit a const schema" do
+	shape = SerializationConstShape.new(sides: 3)
+	serialized = Example.serialize(shape, type: SerializationConstShape)
+
+	assert_equal serialized, { "sides" => 3, "kind" => "shape" }
+	assert_equal Example.deserialize(serialized, type: SerializationConstShape), shape
+	assert_equal Example.deserialize({ "sides" => 3 }, type: SerializationConstShape), shape
+	assert_raises(Literal::TypeError) { Example.deserialize({ "sides" => 3, "kind" => "circle" }, type: SerializationConstShape) }
+
+	assert_equal(
+		Example.json_schema(SerializationConstShape),
+		{
+			"type" => "object",
+			"properties" => {
+				"sides" => { "type" => "integer" },
+				"kind" => { "type" => "string", "const" => "shape" },
+			},
+			"required" => ["sides", "kind"],
+			"additionalProperties" => false,
+		},
+	)
+end
+
+class SerializationConstSquare < Literal::Data
+	const :kind, :square
+	prop :size, Integer
+end
+
+class SerializationConstCircle < Literal::Data
+	const :kind, :circle
+	prop :size, Integer
+end
+
+test "consts tell apart the members of an untagged union" do
+	type = _Union(SerializationConstSquare, SerializationConstCircle)
+	circle = SerializationConstCircle.new(size: 1)
+	serialized = Example.serialize(circle, type:)
+
+	assert_equal serialized, { "size" => 1, "kind" => "circle" }
+	assert_equal Example.deserialize(serialized, type:), circle
+	assert_equal Example.deserialize({ "size" => 1, "kind" => "square" }, type:), SerializationConstSquare.new(size: 1)
+	assert_raises(Literal::ArgumentError) { Example.deserialize({ "size" => 1 }, type:) }
+end

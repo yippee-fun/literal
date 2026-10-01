@@ -172,6 +172,10 @@ module Literal::Properties
 		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, description:, &coercion)
 	end
 
+	def const(name, value, reader: false, description: nil)
+		prop(name, value, :const, reader:, writer: false, default: value, description:)
+	end
+
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		seal = nil
 
@@ -183,7 +187,32 @@ module Literal::Properties
 			seal = pipeline.seal_proc
 		end
 
-		if default && !(Proc === default || default.frozen?)
+		if :const == kind
+			if default in nil | Proc
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be a frozen object, not nil or a Proc.")
+			end
+
+			if writer
+				raise Literal::ArgumentError.new("A const cannot have a writer.")
+			end
+
+			if coercion || seal
+				raise Literal::ArgumentError.new("A const cannot have a coercion or a seal.")
+			end
+
+			# Interned, so a string const needs no `frozen_string_literal` comment.
+			default = -default if String === default
+
+			# A module is shared by identity, so it needs no freezing.
+			unless default.frozen? || Module === default
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be frozen.")
+			end
+
+			# The value is its own type. A module, whose `===` matches its instances,
+			# or a value its own `===` rejects, such as a Regexp or a Range, is
+			# matched by identity instead.
+			type = (Module === default || !(default === default)) ? Literal::Types::SameObjectType.new(default) : default
+		elsif default && !(Proc === default || default.frozen?)
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 

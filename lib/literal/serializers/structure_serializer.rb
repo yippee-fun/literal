@@ -60,7 +60,9 @@ class Literal::StructureSerializer < Literal::Serializer
 		type.literal_properties.each do |property|
 			name = property.name.name
 			allowed << name
-			required << name if property.required?
+			# Serialization always writes a const, so its key is required. That
+			# lets a const tell apart the members of an untagged union.
+			required << name if property.required? || property.const?
 
 			if (domain = const_domain(without_undefined(property.type)))
 				const_domains[name] = domain

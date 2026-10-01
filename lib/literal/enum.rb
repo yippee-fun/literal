@@ -15,6 +15,10 @@ class Literal::Enum
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:)
 		end
 
+		def const(name, value, reader: :public, description: nil)
+			prop(name, value, :const, reader:, default: value, description:)
+		end
+
 		# Members are idiomatically defined above the checks in the class body,
 		# so `check` judges them before it installs.
 		private def __literal_existing_instances__
