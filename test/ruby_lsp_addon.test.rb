@@ -110,6 +110,24 @@ if ruby_lsp_available
 		assert_equal :public, index["email"].first.visibility
 	end
 
+	test "a keyword splat overrides options given before it" do
+		index = index_source(<<~RUBY)
+			class A
+				prop :name, String, reader: :public, writer: :public, **OPTIONS
+			end
+		RUBY
+
+		assert_equal 1, index["@name"].size
+		assert_equal nil, index["name"]
+		assert_equal nil, index["name="]
+	end
+
+	test "detects whether index entries take a configuration" do
+		takes_configuration = Gem::Version.new(RubyLsp::VERSION) >= Gem::Version.new("0.26.5")
+
+		assert_equal takes_configuration, RubyLsp::Literal::IndexingEnhancement::ENTRIES_TAKE_CONFIGURATION
+	end
+
 	test "ignores prop calls outside a namespace" do
 		index = index_source(<<~RUBY)
 			prop :name, String

@@ -21,6 +21,9 @@ module RubyLsp
 		end
 
 		class IndexingEnhancement < RubyIndexer::Enhancement
+			# ruby-lsp 0.26.5 added a leading configuration argument to index entries.
+			ENTRIES_TAKE_CONFIGURATION = (RubyIndexer::Entry::InstanceVariable.instance_method(:initialize).parameters in [[:req, :configuration], *])
+
 			def on_call_node_enter(node)
 				name = node.name
 				owner = @listener.current_owner
@@ -40,6 +43,9 @@ module RubyLsp
 							case element
 							in Prism::AssocNode[key: Prism::SymbolNode[unescaped: String => key], value:]
 								kwargs[key] = value
+							in Prism::AssocSplatNode
+								# A splat may override any option given before it.
+								kwargs.clear
 							else
 								nil
 							end
@@ -57,14 +63,17 @@ module RubyLsp
 					prop_signature = prop_type_location.slice.lines.map { |line| line.delete_prefix(prop_type_indentation) }.join
 
 					@listener.instance_exec do
-						@index.add(RubyIndexer::Entry::InstanceVariable.new(
-							@index.configuration,
+						entry_arguments = [
 							"@#{prop_name}",
 							@uri,
 							RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
 							[collect_comments(node), "**Type:**\n```ruby\n#{prop_signature}\n```"].join("\n\n"),
 							owner,
-						))
+						]
+
+						entry_arguments.unshift(@index.configuration) if ENTRIES_TAKE_CONFIGURATION
+
+						@index.add(RubyIndexer::Entry::InstanceVariable.new(*entry_arguments))
 					end
 
 					if kwargs["reader"] in Prism::SymbolNode[unescaped: "private" | "protected" | "public" => visibility]
