@@ -829,7 +829,10 @@ class Literal::Array
 	# Ruby converts non-Integer range bounds with `to_int`, which we don't
 	# support, since we need to know the bounds to check for padding.
 	private def __check_range_index__(range, method)
-		unless (nil == range.begin || Integer === range.begin) && (nil == range.end || Integer === range.end)
+		case [range.begin, range.end]
+		in [Integer | nil, Integer | nil]
+			nil
+		else
 			raise ArgumentError.new("Cannot call `#{method}` on a Literal::Array with a range of #{range.inspect}. Use a Range of Integers.")
 		end
 	end
