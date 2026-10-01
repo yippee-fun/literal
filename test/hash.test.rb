@@ -272,6 +272,12 @@ test "#to_h with a block maps pairs into a plain hash" do
 	assert_equal hash.to_h, { a: 1, b: 2 }
 end
 
+test "#to_hash ignores a block, like Hash#to_hash" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+
+	assert_equal hash.to_hash { |key, value| [value, key] }, { a: 1, b: 2 }
+end
+
 test "#inspect" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1 })
 
