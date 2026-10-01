@@ -100,9 +100,7 @@ class Literal::Seal
 		end
 	end
 
-	private
-
-	def __proc_from__(callable)
+	private def __proc_from__(callable)
 		case callable
 		when ::Proc
 			callable
@@ -111,7 +109,7 @@ class Literal::Seal
 		end
 	end
 
-	def __compose__(first, second)
+	private def __compose__(first, second)
 		# instance_exec, not call: a composed coercion carried by a seal runs
 		# against the object being constructed, and each stage should see that
 		# context the same way an uncomposed block would.

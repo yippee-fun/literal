@@ -1,40 +1,45 @@
 # frozen_string_literal: true
 
-require "js_regex"
+if defined?(JsRegex)
+	test "string json schema" do
+		type = Literal::JSONSchema::String(
+			format: "email",
+			pattern: /\A[A-Z]+\z/,
+			min_length: 7,
+			max_length: 64,
+		)
 
-test "string json schema" do
-	type = Literal::JSONSchema::String(
-		format: "email",
-		pattern: /\A[A-Z]+\z/,
-		min_length: 7,
-		max_length: 64,
-	)
-
-	assert_equal(
-		type.json_schema,
-		{
-			"type" => "string",
-			"format" => "email",
-			"pattern" => "^[A-Z]+$",
-			"minLength" => 7,
-			"maxLength" => 64,
-		},
-	)
+		assert_equal(
+			type.json_schema,
+			{
+				"type" => "string",
+				"format" => "email",
+				"pattern" => "^[A-Z]+$",
+				"minLength" => 7,
+				"maxLength" => 64,
+			},
+		)
+	end
 end
 
 test "string json schema validation" do
 	email = Literal::JSONSchema::String(format: "email")
 	uuid = Literal::JSONSchema::String(format: "uuid")
-	pattern = Literal::JSONSchema::String(pattern: /\A[a-z]+\z/)
 
 	assert email === "joel@example.com"
 	refute email === "not-an-email"
 
 	assert uuid === "2f9ec8cc-75d8-4711-81aa-b60a6d4506d5"
 	refute uuid === "not-a-uuid"
+end
 
-	assert pattern === "literal"
-	refute pattern === "Literal"
+if defined?(JsRegex)
+	test "string json schema pattern validation" do
+		pattern = Literal::JSONSchema::String(pattern: /\A[a-z]+\z/)
+
+		assert pattern === "literal"
+		refute pattern === "Literal"
+	end
 end
 
 test "string json schema subtype" do

@@ -61,7 +61,7 @@ module Literal::ConstantTracker
 			return super
 		end
 
-		return super if object in Literal::Immediate
+		return super if Literal::Immediate === object
 
 		begin
 			references = Literal::ConstantTracker.const_ref(object).reject do |reference|

@@ -4,6 +4,14 @@ require "active_record/railtie"
 require "literal"
 require "securerandom"
 
+# js_regex is optional and only installs on CRuby, so tests that need it are
+# defined only when it’s available.
+begin
+	require "js_regex"
+rescue LoadError
+	nil
+end
+
 module Fixtures
 	Objects = Set[
 		SecureRandom.hex,

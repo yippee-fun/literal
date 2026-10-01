@@ -61,34 +61,40 @@ test "returns frozen empty references for untracked constants" do
 	assert Literal.const_ref(ConstantTrackerTest::IntegerValue).frozen?
 end
 
-test "does not retain removed classes or modules through their constants" do
-	references = Thread.new do
-		[Class, Module].flat_map do |type|
-			3.times.map do
-				Object.const_set(:ConstantTrackerReloadedOwner, type.new)
-				ConstantTrackerReloadedOwner.const_set(:Payload, Object.new)
-				reference = WeakRef.new(ConstantTrackerReloadedOwner)
-				Object.__send__(:remove_const, :ConstantTrackerReloadedOwner)
-				reference
+# Only CRuby reliably collects these objects on GC.start.
+if RUBY_ENGINE == "ruby"
+	test "does not retain removed classes or modules through their constants" do
+		references = Thread.new do
+			[Class, Module].flat_map do |type|
+				3.times.map do
+					Object.const_set(:ConstantTrackerReloadedOwner, type.new)
+					ConstantTrackerReloadedOwner.const_set(:Payload, Object.new)
+					reference = WeakRef.new(ConstantTrackerReloadedOwner)
+					Object.__send__(:remove_const, :ConstantTrackerReloadedOwner)
+					reference
+				end
 			end
-		end
-	end.value
+		end.value
 
-	3.times { GC.start }
-	refute references.any?(&:weakref_alive?)
+		3.times { GC.start }
+		refute references.any?(&:weakref_alive?)
+	end
 end
 
-test "does not retain an owner when its constant value is still alive" do
-	object = Object.new
-	reference = Thread.new do
-		owner = Module.new
-		owner.const_set(:Payload, object)
-		WeakRef.new(owner)
-	end.value
+# Only CRuby reliably collects these objects on GC.start.
+if RUBY_ENGINE == "ruby"
+	test "does not retain an owner when its constant value is still alive" do
+		object = Object.new
+		reference = Thread.new do
+			owner = Module.new
+			owner.const_set(:Payload, object)
+			WeakRef.new(owner)
+		end.value
 
-	3.times { GC.start }
-	refute reference.weakref_alive?
-	assert_equal Literal.const_ref(object), []
+		3.times { GC.start }
+		refute reference.weakref_alive?
+		assert_equal Literal.const_ref(object), []
+	end
 end
 
 test "preserves live aliases through garbage collection" do
@@ -128,17 +134,20 @@ ensure
 	Object.__send__(:remove_const, :ConstantTrackerNamedOwner)
 end
 
-test "a saved reference does not keep its owner alive" do
-	reference = Thread.new do
-		owner = Module.new
-		owner.const_set(:Payload, Object.new)
-		Literal.const_ref(owner::Payload).first
-	end.value
+# Only CRuby reliably collects these objects on GC.start.
+if RUBY_ENGINE == "ruby"
+	test "a saved reference does not keep its owner alive" do
+		reference = Thread.new do
+			owner = Module.new
+			owner.const_set(:Payload, Object.new)
+			Literal.const_ref(owner::Payload).first
+		end.value
 
-	3.times { GC.start }
-	assert_equal reference.owner, nil
-	assert_equal reference.name, nil
-	assert_equal reference.to_s, ""
+		3.times { GC.start }
+		assert_equal reference.owner, nil
+		assert_equal reference.name, nil
+		assert_equal reference.to_s, ""
+	end
 end
 
 test "registering the same constant again does not accumulate references" do

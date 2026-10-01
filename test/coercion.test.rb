@@ -11,7 +11,7 @@ test "coercions compose in both directions" do
 end
 
 test "composing a coercion into a seal returns a seal whose coercion runs first" do
-	strip = Literal::Coercion { |it| it.strip }
+	strip = Literal::Coercion(&:strip)
 
 	assert Literal::Seal === (strip >> Literal::Coercions::Immutable)
 	assert Literal::Seal === (Literal::Coercions::Immutable << strip)
@@ -34,7 +34,7 @@ end
 
 class CoercionSealSplit < Literal::Struct
 	prop :name, String, reader: :public, &(
-		Literal::Coercion { |it| it.strip } >> Literal::Coercions::Immutable
+		Literal::Coercion(&:strip) >> Literal::Coercions::Immutable
 	)
 end
 
@@ -62,7 +62,7 @@ class CoercionContext < Literal::Struct
 	end
 
 	prop :composed, String, reader: :public, &(
-		Literal::Coercion { |it| tag(it) } >> proc { |it| tag(it) }
+		Literal::Coercion() { |it| tag(it) } >> proc { |it| tag(it) }
 	)
 
 	prop :sealed, String, reader: :public, &(

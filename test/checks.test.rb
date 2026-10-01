@@ -1813,17 +1813,20 @@ end
 
 # A single anonymous parameter — `it`, or a lone `_1` — reads the property the
 # failure is filed against, so the common one-property check needs no name.
-test "it reads the pinned property" do
-	klass = Class.new(Literal::Data) do
-		prop :min, Integer
+# `it` is only a block parameter from Ruby 3.4.
+if RUBY_VERSION >= "3.4"
+	test "it reads the pinned property" do
+		klass = Class.new(Literal::Data) do
+			prop :min, Integer
 
-		check(:min, "must not be negative") { !it.negative? } # rubocop:disable Lint/ItWithoutArgumentsInBlock
+			check(:min, "must not be negative") { !it.negative? } # rubocop:disable Lint/ItWithoutArgumentsInBlock
+		end
+
+		assert_equal 1, klass.new(min: 1).min
+
+		error = assert_raises(Literal::CheckError) { klass.new(min: -1) }
+		assert error.message.include?("must not be negative")
 	end
-
-	assert_equal 1, klass.new(min: 1).min
-
-	error = assert_raises(Literal::CheckError) { klass.new(min: -1) }
-	assert error.message.include?("must not be negative")
 end
 
 test "a lone _1 reads the pinned property" do
@@ -1838,15 +1841,18 @@ test "a lone _1 reads the pinned property" do
 end
 
 # `%{}` slots name reads, and the pinned property is the read.
-test "it fills the pinned property's message slot" do
-	klass = Class.new(Literal::Data) do
-		prop :min, Integer
+# `it` is only a block parameter from Ruby 3.4.
+if RUBY_VERSION >= "3.4"
+	test "it fills the pinned property's message slot" do
+		klass = Class.new(Literal::Data) do
+			prop :min, Integer
 
-		check(:min, "cannot be %{min}") { !it.negative? } # rubocop:disable Lint/ItWithoutArgumentsInBlock
+			check(:min, "cannot be %{min}") { !it.negative? } # rubocop:disable Lint/ItWithoutArgumentsInBlock
+		end
+
+		error = assert_raises(Literal::CheckError) { klass.new(min: -3) }
+		assert error.message.include?("cannot be -3")
 	end
-
-	error = assert_raises(Literal::CheckError) { klass.new(min: -3) }
-	assert error.message.include?("cannot be -3")
 end
 
 # A Symbol proc has no parameter names to read from, but it takes exactly one
@@ -1881,18 +1887,21 @@ end
 
 # A whole-value check pins no property, so an anonymous parameter has
 # nothing to read.
-test "it in a whole-value check is refused" do
-	error = assert_raises(Literal::ArgumentError) do
-		Class.new(Literal::Data) do
-			prop :name, String
-			check("…") { it.empty? } # rubocop:disable Lint/ItWithoutArgumentsInBlock
+# `it` is only a block parameter from Ruby 3.4.
+if RUBY_VERSION >= "3.4"
+	test "it in a whole-value check is refused" do
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(Literal::Data) do
+				prop :name, String
+				check("…") { it.empty? } # rubocop:disable Lint/ItWithoutArgumentsInBlock
+			end
 		end
-	end
 
-	assert_equal(
-		"A whole-value check has no property for an anonymous block to read, so name what it reads: write `{ |min:, max:| ... }`",
-		error.message
-	)
+		assert_equal(
+			"A whole-value check has no property for an anonymous block to read, so name what it reads: write `{ |min:, max:| ... }`",
+			error.message
+		)
+	end
 end
 
 # Beyond a lone `_1`, a numbered parameter is a second positional, which names

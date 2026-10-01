@@ -36,11 +36,10 @@ class Literal::Types::ConstraintType
 		result = true
 
 		@property_constraints.each do |a, t|
-			# We intentionally don’t return early here becuase it triggers an allocation.
-			if result && !(t === value.public_send(a))
-				result = false
-				break
-			end
+			# We intentionally don’t return or break early here becuase both trigger an allocation.
+			next unless result
+
+			result = false unless t === value.public_send(a)
 		rescue NoMethodError => e
 			raise unless e.name == a && e.receiver == value
 			return false

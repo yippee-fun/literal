@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "js_regex"
-
 include Literal::Types
 
 class SerializationPerson < Literal::Data
@@ -164,7 +162,7 @@ class SerializationUpcasingSerializer < SerializationRedactingSerializer
 	end
 end
 
-SerializationOpaque = Class.new
+class SerializationOpaque; end
 
 class SerializationOpaqueSerializer < Literal::Serializer
 	def type
@@ -493,11 +491,22 @@ test "string length range serialization" do
 	)
 end
 
-test "string regex pattern serialization" do
-	assert_equal(
-		Example.json_schema(_String(/\A[A-Z]+\z/)),
-		{ "type" => "string", "pattern" => "^[A-Z]+$" },
-	)
+if defined?(JsRegex)
+	test "string regex pattern serialization" do
+		assert_equal(
+			Example.json_schema(_String(/\A[A-Z]+\z/)),
+			{ "type" => "string", "pattern" => "^[A-Z]+$" },
+		)
+
+		assert_equal(
+			Example.json_schema(_Hash(_String(/\A[a-z_]+\z/), Integer)),
+			{
+				"type" => "object",
+				"propertyNames" => { "type" => "string", "pattern" => "^[a-z_]+$" },
+				"additionalProperties" => { "type" => "integer" },
+			},
+		)
+	end
 end
 
 test "json schema scalar type serialization" do
@@ -849,15 +858,6 @@ test "hash json schema" do
 			"type" => "object",
 			"propertyNames" => { "type" => "string", "enum" => ["small", "large"] },
 			"additionalProperties" => { "type" => "string" },
-		},
-	)
-
-	assert_equal(
-		Example.json_schema(_Hash(_String(/\A[a-z_]+\z/), Integer)),
-		{
-			"type" => "object",
-			"propertyNames" => { "type" => "string", "pattern" => "^[a-z_]+$" },
-			"additionalProperties" => { "type" => "integer" },
 		},
 	)
 
@@ -2731,7 +2731,7 @@ test "codecs reject encoded types that are not serializable" do
 	error = assert_raises(Literal::ArgumentError) { context.json_schema(SerializationOpaque) }
 
 	assert error.message.include?("there is no serializer for Object")
-	assert error.message.include?("SerializationOpaque → _Map({value: Object}) → Object")
+	assert error.message.include?("SerializationOpaque → _Map(#{{ value: Object }.inspect}) → Object")
 end
 
 test "coerced properties deserialize without re-running the coercion" do

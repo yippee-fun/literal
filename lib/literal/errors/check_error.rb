@@ -11,7 +11,7 @@ class Literal::CheckError < StandardError
 
 	# Trimmed by path rather than by count, because the paths that raise are
 	# different depths. Testing the path alone also catches the codegen's eval
-	# frames, whose path is "(eval at .../properties.rb:N)".
+	# frames, which are evaluated with properties.rb as their path.
 	def self.raise_trimmed(shape:, errors:)
 		error = new(shape:, errors:)
 		frames = caller_locations(1)
