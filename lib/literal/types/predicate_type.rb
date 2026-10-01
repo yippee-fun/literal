@@ -34,7 +34,7 @@ class Literal::Types::PredicateType
 		@block === other
 	ensure
 		state&.delete(key)
-		Thread.current[THREAD_KEY] = nil if state&.empty?
+		Thread.current[THREAD_KEY] = nil if state && state.empty?
 	end
 
 	freeze

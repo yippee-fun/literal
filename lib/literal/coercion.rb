@@ -83,9 +83,7 @@ class Literal::Coercion
 		end
 	end
 
-	private
-
-	def __proc_from__(callable)
+	private def __proc_from__(callable)
 		case callable
 		when ::Proc
 			callable
@@ -94,7 +92,7 @@ class Literal::Coercion
 		end
 	end
 
-	def __compose__(first, second)
+	private def __compose__(first, second)
 		# instance_exec, not call: coercions run against the object being
 		# constructed, and each stage should see that context the same way an
 		# uncomposed block would.

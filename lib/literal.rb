@@ -5,6 +5,7 @@ require_relative "literal/version"
 
 module Literal
 	OBJECT_ID = BasicObject.instance_method(:__id__)
+	EQUAL = BasicObject.instance_method(:equal?)
 	FROZEN = Kernel.instance_method(:frozen?)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
@@ -105,12 +106,12 @@ module Literal
 		end
 	end
 
-	def self.Coercion(&block)
-		Literal::Coercion.new(&block)
+	def self.Coercion(&)
+		Literal::Coercion.new(&)
 	end
 
-	def self.Seal(&block)
-		Literal::Seal.new(&block)
+	def self.Seal(&)
+		Literal::Seal.new(&)
 	end
 
 	def self.Array(type)
@@ -162,18 +163,27 @@ module Literal
 		end
 	end
 
+	# The guard is a flat stack of [type, value] pairs, kept between calls so a
+	# warm check doesn't allocate. It only ever holds the current descent, so
+	# scanning it is cheap.
 	def self.with_match_guard(type, value)
-		state = (Thread.current[:literal_match_state] ||= {})
-		key = [type.class, OBJECT_ID.bind_call(type), OBJECT_ID.bind_call(value)]
+		stack = (Thread.current[:literal_match_stack] ||= [])
 
-		return false if state[key]
+		i = 0
+		size = stack.size
+		while i < size
+			return false if EQUAL.bind_call(stack[i], type) && EQUAL.bind_call(stack[i + 1], value)
+			i += 2
+		end
 
-		added = true
-		state[key] = true
-		yield
-	ensure
-		state&.delete(key) if added
-		Thread.current[:literal_match_state] = nil if state&.empty?
+		stack.push(type, value)
+
+		begin
+			yield
+		ensure
+			stack.pop
+			stack.pop
+		end
 	end
 
 	# Like subtype?, but marks the check as descending into a component of a

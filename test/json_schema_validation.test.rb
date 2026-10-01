@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "js_regex"
 require "json_schemer"
 
 include Literal::Types

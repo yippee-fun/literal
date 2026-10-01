@@ -28,7 +28,9 @@ class Literal::Types::JSONDataType
 			# The match guard answers false on re-entry, so self-referential
 			# values are rejected rather than recursing forever.
 			Literal.with_match_guard(self, value) do
-				value.all? { |k, v| String === k && self === v }
+				# Hash#all? yields each pair as a new array; each_pair doesn't.
+				value.each_pair { |k, v| return false unless String === k && self === v }
+				true
 			end
 		when Array
 			Literal.with_match_guard(self, value) do

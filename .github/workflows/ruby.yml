@@ -33,7 +33,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-          bundler-args: --without development
       - name: Quickdraw tests
         run: bundle exec qt -t 1 "./test/**/*.test.rb"
   allocations_test:
@@ -50,7 +49,6 @@ jobs:
         with:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-          bundler-args: --without development
       - name: Test allocations
         run: bundle exec ./allocations_test.rb
   rubocop:
