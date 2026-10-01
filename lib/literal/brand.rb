@@ -18,7 +18,7 @@ class Literal::Brand
 		end
 
 		Literal.check(object, @type)
-		raise Literal::ArgumentError.new("Cannot brand immediate values.") if object in Literal::Immediate
+		raise Literal::ArgumentError.new("Cannot brand immediate values.") if Literal::Immediate === object
 
 		@objects[object] = object
 		object
