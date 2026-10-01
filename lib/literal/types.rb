@@ -579,7 +579,7 @@ module Literal::Types
 	NilableAnyType = _Nilable(AnyType::Instance)
 	NilableBooleanType = _Nilable(BooleanType::Instance)
 	NilableCallableType = _Nilable(CallableType)
-	NilableJSONDataType = _Nilable(JSONDataType)
+	NilableJSONDataType = _Nilable(JSONDataType::Instance)
 	NilableLambdaType = _Nilable(LambdaType)
 	NilableProcableType = _Nilable(ProcableType)
 end
