@@ -30,11 +30,22 @@ module RubyLsp
 				return unless owner
 				return unless :prop == name
 
-				args = arguments&.reject { |it| it.is_a?(Prism::KeywordHashNode) }
-				kwargs = arguments.find { |it| it.is_a?(Prism::KeywordHashNode) }&.elements.to_h do |element|
-					case element
-					in { key: Prism::SymbolNode[unescaped: String => key], value: value }
-						[key, value]
+				args = []
+				kwargs = {}
+
+				arguments&.each do |argument|
+					case argument
+					when Prism::KeywordHashNode
+						argument.elements.each do |element|
+							case element
+							in Prism::AssocNode[key: Prism::SymbolNode[unescaped: String => key], value:]
+								kwargs[key] = value
+							else
+								nil
+							end
+						end
+					else
+						args << argument
 					end
 				end
 
@@ -47,6 +58,7 @@ module RubyLsp
 
 					@listener.instance_exec do
 						@index.add(RubyIndexer::Entry::InstanceVariable.new(
+							@index.configuration,
 							"@#{prop_name}",
 							@uri,
 							RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
@@ -64,10 +76,12 @@ module RubyLsp
 					if kwargs["writer"] in Prism::SymbolNode[unescaped: "private" | "protected" | "public" => visibility]
 						@listener.add_method("#{prop_name}=", location, [
 							RubyIndexer::Entry::Signature.new([
-								RubyIndexer::Entry::RequiredParameter.new(name: "value"),
+								RubyIndexer::Entry::RequiredParameter.new(name: :value),
 							]),
 						], visibility: visibility.to_sym)
 					end
+				else
+					nil
 				end
 			end
 		end
