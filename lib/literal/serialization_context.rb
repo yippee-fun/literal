@@ -153,7 +153,7 @@ class Literal::SerializationContext
 	def serializable_type?(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		cached = @serializable_cache[type]
+		cached = cache_fetch(@serializable_cache, type)
 		return cached unless cached.nil?
 
 		result = serializable_type_within?(type, {}.compare_by_identity, @serializable_cache)
@@ -214,7 +214,7 @@ class Literal::SerializationContext
 	def object_shape(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		cached = @object_shape_cache[type]
+		cached = cache_fetch(@object_shape_cache, type)
 
 		if cached.nil?
 			cached = serializer_matching_type(type)&.object_shape(type) || false
@@ -236,7 +236,7 @@ class Literal::SerializationContext
 		return type.equal?(@type) if Literal::Serializer::SerializableType === type
 		return referenceable_type?(type) if stack.key?(type)
 
-		cached = seen[type]
+		cached = cache_fetch(seen, type)
 		return cached unless cached.nil?
 
 		serializer = serializer_matching_type(type)
@@ -313,7 +313,7 @@ class Literal::SerializationContext
 	end
 
 	private def serializer_matching_type(type)
-		cached = @serializer_cache[type]
+		cached = cache_fetch(@serializer_cache, type)
 
 		if cached.nil?
 			cached = @serializers.find { |it| it.handles_type?(type) } || false
@@ -331,6 +331,13 @@ class Literal::SerializationContext
 		else
 			{}.compare_by_identity
 		end
+	end
+
+	# Reading an immediate key returns nil on CRuby, but JRuby raises.
+	private def cache_fetch(cache, key)
+		cache[key]
+	rescue ArgumentError
+		nil
 	end
 
 	private def cache_store(cache, key, value)

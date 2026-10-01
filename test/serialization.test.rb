@@ -162,7 +162,7 @@ class SerializationUpcasingSerializer < SerializationRedactingSerializer
 	end
 end
 
-SerializationOpaque = Class.new
+class SerializationOpaque; end
 
 class SerializationOpaqueSerializer < Literal::Serializer
 	def type

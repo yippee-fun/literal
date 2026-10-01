@@ -331,7 +331,8 @@ module Literal::Properties
 	private def __define_literal_methods__(new_property)
 		code =	__generate_literal_methods__(new_property)
 		__literal_silence_redefinitions__(new_property) if new_property
-		__literal_extension__.module_eval(code)
+		# An explicit path, so every engine attributes these frames to Literal.
+		__literal_extension__.module_eval(code, __FILE__, __LINE__)
 	end
 
 	# Re-emitting a property's methods — a writer picking up a new check —
