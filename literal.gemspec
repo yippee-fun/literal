@@ -18,6 +18,7 @@ Gem::Specification.new do |spec|
 	spec.metadata["source_code_uri"] = "https://github.com/joeldrapper/literal"
 	spec.metadata["changelog_uri"] = "https://github.com/joeldrapper/literal/releases"
 	spec.metadata["funding_uri"] = "https://github.com/sponsors/joeldrapper"
+	spec.metadata["mailing_list_uri"]   = "https://www.rubyforum.org/tag/literal"
 
 	spec.files = Dir[
 		"README.md",
