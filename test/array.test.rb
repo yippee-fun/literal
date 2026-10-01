@@ -833,6 +833,19 @@ test "#[]= rejects other index forms" do
 	assert_equal array.to_a, [1, 2, 3]
 end
 
+test "#[]= with a range uses the bounds it checked" do
+	sneaky_range = Class.new(Range) do
+		def begin = 0
+		def end = 0
+	end
+
+	array = Literal::Array(Integer).new(1)
+
+	array[sneaky_range.new(5, 5)] = 9
+
+	assert_equal array.to_a, [9]
+end
+
 test "#insert rejects non-Integer indexes" do
 	array = Literal::Array(Integer).new(1, 2, 3)
 

@@ -182,9 +182,9 @@ class Literal::Array
 			__check_padding__(index)
 			@__value__[index] = value
 		when Range
-			__check_range_index__(index, "#[]=")
-			__check_padding__(index.begin || 0)
-			@__value__[index] = [value]
+			range = __integer_range__(index, "#[]=")
+			__check_padding__(range.begin || 0)
+			@__value__[range] = [value]
 			value
 		else
 			raise ArgumentError.new("Cannot assign to a Literal::Array with an index of #{index.inspect}. Use an Integer or a Range of Integers.")
@@ -833,11 +833,13 @@ class Literal::Array
 	end
 
 	# Ruby converts non-Integer range bounds with `to_int`, which we don't
-	# support, since we need to know the bounds to check for padding.
-	private def __check_range_index__(range, method)
-		case [range.begin, range.end]
-		in [Integer | nil, Integer | nil]
-			nil
+	# support, since we need to know the bounds to check for padding. We return
+	# a plain Range built from the bounds we checked, because a Range subclass
+	# could report different bounds from the ones `Array#[]=` actually uses.
+	private def __integer_range__(range, method)
+		case [range.begin, range.end, range.exclude_end?]
+		in [Integer | nil => first, Integer | nil => last, exclude_end]
+			::Range.new(first, last, exclude_end)
 		else
 			raise ArgumentError.new("Cannot call `#{method}` on a Literal::Array with a range of #{range.inspect}. Use a Range of Integers.")
 		end
