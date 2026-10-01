@@ -66,7 +66,7 @@ class Literal::Types::JSONDataType
 		when Literal::Types::ArrayType
 			Literal.subtype?(other.type, self, context:)
 		when Literal::Types::HashType
-			(Literal.subtype?(other.key_type, self, context:) && Literal.subtype?(other.value_type, self, context:))
+			Literal.subtype?(other.key_type, String, context:) && Literal.subtype?(other.value_type, self, context:)
 		when Literal::Types::ConstraintType
 			Literal.subtype?(other, Literal::Types._Float(finite?: Literal::Types._Truthy), context:) ||
 				other.object_constraints.any? { |type| self.>=(type, context:) }
