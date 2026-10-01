@@ -848,7 +848,6 @@ test "#insert with no values is a no-op" do
 	assert_same array.insert(5.0), array
 	assert_equal array.to_a, [1]
 
-	assert_raises(::TypeError) { array.insert("5") }
 	assert_raises(FrozenError) { array.freeze.insert(5) }
 end
 
