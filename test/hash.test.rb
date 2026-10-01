@@ -189,6 +189,36 @@ test "construction drops the input's default and default proc" do
 	end
 end
 
+test "construction stores a plain hash, leaving subclass overrides behind" do
+	subclass = Class.new(::Hash) do
+		def default=(_value)
+			raise "unreachable"
+		end
+
+		def to_h(&) = {}
+	end
+
+	input = subclass.new { |_, _| "nope" }
+	input["a"] = 1
+
+	hash = Literal::Hash(String, Integer).new(input)
+
+	assert_equal hash.__value__.class, ::Hash
+	assert_equal hash.to_h["zz"], nil
+	assert_equal hash.to_h { |key, value| [value, key] }, { 1 => "a" }
+end
+
+test "construction keeps identity comparison of keys" do
+	input = {}.compare_by_identity
+	input["a".dup] = 1
+	input["a".dup] = 2
+
+	hash = Literal::Hash(String, Integer).new(input)
+
+	assert hash.__value__.compare_by_identity?
+	assert_equal hash.size, 2
+end
+
 test "merging a hash with a default or default proc adopts only its entries" do
 	hash = Literal::Hash(String, Integer).new({ "a" => 1 })
 	other = Hash.new { |_, _| "nope" }.merge("b" => 2)

@@ -99,10 +99,7 @@ class Literal::Hash
 
 		@__key_type__ = key_type
 		@__value_type__ = value_type
-		@__value__ = value.dup
-		# `dup` carries over the input's default and default proc, which were
-		# never type checked. Assigning a nil default clears both.
-		@__value__.default = nil
+		@__value__ = __plain_copy__(value)
 		@__collection_type__ = collection_type
 	end
 
@@ -444,6 +441,15 @@ class Literal::Hash
 		else
 			raise ArgumentError.new("Cannot perform `#{method}` between a Literal::Hash and #{other.class.inspect}.")
 		end
+	end
+
+	# Copies the entries into a plain `Hash`. Unlike `dup`, this leaves behind
+	# the input's default and default proc, which were never type checked, and
+	# any subclass overrides, while keeping identity comparison of keys.
+	private def __plain_copy__(value)
+		copy = {}
+		copy.compare_by_identity if ::Hash.instance_method(:compare_by_identity?).bind_call(value)
+		copy.update(value)
 	end
 
 	private def inspect_generic
