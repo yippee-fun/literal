@@ -771,6 +771,83 @@ test "#insert checks values and padding" do
 	assert_equal array.to_a, [1, 2, 3, 4]
 end
 
+test "#[]= with a range assigns the value as a single element" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	array[0..1] = 5
+	assert_equal array.to_a, [5, 3]
+
+	array[1..] = 6
+	assert_equal array.to_a, [5, 6]
+
+	assert_raises(Literal::TypeError) { array[0..0] = "5" }
+	assert_raises(Literal::TypeError) { array[0..0] = [7] }
+	assert_equal array.to_a, [5, 6]
+end
+
+test "#[]= with a range doesn't splat the value" do
+	array = Literal::Array(Array).new([1])
+
+	array[0..0] = ["str"]
+	assert_equal array.to_a, [["str"]]
+
+	array[0..0] = []
+	assert_equal array.to_a, [[]]
+end
+
+test "#[]= with a range doesn't splat a tuple" do
+	tuple = Literal::Tuple(Integer, String)
+	array = Literal::Array(tuple).new(tuple.new(1, "a"))
+
+	array[0..0] = tuple.new(2, "b")
+
+	assert_equal array.to_a, [tuple.new(2, "b")]
+end
+
+test "#[]= with a range can't pad a non-nilable array with nils" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	array[3..3] = 4
+	assert_equal array.to_a, [1, 2, 3, 4]
+
+	assert_raises(Literal::TypeError) { array[6..6] = 9 }
+	assert_raises(Literal::TypeError) { array[6..] = 9 }
+	assert_equal array.to_a, [1, 2, 3, 4]
+end
+
+test "#[]= with a range pads a nilable array with nils" do
+	array = Literal::Array(_Nilable(Integer)).new(1)
+
+	array[3..3] = 2
+
+	assert_equal array.to_a, [1, nil, nil, 2]
+end
+
+test "#[]= rejects other index forms" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	assert_raises(ArgumentError) { array[5.0] = 9 }
+	assert_raises(ArgumentError) { array[0.0] = 9 }
+	assert_raises(ArgumentError) { array[5.0..5.0] = 9 }
+	assert_raises(ArgumentError) { array["0"] = 9 }
+	assert_equal array.to_a, [1, 2, 3]
+end
+
+test "#insert rejects non-Integer indexes" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	assert_raises(ArgumentError) { array.insert(5.0, 9) }
+	assert_raises(ArgumentError) { array.insert(1.0, 9) }
+	assert_equal array.to_a, [1, 2, 3]
+end
+
+test "#insert with no values is a no-op" do
+	array = Literal::Array(Integer).new(1)
+
+	assert_same array.insert(5), array
+	assert_equal array.to_a, [1]
+end
+
 test "#concat checks compatibility" do
 	array = Literal::Array(Numeric).new(1)
 
