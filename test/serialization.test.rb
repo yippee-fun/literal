@@ -3450,8 +3450,29 @@ test "consts serialize, deserialize and emit a const schema" do
 				"sides" => { "type" => "integer" },
 				"kind" => { "type" => "string", "const" => "shape" },
 			},
-			"required" => ["sides"],
+			"required" => ["sides", "kind"],
 			"additionalProperties" => false,
 		},
 	)
+end
+
+class SerializationConstSquare < Literal::Data
+	const :kind, :square
+	prop :size, Integer
+end
+
+class SerializationConstCircle < Literal::Data
+	const :kind, :circle
+	prop :size, Integer
+end
+
+test "consts tell apart the members of an untagged union" do
+	type = _Union(SerializationConstSquare, SerializationConstCircle)
+	circle = SerializationConstCircle.new(size: 1)
+	serialized = Example.serialize(circle, type:)
+
+	assert_equal serialized, { "size" => 1, "kind" => "circle" }
+	assert_equal Example.deserialize(serialized, type:), circle
+	assert_equal Example.deserialize({ "size" => 1, "kind" => "square" }, type:), SerializationConstSquare.new(size: 1)
+	assert_raises(Literal::ArgumentError) { Example.deserialize({ "size" => 1 }, type:) }
 end

@@ -815,9 +815,32 @@ test "consts are assigned at initialization and are not initializer parameters" 
 end
 
 test "a const value must be a frozen object, not nil or a Proc" do
-	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, +"unfrozen" } }
+	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, [:unfrozen] } }
 	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, nil } }
 	assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, -> { "example" } } }
+end
+
+test "a const string is interned rather than rejected when unfrozen" do
+	example = Class.new(Example) { const :kind, +"example", reader: :public }
+
+	assert example.new.kind.frozen?
+	assert_equal example.new.kind, "example"
+end
+
+test "a const module is matched by identity rather than by its instances" do
+	example = Class.new(Literal::Data) { const :kind, Class }
+
+	assert_equal example.new.kind, Class
+	assert_equal example.from_props(kind: Class).kind, Class
+	assert_raises(Literal::TypeError) { example.from_props(kind: String) }
+end
+
+test "a const value its own === rejects is matched by identity" do
+	pattern = /example/
+	example = Class.new(Literal::Data) { const :pattern, pattern }
+
+	assert_equal example.new.pattern, pattern
+	assert_equal example.from_props(pattern:).pattern, pattern
 end
 
 test "a const cannot have a writer or a coercion" do
