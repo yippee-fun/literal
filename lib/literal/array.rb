@@ -329,6 +329,13 @@ class Literal::Array
 	end
 
 	def insert(index, *values)
+		# Inserting nothing is a no-op that can't pad, so we defer entirely to
+		# Ruby, which still converts the index and checks for frozenness.
+		if values.empty?
+			@__value__.insert(index)
+			return self
+		end
+
 		unless Integer === index
 			raise ArgumentError.new("Cannot insert into a Literal::Array at #{index.inspect}. Use an Integer index.")
 		end
@@ -339,8 +346,7 @@ class Literal::Array
 			end
 		end
 
-		# Inserting nothing is a no-op, so it can't pad.
-		__check_padding__(index) unless values.empty?
+		__check_padding__(index)
 
 		@__value__.insert(index, *values)
 		self

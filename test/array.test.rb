@@ -845,7 +845,11 @@ test "#insert with no values is a no-op" do
 	array = Literal::Array(Integer).new(1)
 
 	assert_same array.insert(5), array
+	assert_same array.insert(5.0), array
 	assert_equal array.to_a, [1]
+
+	assert_raises(::TypeError) { array.insert("5") }
+	assert_raises(FrozenError) { array.freeze.insert(5) }
 end
 
 test "#concat checks compatibility" do
