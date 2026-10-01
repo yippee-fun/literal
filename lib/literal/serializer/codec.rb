@@ -71,12 +71,18 @@ class Literal::Serializer::Codec < Literal::Serializer
 		)
 	end
 
+	# Nested deserialization is not strict, and the context's final check only
+	# sees the decoded value — which is always of this codec's type — so the
+	# encoded value is checked here, before untrusted input reaches decode.
 	def deserialize(raw, type:)
 		serializer = encoded_serializer
+		value = serializer.deserialize(serializer.coerce(raw), type: encoded)
 
-		decode(
-			serializer.deserialize(serializer.coerce(raw), type: encoded),
-		)
+		unless encoded === value
+			raise Literal::ArgumentError, "Value #{raw.inspect} cannot be deserialized as #{type.inspect} (encoded as #{encoded.inspect})"
+		end
+
+		decode(value)
 	end
 
 	private def encoded
