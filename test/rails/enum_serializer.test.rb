@@ -40,13 +40,13 @@ test "the serializer is registered without a deprecation warning" do
 end
 
 test "an enum serializes to a hash" do
-	assert_equal ActiveJob::Arguments.serialize([SerializedColor::Red]), [
-{
+	payload = {
 		"_aj_serialized" => "Literal::Rails::EnumSerializer",
 		"class" => "SerializedColor",
 		"value" => 1,
-	},
-]
+	}
+
+	assert_equal ActiveJob::Arguments.serialize([SerializedColor::Red]), [payload]
 end
 
 test "an enum with integer values round-trips" do
@@ -66,28 +66,28 @@ test "enums nested in other arguments round-trip" do
 end
 
 test "deserializing an unknown value raises" do
+	payload = {
+		"_aj_serialized" => "Literal::Rails::EnumSerializer",
+		"class" => "SerializedColor",
+		"value" => 99,
+	}
+
 	error = assert_raises(ActiveJob::DeserializationError) do
-		ActiveJob::Arguments.deserialize([
-{
-			"_aj_serialized" => "Literal::Rails::EnumSerializer",
-			"class" => "SerializedColor",
-			"value" => 99,
-		},
-])
+		ActiveJob::Arguments.deserialize([payload])
 	end
 
 	assert KeyError === error.cause
 end
 
 test "deserializing a class that isn't an enum raises" do
+	payload = {
+		"_aj_serialized" => "Literal::Rails::EnumSerializer",
+		"class" => "String",
+		"value" => "foo",
+	}
+
 	error = assert_raises(ActiveJob::DeserializationError) do
-		ActiveJob::Arguments.deserialize([
-{
-			"_aj_serialized" => "Literal::Rails::EnumSerializer",
-			"class" => "String",
-			"value" => "foo",
-		},
-])
+		ActiveJob::Arguments.deserialize([payload])
 	end
 
 	assert ArgumentError === error.cause
