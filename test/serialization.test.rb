@@ -275,6 +275,36 @@ class SerializationWalletCodec < Literal::Serializer::Codec
 	end
 end
 
+class SerializationCents
+	attr_reader :cents
+
+	def initialize(cents)
+		@cents = cents
+	end
+
+	def ==(other)
+		self.class === other && cents == other.cents
+	end
+end
+
+class SerializationCentsCodec < Literal::Serializer::Codec
+	def type
+		SerializationCents
+	end
+
+	def encoded_type
+		Integer
+	end
+
+	def encode(value)
+		value.cents
+	end
+
+	def decode(value)
+		SerializationCents.new(value)
+	end
+end
+
 class SerializationBrokenCodec < Literal::Serializer::Codec
 	def type
 		SerializationOpaque
@@ -2720,6 +2750,51 @@ test "codecs must implement encode and decode" do
 	end
 
 	assert error.message.include?("must implement #decode(value)")
+end
+
+test "codecs reject raw values that do not match their encoded type" do
+	context = Literal::SerializationContext.new(SerializationCentsCodec)
+
+	assert_equal(context.json_schema(SerializationCents), { "type" => "integer" })
+	assert_equal(context.deserialize(100, type: SerializationCents), SerializationCents.new(100))
+
+	error = assert_raises(Literal::ArgumentError) do
+		context.deserialize("five", type: SerializationCents)
+	end
+
+	assert error.message.include?("Value \"five\" cannot be deserialized as")
+	assert error.message.include?("SerializationCents (encoded as Integer)")
+
+	assert_raises(Literal::ArgumentError) { context.deserialize({ "a" => 1 }, type: SerializationCents) }
+	assert_raises(Literal::ArgumentError) { context.deserialize(nil, type: SerializationCents) }
+	assert_raises(Literal::ArgumentError) { context.deserialize(1.5, type: SerializationCents) }
+end
+
+test "codecs reject nested raw values that do not match their encoded type" do
+	context = Literal::SerializationContext.new(SerializationCentsCodec)
+	type = _Array(SerializationCents)
+
+	assert_equal(context.deserialize([1, 2], type:), [SerializationCents.new(1), SerializationCents.new(2)])
+
+	assert_raises(Literal::ArgumentError) { context.deserialize([1, "five"], type:) }
+	assert_raises(Literal::ArgumentError) { context.deserialize([{ "a" => 1 }], type:) }
+	assert_raises(Literal::ArgumentError) { context.deserialize({ "a" => "five" }, type: _Map(a: SerializationCents)) }
+end
+
+test "codecs reject structured raw values that do not match their encoded type" do
+	context = Literal::SerializationContext.new(SerializationMoneyCodec, SerializationWalletCodec)
+
+	assert_raises(Literal::ArgumentError) do
+		context.deserialize({ "cents" => "five", "currency" => "USD" }, type: SerializationMoney)
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		context.deserialize({ "cents" => "five", "currency" => "USD" }, type: SerializationWallet)
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		context.deserialize([{ "cents" => 100, "currency" => 1 }], type: _Array(SerializationMoney))
+	end
 end
 
 test "codecs reject encoded types that are not serializable" do
