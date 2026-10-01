@@ -100,6 +100,9 @@ class Literal::Hash
 		@__key_type__ = key_type
 		@__value_type__ = value_type
 		@__value__ = value.dup
+		# `dup` carries over the input's default and default proc, which were
+		# never type checked. Assigning a nil default clears both.
+		@__value__.default = nil
 		@__collection_type__ = collection_type
 	end
 
@@ -335,7 +338,11 @@ class Literal::Hash
 		__with__(@__value__.slice(*keys))
 	end
 
-	def to_h
+	# Returns a detached plain copy. Given a block, maps each pair to a new pair
+	# like `Hash#to_h`.
+	def to_h(&block)
+		return @__value__.to_h(&block) if block
+
 		@__value__.dup
 	end
 

@@ -174,6 +174,30 @@ test "a backing hash's default value never leaks through lookups" do
 	assert_equal hash.dig(:b, :deeper), Literal::Undefined
 end
 
+test "construction drops the input's default and default proc" do
+	from_proc = Literal::Hash(String, Integer).new(Hash.new { |_, _| "nope" })
+	from_value = Literal::Hash(String, Integer).coerce(Hash.new(0))
+
+	[from_proc, from_value].each do |hash|
+		assert_equal hash.to_h.default, nil
+		assert_equal hash.to_h.default_proc, nil
+		assert_equal hash.to_h["x"], nil
+		assert_equal hash.to_hash["x"], nil
+		assert_equal hash.merge({ "a" => 1 }).to_h["zz"], nil
+		assert_equal hash.merge!({ "a" => 1 }) { |_, old, _| old }.to_h["zz"], nil
+		assert_equal hash.compact.to_h["zz"], nil
+	end
+end
+
+test "merging a hash with a default or default proc adopts only its entries" do
+	hash = Literal::Hash(String, Integer).new({ "a" => 1 })
+	other = Hash.new { |_, _| "nope" }.merge("b" => 2)
+
+	assert_equal hash.merge(other).to_h["zz"], nil
+	assert_equal hash.merge!(other).to_h["zz"], nil
+	assert_equal hash.to_h, { "a" => 1, "b" => 2 }
+end
+
 test "#each yields pairs and returns self" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
 	yielded = []
@@ -206,6 +230,16 @@ test "#to_h and #to_hash return detached plain copies, enabling double-splats" d
 
 	kwargs = -> (**kw) { kw }
 	assert_equal kwargs.call(**hash), { a: 1 }
+end
+
+test "#to_h with a block maps pairs into a plain hash" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+
+	inverted = hash.to_h { |key, value| [value, key] }
+
+	assert ::Hash === inverted
+	assert_equal inverted, { 1 => :a, 2 => :b }
+	assert_equal hash.to_h, { a: 1, b: 2 }
 end
 
 test "#inspect" do
