@@ -3596,3 +3596,17 @@ test "codec dispatch follows properties added to the shapes it encodes to" do
 
 	assert_raises(Literal::ArgumentError) { context.deserialize(serialized, type: wrapper) }
 end
+
+test "serializability follows properties added while the walk materializes a deferred type" do
+	context = Literal::SerializationContext.new
+	shape = Class.new(Literal::Data) { prop :name, String }
+
+	assert context.serializable_type?(shape)
+
+	deferred = _Deferred do
+		shape.prop :thing, Object
+		shape
+	end
+
+	refute context.serializable_type?(_Array(deferred))
+end

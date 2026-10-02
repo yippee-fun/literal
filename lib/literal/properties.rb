@@ -9,7 +9,8 @@ module Literal::Properties
 	# on them. Facts about a type can reach the properties of any shape it refers
 	# to, so a prop added to one of these advances the generation, and caches
 	# hold their entries only within a generation.
-	OBSERVED = defined?(ObjectSpace::WeakKeyMap) ? ObjectSpace::WeakKeyMap.new : {}.compare_by_identity
+	# By identity, and weak on every engine, so ad-hoc shapes can be collected.
+	OBSERVED = ObjectSpace::WeakMap.new
 	@generation = 0
 	@generation_mutex = Mutex.new
 

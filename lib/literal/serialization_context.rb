@@ -153,13 +153,9 @@ class Literal::SerializationContext
 	def serializable_type?(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		generation = Literal::Properties.generation
-		cached = cache_fetch(@serializable_cache, type, generation)
-		return cached unless cached.nil?
-
-		result = serializable_type_within?(type, {}.compare_by_identity, generation)
-		cache_store(@serializable_cache, type, false, generation) unless result
-		result
+		cached(@serializable_cache, type) do |generation|
+			serializable_type_within?(type, {}.compare_by_identity, generation)
+		end
 	end
 
 	# Builds a descriptive error for a type that failed serializable_type?, by
@@ -215,15 +211,9 @@ class Literal::SerializationContext
 	def object_shape(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		generation = Literal::Properties.generation
-		cached = cache_fetch(@object_shape_cache, type, generation)
-
-		if cached.nil?
-			cached = serializer_matching_type(type)&.object_shape(type) || false
-			cache_store(@object_shape_cache, type, cached, generation)
-		end
-
-		cached || nil
+		cached(@object_shape_cache, type) do
+			serializer_matching_type(type)&.object_shape(type) || false
+		end || nil
 	end
 
 	def build_json_schema(type, generator:)
@@ -315,18 +305,30 @@ class Literal::SerializationContext
 	end
 
 	private def serializer_matching_type(type)
-		generation = Literal::Properties.generation
-		cached = cache_fetch(@serializer_cache, type, generation)
-
-		if cached.nil?
+		cached(@serializer_cache, type) do
 			# Every serializer call on a shape follows its dispatch here, so this
 			# observes it before anything derives a fact from its properties.
 			Literal::Properties.observe(type) if Literal::Properties === type
-			cached = @serializers.find { |it| it.handles_type?(type) } || false
-			cache_store(@serializer_cache, type, cached, generation)
-		end
+			@serializers.find { |it| it.handles_type?(type) } || false
+		end || nil
+	end
 
-		cached || nil
+	# The cached value for key, or the block's value, computed with the shape
+	# generation it is labelled with. Materializing a deferred type can add
+	# properties, so a value computed across a generation change is computed
+	# again rather than answered from shapes that have since changed.
+	private def cached(cache, key)
+		generation = Literal::Properties.generation
+		value = cache_fetch(cache, key, generation)
+		return value unless value.nil?
+
+		while true
+			value = yield generation
+			current = Literal::Properties.generation
+			return cache_store(cache, key, value, generation) if current == generation
+
+			generation = current
+		end
 	end
 
 	# Weakly keyed where the engine supports it, so ad-hoc types can be
