@@ -153,11 +153,12 @@ class Literal::SerializationContext
 	def serializable_type?(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		cached = cache_fetch(@serializable_cache, type)
+		generation = Literal::Properties.generation
+		cached = cache_fetch(@serializable_cache, type, generation)
 		return cached unless cached.nil?
 
-		result = serializable_type_within?(type, {}.compare_by_identity, @serializable_cache)
-		cache_store(@serializable_cache, type, false) unless result
+		result = serializable_type_within?(type, {}.compare_by_identity, generation)
+		cache_store(@serializable_cache, type, false, generation) unless result
 		result
 	end
 
@@ -214,11 +215,12 @@ class Literal::SerializationContext
 	def object_shape(type)
 		type = type.materialize if type in Literal::Types::DeferredType
 
-		cached = cache_fetch(@object_shape_cache, type)
+		generation = Literal::Properties.generation
+		cached = cache_fetch(@object_shape_cache, type, generation)
 
 		if cached.nil?
 			cached = serializer_matching_type(type)&.object_shape(type) || false
-			cache_store(@object_shape_cache, type, cached)
+			cache_store(@object_shape_cache, type, cached, generation)
 		end
 
 		cached || nil
@@ -228,7 +230,7 @@ class Literal::SerializationContext
 		serializer_for_type(type).json_schema(type, generator:)
 	end
 
-	private def serializable_type_within?(type, stack, seen)
+	private def serializable_type_within?(type, stack, generation)
 		type = type.materialize if type in Literal::Types::DeferredType
 
 		# Only this context's own aggregate type is trivially serializable;
@@ -236,19 +238,19 @@ class Literal::SerializationContext
 		return type.equal?(@type) if Literal::Serializer::SerializableType === type
 		return referenceable_type?(type) if stack.key?(type)
 
-		cached = cache_fetch(seen, type)
+		cached = cache_fetch(@serializable_cache, type, generation)
 		return cached unless cached.nil?
 
 		serializer = serializer_matching_type(type)
 		return false unless serializer
 
 		stack[type] = true
-		result = serializer.child_types(type).all? { |child| serializable_type_within?(child, stack, seen) }
+		result = serializer.child_types(type).all? { |child| serializable_type_within?(child, stack, generation) }
 		stack.delete(type)
 
 		# Only positive results are safe to remember from mid-walk: a negative
 		# may depend on the current stack, but success never does.
-		cache_store(seen, type, true) if result
+		cache_store(@serializable_cache, type, true, generation) if result
 		result
 	end
 
@@ -313,11 +315,15 @@ class Literal::SerializationContext
 	end
 
 	private def serializer_matching_type(type)
-		cached = cache_fetch(@serializer_cache, type)
+		generation = Literal::Properties.generation
+		cached = cache_fetch(@serializer_cache, type, generation)
 
 		if cached.nil?
+			# Every serializer call on a shape follows its dispatch here, so this
+			# observes it before anything derives a fact from its properties.
+			Literal::Properties.observe(type) if Literal::Properties === type
 			cached = @serializers.find { |it| it.handles_type?(type) } || false
-			cache_store(@serializer_cache, type, cached)
+			cache_store(@serializer_cache, type, cached, generation)
 		end
 
 		cached || nil
@@ -333,17 +339,20 @@ class Literal::SerializationContext
 		end
 	end
 
+	# Entries are labelled with the shape generation read before computing
+	# them, and an entry from any other generation reads as a miss.
 	# Reading an immediate key returns nil on CRuby, but JRuby raises.
-	private def cache_fetch(cache, key)
-		cache[key]
+	private def cache_fetch(cache, key, generation)
+		entry = cache[key]
+		entry[1] if entry && generation == entry[0]
 	rescue ArgumentError
 		nil
 	end
 
-	private def cache_store(cache, key, value)
+	private def cache_store(cache, key, value, generation)
 		@cache_mutex.synchronize do
 			cache.clear if Hash === cache && cache.size >= CacheLimit
-			cache[key] = value
+			cache[key] = [generation, value].freeze
 		end
 
 		value

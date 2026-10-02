@@ -92,10 +92,10 @@ class Literal::Serializer::Codec < Literal::Serializer
 	# The serializer the context would pick for the encoded type. Only when
 	# that would be this codec itself does dispatch resume after it, so a
 	# codec whose encoded type still matches it cannot recurse into itself.
+	# Not memoized: the pick can change with the properties of shapes the
+	# encoded type refers to, and the context's own cache tracks that.
 	private def encoded_serializer
-		@encoded_serializer ||= begin
-			serializer = @context.serializer_for_type(encoded)
-			serializer.equal?(self) ? super_serializer(encoded) : serializer
-		end
+		serializer = @context.serializer_for_type(encoded)
+		serializer.equal?(self) ? super_serializer(encoded) : serializer
 	end
 end
