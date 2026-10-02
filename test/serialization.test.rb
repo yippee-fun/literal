@@ -3502,3 +3502,111 @@ test "union of boolean consts serializes as a boolean" do
 	assert_equal Example.deserialize(false, type:), false
 	assert_equal Example.json_schema(type), { "type" => "boolean" }
 end
+
+test "union dispatch sees properties added after the union was classified" do
+	context = Literal::SerializationContext.new
+
+	field = Class.new(Literal::Data) do
+		prop :object, _Union("field")
+		prop :name, String
+	end
+
+	section = Class.new(Literal::Data) do
+		prop :object, _Union("section")
+		prop :title, String
+	end
+
+	items = _Array(_Union(field, section))
+
+	assert context.property_kind === items
+
+	section.prop :items, items
+
+	inner = section.new(object: "section", title: "inner", items: [])
+	outer = section.new(object: "section", title: "outer", items: [field.new(object: "field", name: "name"), inner])
+	serialized = context.serialize(outer, type: section)
+
+	assert_equal context.deserialize(serialized, type: section), outer
+end
+
+test "serializability follows properties added after the type was checked" do
+	context = Literal::SerializationContext.new
+	shape = Class.new(Literal::Data) { prop :name, String }
+
+	assert context.serializable_type?(shape)
+	assert context.serializable_type?(_Array(shape))
+
+	shape.prop :thing, Object
+
+	refute context.serializable_type?(shape)
+	refute context.serializable_type?(_Array(shape))
+end
+
+test "union naturalness follows properties added after the union was classified" do
+	context = Literal::SerializationContext.new
+	a = Class.new(Literal::Data) { prop :x, String }
+	b = Class.new(Literal::Data) { prop :x, String }
+	union = _Union(a, b)
+
+	refute context.serializer_for?(union)
+
+	b.prop :y, String
+
+	assert context.serializer_for?(union)
+
+	a.prop :y, _Optional(String)
+
+	refute context.serializer_for?(union)
+end
+
+test "a slice checked while it is built follows the properties it gains" do
+	context = Literal::SerializationContext.new
+	base = Class.new(Literal::Data)
+	origin = Class.new(base) do
+		prop :thing, Object
+		prop :name, String
+	end
+
+	base.define_singleton_method(:inherited) do |subclass|
+		super(subclass)
+		context.serializable_type?(subclass)
+	end
+
+	refute context.serializable_type?(origin.slice(:thing))
+end
+
+test "codec dispatch follows properties added to the shapes it encodes to" do
+	empty = Class.new(Literal::Data)
+	named = Class.new(Literal::Data) { prop :name, String }
+	wrapper = Struct.new(:value)
+	encoded = _Union(empty, named)
+
+	codec = Class.new(Literal::Serializer::Codec) do
+		define_method(:type) { wrapper }
+		define_method(:encoded_type) { encoded }
+		define_method(:decode) { |value| wrapper.new(value) }
+
+		def encode(value) = value.value
+	end
+
+	context = Literal::SerializationContext.new(codec)
+	serialized = context.serialize(wrapper.new(named.new(name: "n")), type: wrapper)
+
+	empty.prop? :name, String
+
+	assert_raises(Literal::ArgumentError) { context.deserialize(serialized, type: wrapper) }
+end
+
+test "serializability follows properties added while the walk materializes a deferred type" do
+	context = Literal::SerializationContext.new
+	shape = Class.new(Literal::Data) { prop :name, String }
+
+	assert context.serializable_type?(shape)
+
+	deferred = _Deferred do
+		shape.prop :thing, Object
+		shape
+	end
+
+	refute context.serializable_type?(_Array(deferred))
+end
