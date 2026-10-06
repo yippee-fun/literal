@@ -5,6 +5,27 @@ module Literal::Properties
 
 	NO_CHECKS = [].freeze
 
+	# Shapes a cache has derived facts from — a serialization context dispatching
+	# on them. Facts about a type can reach the properties of any shape it refers
+	# to, so a prop added to one of these advances the generation, and caches
+	# hold their entries only within a generation.
+	# By identity, and weak on every engine, so ad-hoc shapes can be collected.
+	OBSERVED = ObjectSpace::WeakMap.new
+	@generation = 0
+	@generation_mutex = Mutex.new
+
+	def self.generation
+		@generation
+	end
+
+	def self.observe(shape)
+		@generation_mutex.synchronize { OBSERVED[shape] = true }
+	end
+
+	def self.changed(shape)
+		@generation_mutex.synchronize { @generation += 1 if OBSERVED.key?(shape) }
+	end
+
 	module DocString
 		# @!method initialize(...)
 	end
@@ -261,9 +282,7 @@ module Literal::Properties
 			seal:,
 		)
 
-		literal_properties << property
-		__define_literal_methods__(property)
-		include(__literal_extension__)
+		__literal_add_property__(property)
 
 		name
 	end
@@ -291,11 +310,7 @@ module Literal::Properties
 				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
 			end
 
-			sliced.each do |property|
-				literal_properties << property
-				__define_literal_methods__(property)
-				include(__literal_extension__)
-			end
+			sliced.each { |property| __literal_add_property__(property) }
 		end.tap { |projection| projection.__send__(:__literal_slice_checks__, self, names) }
 	end
 
@@ -326,6 +341,15 @@ module Literal::Properties
 
 	private def __literal_property_class__
 		Literal::Property
+	end
+
+	private def __literal_add_property__(property)
+		literal_properties << property
+		# After the change, so an entry labelled with the new generation was
+		# computed from it.
+		Literal::Properties.changed(self)
+		__define_literal_methods__(property)
+		include(__literal_extension__)
 	end
 
 	private def __define_literal_methods__(new_property)
