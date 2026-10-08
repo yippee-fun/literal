@@ -227,3 +227,16 @@ test "seals run at construction but not when marshal loading" do
 	assert b.tags.frozen?
 	assert_equal b, a
 end
+
+test "a non-public reader keeps hash, == and eql? public" do
+	example = Class.new(Literal::Struct) do
+		prop :a, Integer
+		prop :b, Integer, reader: :private
+	end
+
+	assert_equal example.new(a: 1, b: 2), example.new(a: 1, b: 2)
+	assert example.new(a: 1, b: 2).eql?(example.new(a: 1, b: 2))
+	assert_equal example.new(a: 1, b: 2).hash, example.new(a: 1, b: 2).hash
+	refute example.new(a: 1, b: 2).respond_to?(:b)
+	assert example.new(a: 1, b: 2).respond_to?(:a)
+end
