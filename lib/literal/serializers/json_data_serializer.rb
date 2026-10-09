@@ -19,24 +19,11 @@ class Literal::JSONDataSerializer < Literal::Serializer
 		true
 	end
 
-	# JSON data is passed through, but its objects are sorted by key at every
-	# depth, like every other serialized object. Arrays keep their order.
 	def serialize(value, type:)
-		sort_keys(value)
+		value
 	end
 
 	def deserialize(raw, type:)
 		raw
-	end
-
-	private def sort_keys(value)
-		case value
-		when Hash
-			value.sort_by { |key, _| key }.to_h { |key, item| [key, sort_keys(item)] }
-		when Array
-			value.map { |item| sort_keys(item) }
-		else
-			value
-		end
 	end
 end

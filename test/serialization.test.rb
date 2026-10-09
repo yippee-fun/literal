@@ -3732,3 +3732,58 @@ test "payloads serialized before sorting still deserialize" do
 	assert_equal(Example.deserialize([[3, "c"], [1, "a"]], type: _Hash(Integer, String)), { 1 => "a", 3 => "c" })
 	assert_equal(Example.deserialize({ "zebra" => 1, "apple" => 2 }, type: _Map(zebra: Integer, apple: Integer)), { zebra: 1, apple: 2 })
 end
+
+class SerializationNestedPayload
+	def initialize(payload)
+		@payload = payload
+	end
+
+	attr_reader :payload
+end
+
+class SerializationNestedPayloadSerializer < Literal::Serializer
+	def type
+		_Class(SerializationNestedPayload)
+	end
+
+	def handles_type?(type)
+		type == SerializationNestedPayload
+	end
+
+	def value_type(value)
+		SerializationNestedPayload if SerializationNestedPayload === value
+	end
+
+	def serialize(value, type:)
+		{ "payload" => value.payload }
+	end
+
+	def deserialize(raw, type:)
+		SerializationNestedPayload.new(raw["payload"])
+	end
+end
+
+test "nested objects returned by custom serializers are sorted" do
+	context = Literal::SerializationContext.new(SerializationNestedPayloadSerializer)
+
+	assert_equal(
+		JSON.generate(context.serialize(SerializationNestedPayload.new({ "z" => [{ "b" => 1, "a" => 2 }], "a" => 1 }), type: SerializationNestedPayload)),
+		'{"payload":{"a":1,"z":[{"a":2,"b":1}]}}',
+	)
+
+	assert_equal(
+		JSON.generate(
+			context.serialize(
+				Set[SerializationNestedPayload.new({ "z" => 1, "a" => 2 }), SerializationNestedPayload.new({ "a" => 1 })],
+				type: _Set(SerializationNestedPayload),
+			),
+		),
+		'[{"payload":{"a":1}},{"payload":{"a":2,"z":1}}]',
+	)
+end
+
+test "sets of deeply nested json data serialize" do
+	deep = 150.times.reduce([]) { |inner, _| [inner] }
+
+	assert_equal(Example.serialize(Set[deep, [1]], type: _Set(_JSONData)).size, 2)
+end

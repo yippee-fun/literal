@@ -118,14 +118,29 @@ class Literal::Serializer
 		raw
 	end
 
+	# Sorts the keys of every object within serialized JSON data, at every
+	# depth. Arrays keep their order.
+	def self.sort_keys(value)
+		case value
+		when Hash
+			value.sort_by { |key, _| key }.to_h { |key, item| [key, sort_keys(item)] }
+		when Array
+			value.map { |item| sort_keys(item) }
+		else
+			value
+		end
+	end
+
 	# Sorts serialized elements whose order carries no meaning — set members
 	# and hash entry pairs — by their canonical JSON encoding, so they
-	# serialize predictably regardless of insertion order. Elements are
-	# already serialized, so any objects within them are already sorted.
+	# serialize predictably regardless of insertion order. JSON data has no
+	# nesting limit, so neither does the encoding.
 	private def sort_canonically(elements)
 		return elements if elements.size < 2
 
-		elements.sort_by { |element| JSON.generate(element) }
+		elements.sort_by do |element|
+			JSON.generate(Literal::Serializer.sort_keys(element), max_nesting: false)
+		end
 	end
 
 	private def json_type_for(type)
