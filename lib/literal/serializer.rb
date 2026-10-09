@@ -139,8 +139,36 @@ class Literal::Serializer
 		return elements if elements.size < 2
 
 		elements.sort_by do |element|
-			JSON.generate(Literal::Serializer.sort_keys(element), max_nesting: false)
+			JSON.generate(encodable_sort_key(Literal::Serializer.sort_keys(element)), max_nesting: false)
 		end
+	end
+
+	# JSON data admits strings in any encoding, but JSON only encodes UTF-8.
+	# For the sort key alone, strings are transcoded to UTF-8, and those that
+	# can't be stand in as a NUL-prefixed hex dump of their bytes.
+	private def encodable_sort_key(value)
+		case value
+		when String
+			encodable_sort_key_string(value)
+		when Hash
+			value.to_h { |key, item| [encodable_sort_key_string(key), encodable_sort_key(item)] }
+		when Array
+			value.map { |item| encodable_sort_key(item) }
+		else
+			value
+		end
+	end
+
+	private def encodable_sort_key_string(string)
+		utf8 = if Encoding::BINARY == string.encoding
+			string.dup.force_encoding(Encoding::UTF_8)
+		else
+			string.encode(Encoding::UTF_8)
+		end
+
+		utf8.valid_encoding? ? utf8 : "\0#{string.unpack1('H*')}"
+	rescue EncodingError
+		"\0#{string.unpack1('H*')}"
 	end
 
 	private def json_type_for(type)

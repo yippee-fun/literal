@@ -3787,3 +3787,12 @@ test "sets of deeply nested json data serialize" do
 
 	assert_equal(Example.serialize(Set[deep, [1]], type: _Set(_JSONData)).size, 2)
 end
+
+test "sets and entry pairs of non-UTF-8 strings serialize" do
+	binary = (+"\xFF").force_encoding(Encoding::BINARY)
+
+	# Strings JSON can't encode sort as a NUL-prefixed hex dump of their bytes.
+	assert_equal(Example.serialize(Set["ok", binary], type: _Set(String)), [binary, "ok"])
+	assert_equal(Example.serialize(Set[binary, "ok"], type: _Set(String)), [binary, "ok"])
+	assert_equal(Example.serialize({ [binary] => 1, ["ok"] => 2 }, type: _Hash(_Array(String), Integer)), [[[binary], 1], [["ok"], 2]])
+end
