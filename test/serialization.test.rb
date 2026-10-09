@@ -3791,8 +3791,38 @@ end
 test "sets and entry pairs of non-UTF-8 strings serialize" do
 	binary = (+"\xFF").force_encoding(Encoding::BINARY)
 
-	# Strings JSON can't encode sort as a NUL-prefixed hex dump of their bytes.
-	assert_equal(Example.serialize(Set["ok", binary], type: _Set(String)), [binary, "ok"])
-	assert_equal(Example.serialize(Set[binary, "ok"], type: _Set(String)), [binary, "ok"])
-	assert_equal(Example.serialize({ [binary] => 1, ["ok"] => 2 }, type: _Hash(_Array(String), Integer)), [[[binary], 1], [["ok"], 2]])
+	# Strings JSON can't encode sort after those it can.
+	assert_equal(Example.serialize(Set["ok", binary], type: _Set(String)), ["ok", binary])
+	assert_equal(Example.serialize(Set[binary, "ok"], type: _Set(String)), ["ok", binary])
+	assert_equal(Example.serialize({ [binary] => 1, ["ok"] => 2 }, type: _Hash(_Array(String), Integer)), [[["ok"], 2], [[binary], 1]])
+
+	other = (+"\xFE").force_encoding(Encoding::BINARY)
+
+	assert_equal(
+		Example.serialize(Set[binary, other], type: _Set(String)),
+		Example.serialize(Set[other, binary], type: _Set(String)),
+	)
+end
+
+class SerializationInfinitePayloadSerializer < SerializationNestedPayloadSerializer
+	def serialize(value, type:)
+		Float::INFINITY
+	end
+end
+
+test "invalid output from custom serializers in sets still fails the strict check" do
+	context = Literal::SerializationContext.new(SerializationInfinitePayloadSerializer)
+
+	assert_raises(Literal::ArgumentError) do
+		context.serialize(Set[SerializationNestedPayload.new(1), SerializationNestedPayload.new(2)], type: _Set(SerializationNestedPayload))
+	end
+end
+
+test "json data in identity hashes keeps every entry" do
+	data = {}.compare_by_identity
+	data[+"b"] = 1
+	data[+"a"] = 2
+	data[+"a"] = 3
+
+	assert_equal(Example.serialize(data, type: _JSONData).to_a, [["a", 2], ["a", 3], ["b", 1]])
 end

@@ -123,7 +123,14 @@ class Literal::Serializer
 	def self.sort_keys(value)
 		case value
 		when Hash
-			value.sort_by { |key, _| key }.to_h { |key, item| [key, sort_keys(item)] }
+			if value.compare_by_identity?
+				# Identity hashes can repeat a key, so ties keep insertion order.
+				sorted = {}.compare_by_identity
+				value.each_with_index.sort_by { |(key, _), index| [key, index] }.each { |(key, item), _| sorted[key] = sort_keys(item) }
+				sorted
+			else
+				value.sort_by { |key, _| key }.to_h { |key, item| [key, sort_keys(item)] }
+			end
 		when Array
 			value.map { |item| sort_keys(item) }
 		else
@@ -133,42 +140,32 @@ class Literal::Serializer
 
 	# Sorts serialized elements whose order carries no meaning — set members
 	# and hash entry pairs — by their canonical JSON encoding, so they
-	# serialize predictably regardless of insertion order. JSON data has no
-	# nesting limit, so neither does the encoding.
+	# serialize predictably regardless of insertion order. Elements JSON can't
+	# encode sort after those it can, and ties break on the elements' Marshal
+	# bytes, so the order is total.
 	private def sort_canonically(elements)
 		return elements if elements.size < 2
 
-		elements.sort_by do |element|
-			JSON.generate(encodable_sort_key(Literal::Serializer.sort_keys(element)), max_nesting: false)
-		end
+		elements
+			.map { |element| [canonical_sort_key(element), element] }
+			.sort { |(a_key, a), (b_key, b)| (a_key <=> b_key).nonzero? || (marshal_sort_key(a) <=> marshal_sort_key(b)) }
+			.map(&:last)
 	end
 
-	# JSON data admits strings in any encoding, but JSON only encodes UTF-8.
-	# For the sort key alone, strings are transcoded to UTF-8, and those that
-	# can't be stand in as a NUL-prefixed hex dump of their bytes.
-	private def encodable_sort_key(value)
-		case value
-		when String
-			encodable_sort_key_string(value)
-		when Hash
-			value.to_h { |key, item| [encodable_sort_key_string(key), encodable_sort_key(item)] }
-		when Array
-			value.map { |item| encodable_sort_key(item) }
-		else
-			value
-		end
+	# Elements haven't been validated yet — the strict check runs on the
+	# finished payload — so this must not raise on invalid data, leaving that
+	# check to report it. JSON data has no nesting limit, so neither does the
+	# encoding.
+	private def canonical_sort_key(element)
+		[0, JSON.generate(Literal::Serializer.sort_keys(element), max_nesting: false)]
+	rescue JSON::JSONError, EncodingError, ArgumentError
+		[1, ""]
 	end
 
-	private def encodable_sort_key_string(string)
-		utf8 = if Encoding::BINARY == string.encoding
-			string.dup.force_encoding(Encoding::UTF_8)
-		else
-			string.encode(Encoding::UTF_8)
-		end
-
-		utf8.valid_encoding? ? utf8 : "\0#{string.unpack1('H*')}"
-	rescue EncodingError
-		"\0#{string.unpack1('H*')}"
+	private def marshal_sort_key(element)
+		Marshal.dump(Literal::Serializer.sort_keys(element))
+	rescue TypeError, ArgumentError
+		""
 	end
 
 	private def json_type_for(type)
