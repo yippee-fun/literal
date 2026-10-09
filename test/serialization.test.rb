@@ -3826,3 +3826,45 @@ test "json data in identity hashes keeps every entry" do
 
 	assert_equal(Example.serialize(data, type: _JSONData).to_a, [["a", 2], ["a", 3], ["b", 1]])
 end
+
+test "sets of strings neither JSON nor Marshal can encode serialize the same in any order" do
+	a = (+"\xFF").force_encoding(Encoding::BINARY)
+	b = (+"\xFE").force_encoding(Encoding::BINARY)
+	[a, b].each { |string| string.define_singleton_method(:singleton) { nil } }
+
+	assert_equal(
+		Example.serialize(Set[a, b], type: _Set(String)),
+		Example.serialize(Set[b, a], type: _Set(String)),
+	)
+end
+
+class SerializationRaisingJSON
+	def to_json(*) = raise("boom")
+end
+
+class SerializationRaisingPayloadSerializer < SerializationNestedPayloadSerializer
+	def serialize(value, type:)
+		SerializationRaisingJSON.new
+	end
+end
+
+test "custom serializer output whose hooks raise still fails the strict check" do
+	context = Literal::SerializationContext.new(SerializationRaisingPayloadSerializer)
+
+	assert_raises(Literal::ArgumentError) do
+		context.serialize(Set[SerializationNestedPayload.new(1), SerializationNestedPayload.new(2)], type: _Set(SerializationNestedPayload))
+	end
+end
+
+test "identity hashes with repeated keys serialize the same in any order" do
+	first = {}.compare_by_identity
+	first[+"a"] = 1
+	first[+"a"] = 2
+
+	second = {}.compare_by_identity
+	second[+"a"] = 2
+	second[+"a"] = 1
+
+	assert_equal(Example.serialize(first, type: _JSONData).to_a, [["a", 1], ["a", 2]])
+	assert_equal(Example.serialize(second, type: _JSONData).to_a, [["a", 1], ["a", 2]])
+end

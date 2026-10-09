@@ -124,9 +124,12 @@ class Literal::Serializer
 		case value
 		when Hash
 			if value.compare_by_identity?
-				# Identity hashes can repeat a key, so ties keep insertion order.
+				# Identity hashes can repeat a key, so entries sharing a key sort
+				# canonically among themselves.
 				sorted = {}.compare_by_identity
-				value.each_with_index.sort_by { |(key, _), index| [key, index] }.each { |(key, item), _| sorted[key] = sort_keys(item) }
+				value.group_by { |key, _| key }.sort_by { |key, _| key }.each do |_, entries|
+					sort_canonically(entries).each { |key, item| sorted[key] = sort_keys(item) }
+				end
 				sorted
 			else
 				value.sort_by { |key, _| key }.to_h { |key, item| [key, sort_keys(item)] }
@@ -142,30 +145,42 @@ class Literal::Serializer
 	# and hash entry pairs — by their canonical JSON encoding, so they
 	# serialize predictably regardless of insertion order. Elements JSON can't
 	# encode sort after those it can, and ties break on the elements' Marshal
-	# bytes, so the order is total.
-	private def sort_canonically(elements)
+	# bytes, or failing that their inspection, so the order is total.
+	def self.sort_canonically(elements)
 		return elements if elements.size < 2
 
 		elements
 			.map { |element| [canonical_sort_key(element), element] }
-			.sort { |(a_key, a), (b_key, b)| (a_key <=> b_key).nonzero? || (marshal_sort_key(a) <=> marshal_sort_key(b)) }
+			.sort { |(a_key, a), (b_key, b)| (a_key <=> b_key).nonzero? || (tiebreak_sort_key(a) <=> tiebreak_sort_key(b)) }
 			.map(&:last)
 	end
 
 	# Elements haven't been validated yet — the strict check runs on the
-	# finished payload — so this must not raise on invalid data, leaving that
-	# check to report it. JSON data has no nesting limit, so neither does the
-	# encoding.
-	private def canonical_sort_key(element)
-		[0, JSON.generate(Literal::Serializer.sort_keys(element), max_nesting: false)]
-	rescue JSON::JSONError, EncodingError, ArgumentError
+	# finished payload — and invalid ones can run user code (to_json, _dump,
+	# inspect), so neither key may raise, leaving that check to report them.
+	# JSON data has no nesting limit, so neither does the encoding.
+	def self.canonical_sort_key(element)
+		[0, JSON.generate(sort_keys(element), max_nesting: false)]
+	rescue
 		[1, ""]
 	end
 
-	private def marshal_sort_key(element)
-		Marshal.dump(Literal::Serializer.sort_keys(element))
-	rescue TypeError, ArgumentError
+	def self.tiebreak_sort_key(element)
+		sorted = sort_keys(element)
+
+		begin
+			Marshal.dump(sorted)
+		rescue
+			sorted.inspect
+		end
+	rescue
 		""
+	end
+
+	private_class_method :canonical_sort_key, :tiebreak_sort_key
+
+	private def sort_canonically(elements)
+		Literal::Serializer.sort_canonically(elements)
 	end
 
 	private def json_type_for(type)
