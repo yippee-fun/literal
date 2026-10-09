@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 class Literal::Serializer
 	extend Literal::Types
 	include Literal::Types
@@ -114,6 +116,16 @@ class Literal::Serializer
 	# This gives you an opportunity to coerce raw values before type checking and deserialization.
 	def coerce(raw)
 		raw
+	end
+
+	# Sorts serialized elements whose order carries no meaning — set members
+	# and hash entry pairs — by their canonical JSON encoding, so they
+	# serialize predictably regardless of insertion order. Elements are
+	# already serialized, so any objects within them are already sorted.
+	private def sort_canonically(elements)
+		return elements if elements.size < 2
+
+		elements.sort_by { |element| JSON.generate(element) }
 	end
 
 	private def json_type_for(type)

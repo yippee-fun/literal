@@ -103,7 +103,15 @@ class Literal::SerializationContext
 			raise Literal::ArgumentError, "Value #{value.inspect} was not serialized correctly"
 		end
 
-		serialized
+		# Every value — nested ones included, since serializers recurse through
+		# here — is sorted by key, so objects serialize predictably regardless of
+		# declaration or insertion order. Deserialization reads objects by key, so
+		# it accepts payloads in any order.
+		if Hash === serialized && serialized.size > 1
+			serialized.sort_by { |key, _| key }.to_h
+		else
+			serialized
+		end
 	end
 
 	def deserialize(value, type:, strict: true)

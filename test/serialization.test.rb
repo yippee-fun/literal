@@ -3610,3 +3610,125 @@ test "serializability follows properties added while the walk materializes a def
 
 	refute context.serializable_type?(_Array(deferred))
 end
+
+# Ruby compares hashes regardless of order, so these tests compare the JSON
+# text, which preserves it.
+def assert_serialized_json(value, type:, json:)
+	assert_equal(JSON.generate(Example.serialize(value, type:)), json)
+end
+
+test "structures serialize with keys sorted alphabetically" do
+	assert_serialized_json(
+		SerializationPerson.new(name: "Joel", age: 42),
+		type: SerializationPerson,
+		json: '{"age":42,"name":"Joel"}',
+	)
+
+	assert_serialized_json(
+		SerializationPoint.new(1, 2, label: "origin"),
+		type: SerializationPoint,
+		json: '{"label":"origin","x":1,"y":2}',
+	)
+end
+
+test "maps serialize with keys sorted alphabetically" do
+	assert_serialized_json(
+		{ zebra: 1, apple: 2 },
+		type: _Map(zebra: Integer, apple: Integer),
+		json: '{"apple":2,"zebra":1}',
+	)
+end
+
+test "string-keyed hashes serialize with keys sorted by their serialized key" do
+	assert_serialized_json(
+		{ foo: 1, bar: 2, Baz: 3 },
+		type: _Hash(Symbol, Integer),
+		json: '{"Baz":3,"bar":2,"foo":1}',
+	)
+end
+
+test "entry-pair hashes serialize sorted by each pair's canonical JSON" do
+	assert_serialized_json(
+		{ 3 => "c", 1 => "a", 2 => "b" },
+		type: _Hash(Integer, String),
+		json: '[[1,"a"],[2,"b"],[3,"c"]]',
+	)
+end
+
+test "sets serialize sorted by each member's canonical JSON" do
+	assert_serialized_json(Set[3, 1, 2], type: _Set(Integer), json: "[1,2,3]")
+
+	# Members compare as JSON text, so numbers sort lexically.
+	assert_serialized_json(Set[10, 2, 1], type: _Set(Integer), json: "[1,10,2]")
+
+	assert_serialized_json(
+		Set[{ "b" => 1, "a" => 2 }, { "a" => 1 }],
+		type: _Set(_Hash(String, Integer)),
+		json: '[{"a":1},{"a":2,"b":1}]',
+	)
+end
+
+test "sets serialize the same regardless of insertion order" do
+	type = _Set(_Union(String, Integer, SerializationNamed))
+	members = ["b", 1, SerializationNamed.new(name: "Joel"), "a", 2]
+
+	assert_equal(
+		JSON.generate(Example.serialize(members.to_set, type:)),
+		JSON.generate(Example.serialize(members.reverse.to_set, type:)),
+	)
+end
+
+test "tagged unions sort the discriminator with the other keys" do
+	assert_serialized_json(
+		SerializationValueObject.new(value: "payload"),
+		type: _TaggedUnion(object: SerializationValueObject, note: String),
+		json: '{"$type":"object","value":"payload"}',
+	)
+
+	assert_serialized_json(
+		SerializationUserEvent.new(kind: "user", name: "Joel"),
+		type: _TaggedUnion(user: SerializationUserEvent, admin: SerializationAdminEvent),
+		json: '{"$type":"user","kind":"user","name":"Joel"}',
+	)
+end
+
+test "ranges serialize with keys sorted alphabetically" do
+	assert_serialized_json(1..3, type: _Range(Integer), json: '{"from":1,"inclusive":true,"to":3}')
+end
+
+test "json data serializes with object keys sorted at every depth" do
+	assert_serialized_json(
+		{ "z" => [{ "b" => 1, "a" => 2 }], "a" => { "y" => nil, "x" => true } },
+		type: _JSONData,
+		json: '{"a":{"x":true,"y":null},"z":[{"a":2,"b":1}]}',
+	)
+end
+
+test "nested values serialize sorted at every depth" do
+	assert_serialized_json(
+		{ "people" => [SerializationPerson.new(name: "Joel", age: 42)], "count" => 1 },
+		type: _Hash(String, _Union(Integer, _Array(SerializationPerson))),
+		json: '{"count":1,"people":[{"age":42,"name":"Joel"}]}',
+	)
+end
+
+test "payloads serialized before sorting still deserialize" do
+	assert_equal(
+		Example.deserialize({ "name" => "Joel", "age" => 42 }, type: SerializationPerson),
+		SerializationPerson.new(name: "Joel", age: 42),
+	)
+
+	assert_equal(
+		Example.deserialize({ "value" => "payload", "$type" => "object" }, type: _TaggedUnion(object: SerializationValueObject, note: String)),
+		SerializationValueObject.new(value: "payload"),
+	)
+
+	assert_equal(
+		Example.deserialize({ "from" => 1, "to" => 3, "inclusive" => true }, type: _Range(Integer)),
+		1..3,
+	)
+
+	assert_equal(Example.deserialize([3, 1, 2], type: _Set(Integer)), Set[1, 2, 3])
+	assert_equal(Example.deserialize([[3, "c"], [1, "a"]], type: _Hash(Integer, String)), { 1 => "a", 3 => "c" })
+	assert_equal(Example.deserialize({ "zebra" => 1, "apple" => 2 }, type: _Map(zebra: Integer, apple: Integer)), { zebra: 1, apple: 2 })
+end
