@@ -101,7 +101,7 @@ class Literal::HashSerializer < Literal::Serializer
 		if string_keyed?(hash_type)
 			serialized_entries.to_h
 		else
-			serialized_entries
+			sort_canonically(serialized_entries)
 		end
 	end
 
