@@ -56,8 +56,13 @@ class Literal::Data < Literal::DataStructure
 			props[name] = value
 		end
 
-		instance = self.class.__send__(:__literal_from_props__, props, seal: false)
-		instance.__send__(:__literal_run_checks__)
-		instance
+		# The initializer's lifecycle, minus the coercion carried-over values
+		# already went through: assign, after_initialize, freeze, then checks.
+		copy = self.class.allocate
+		copy.__send__(:__literal_assign_props__, props, "#with", seal: false)
+		copy.__send__(:after_initialize) if copy.respond_to?(:after_initialize, true)
+		copy.freeze
+		copy.__send__(:__literal_run_checks__)
+		copy
 	end
 end

@@ -522,3 +522,37 @@ test "with leaves unchanged values alone" do
 	assert_equal 1, calls
 	assert_equal 1, copy.id
 end
+
+test "with runs after_initialize before freezing the copy" do
+	derived = Class.new(Literal::Data) do
+		prop :first, String
+		prop :last, String
+
+		attr_reader :full
+
+		def after_initialize
+			@full = "#{@first} #{@last}"
+		end
+	end
+
+	copy = derived.new(first: "Ada", last: "Byron").with(last: "Lovelace")
+
+	assert_equal "Ada Lovelace", copy.full
+	assert copy.frozen?
+end
+
+test "with runs checks against the finished copy" do
+	checked = Class.new(Literal::Data) do
+		prop :n, Integer
+
+		attr_reader :double
+
+		def after_initialize
+			@double = @n * 2
+		end
+
+		check(:n, "double must be under 10") { |n:| n * 2 < 10 }
+	end
+
+	assert_raises(Literal::CheckError) { checked.new(n: 1).with(n: 5) }
+end
