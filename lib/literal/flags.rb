@@ -28,6 +28,12 @@ class Literal::Flags
 			raise Literal::ArgumentError.new("Flags must be unique.")
 		end
 
+		invalid_flags = flags.reject { |_name, bit| bit.is_a?(Integer) }
+		unless invalid_flags.empty?
+			invalid_list = invalid_flags.map { |name, bit| "'#{name}' => #{bit.inspect} (#{bit.class})" }.join(", ")
+			raise Literal::ArgumentError.new("Flags must be Integers, but got: #{invalid_list}")
+		end
+
 		const_set(:FLAGS, flags.dup.freeze)
 
 		flags.each do |name, bit|
