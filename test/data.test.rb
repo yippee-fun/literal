@@ -487,3 +487,38 @@ test "with seals the new values" do
 
 	assert copy.name.frozen?
 end
+
+test "with coerces the new values before sealing them" do
+	coerced = Class.new(Literal::Data) do
+		prop :id, Integer do |it|
+			Integer(it)
+		end
+
+		prop :name, String, &(Literal::Coercion { |it| it.strip } >> Literal::Coercions::Immutable)
+	end
+
+	copy = coerced.new(id: 1, name: "a").with(id: "2", name: +" b ")
+
+	assert_equal 2, copy.id
+	assert_equal "b", copy.name
+	assert copy.name.frozen?
+end
+
+test "with leaves unchanged values alone" do
+	calls = 0
+
+	counting = Class.new(Literal::Data) do
+		prop :id, Integer do |it|
+			calls += 1
+			Integer(it)
+		end
+
+		prop :label, String
+	end
+
+	original = counting.new(id: "1", label: "a")
+	copy = original.with(label: "b")
+
+	assert_equal 1, calls
+	assert_equal 1, copy.id
+end

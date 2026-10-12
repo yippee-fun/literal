@@ -51,7 +51,9 @@ class Literal::Data < Literal::DataStructure
 
 		changes.each do |name, value|
 			property = properties[name] || raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
-			props[name] = (seal = property.seal) ? seal.call(value) : value
+			value = property.coerce(value, context: self) if property.coercion
+			value = property.seal.call(value) if property.seal
+			props[name] = value
 		end
 
 		instance = self.class.__send__(:__literal_from_props__, props, seal: false)
