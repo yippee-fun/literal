@@ -436,3 +436,209 @@ test "indexed access raises for invalid key types" do
 	person = Person.new(name: "John")
 	assert_raises(TypeError) { person[0] }
 end
+
+class WithExample < Literal::Data
+	prop :x, Integer, :positional
+	prop :label, String
+	prop :note, _Nilable(String)
+
+	check(:label, "must not be blank") { |label:| !label.empty? }
+end
+
+test "with returns a copy with the given properties replaced" do
+	original = WithExample.new(1, label: "home", note: "hi")
+	copy = original.with(x: 2, note: nil)
+
+	assert_equal copy, WithExample.new(2, label: "home", note: nil)
+	assert_equal original, WithExample.new(1, label: "home", note: "hi")
+	assert copy.frozen?
+end
+
+test "with and no arguments returns self" do
+	original = WithExample.new(1, label: "home")
+
+	assert_same original, original.with
+end
+
+test "with type checks the new values" do
+	original = WithExample.new(1, label: "home")
+
+	assert_raises(Literal::TypeError) { original.with(x: "2") }
+end
+
+test "with runs the checks" do
+	original = WithExample.new(1, label: "home")
+
+	assert_raises(Literal::CheckError) { original.with(label: "") }
+end
+
+test "with raises for unknown attributes" do
+	original = WithExample.new(1, label: "home")
+
+	assert_raises(NameError) { original.with(nope: 1) }
+end
+
+test "with seals the new values" do
+	sealed = Class.new(Literal::Data) do
+		prop :name, String, &Literal::Coercions::Immutable
+	end
+
+	copy = sealed.new(name: "a").with(name: +"b")
+
+	assert copy.name.frozen?
+end
+
+test "with coerces the new values before sealing them" do
+	coerced = Class.new(Literal::Data) do
+		prop :id, Integer do |it|
+			Integer(it)
+		end
+
+		prop :name, String, &(Literal::Coercion(&:strip) >> Literal::Coercions::Immutable)
+	end
+
+	copy = coerced.new(id: 1, name: "a").with(id: "2", name: +" b ")
+
+	assert_equal 2, copy.id
+	assert_equal "b", copy.name
+	assert copy.name.frozen?
+end
+
+test "with leaves unchanged values alone" do
+	calls = 0
+
+	counting = Class.new(Literal::Data) do
+		prop :id, Integer do |it|
+			calls += 1
+			Integer(it)
+		end
+
+		prop :label, String
+	end
+
+	original = counting.new(id: "1", label: "a")
+	copy = original.with(label: "b")
+
+	assert_equal 1, calls
+	assert_equal 1, copy.id
+end
+
+test "with runs after_initialize before freezing the copy" do
+	derived = Class.new(Literal::Data) do
+		prop :first, String
+		prop :last, String
+
+		attr_reader :full
+
+		def after_initialize
+			@full = "#{@first} #{@last}"
+		end
+	end
+
+	copy = derived.new(first: "Ada", last: "Byron").with(last: "Lovelace")
+
+	assert_equal "Ada Lovelace", copy.full
+	assert copy.frozen?
+end
+
+test "with runs checks against the finished copy" do
+	checked = Class.new(Literal::Data) do
+		prop :n, Integer
+
+		attr_reader :double
+
+		def after_initialize
+			@double = @n * 2
+		end
+
+		check(:n, "double must be under 10") { |n:| n * 2 < 10 }
+	end
+
+	assert_raises(Literal::CheckError) { checked.new(n: 1).with(n: 5) }
+end
+
+test "with copies stored members regardless of a custom to_h" do
+	custom = Class.new(Literal::Data) do
+		prop :id, Integer
+		prop :secret, String
+
+		def to_h
+			{ "ID" => @id, "type" => "custom" }
+		end
+	end
+
+	copy = custom.new(id: 1, secret: "s").with(id: 2)
+
+	assert_equal 2, copy.id
+	assert_equal "s", copy.secret
+end
+
+test "with on a subclass includes inherited and added properties" do
+	parent = Class.new(Literal::Data) do
+		prop :a, Integer
+	end
+
+	child = Class.new(parent) do
+		prop :b, String
+	end
+
+	copy = child.new(a: 1, b: "x").with(b: "y")
+
+	assert_equal child.new(a: 1, b: "y"), copy
+	assert_raises(Literal::TypeError) { child.new(a: 1, b: "x").with(a: "1") }
+end
+
+test "with on a shape without properties" do
+	empty = Empty.new
+
+	assert_same empty, empty.with
+	assert_raises(NameError) { empty.with(a: 1) }
+end
+
+test "with coerces against the copy, after its earlier properties" do
+	prefixed = Class.new(Literal::Data) do
+		prop :prefix, String
+		prop :name, String do |it|
+			"#{@prefix}-#{it}"
+		end
+	end
+
+	copy = prefixed.new(prefix: "old", name: "x").with(prefix: "new", name: "y")
+
+	assert_equal "new-y", copy.name
+end
+
+test "with resolves the default for an undefined value" do
+	defaulted = Class.new(Literal::Data) do
+		prop :count, Integer, default: 0
+	end
+
+	copy = defaulted.new(count: 1).with(count: Literal::Undefined)
+
+	assert_equal 0, copy.count
+end
+
+test "with runs checks across changed and carried-over properties" do
+	range = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+
+		check(:max, "must be at least %{min}") { |max:, min:| max >= min }
+	end
+
+	original = range.new(min: 1, max: 5)
+
+	assert_raises(Literal::CheckError) { original.with(min: 6) }
+	assert_raises(Literal::CheckError) { original.with(max: 0) }
+	assert_equal range.new(min: 6, max: 7), original.with(min: 6, max: 7)
+end
+
+test "a property named with keeps its reader" do
+	named = Class.new(Literal::Data) do
+		prop :a, Integer
+		prop :with, String
+		prop :b, Integer
+	end
+
+	assert_equal "x", named.new(a: 1, with: "x", b: 2).with
+end

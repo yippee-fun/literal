@@ -32,6 +32,17 @@ class Literal::Data < Literal::DataStructure
 			)
 		end
 
+		private def __generate_literal_methods__(new_property, buffer = +"")
+			super
+
+			# A property named `with` keeps its reader, as a member of Ruby's Data does.
+			unless literal_properties[:with]&.reader
+				literal_properties.generate_with(buffer, checked: literal_checks.any?)
+			end
+
+			buffer
+		end
+
 		def literal_properties
 			return @literal_properties if defined?(@literal_properties)
 
@@ -41,5 +52,12 @@ class Literal::Data < Literal::DataStructure
 				@literal_properties = Literal::Properties::DataSchema.new
 			end
 		end
+	end
+
+	# Generated per class once it has properties; see DataSchema#generate_with.
+	def with(**changes)
+		return self if changes.empty?
+
+		raise NameError.new("unknown attribute: #{changes.each_key.first.inspect} for #{self.class}")
 	end
 end

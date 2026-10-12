@@ -128,6 +128,10 @@ class Literal::Property
 		Literal.check(value, @type) { |c| c.fill_receiver(receiver:, method: "##{@name.name}=(value)") }
 	end
 
+	def check_with(receiver, value)
+		Literal.check(value, @type) { |c| c.fill_receiver(receiver:, method: "#with", label: @name.name) }
+	end
+
 	def check_initializer(receiver, value)
 		Literal.check(value, @type) { |c| c.fill_receiver(receiver:, method: "#initialize", label: param) }
 	end
