@@ -103,7 +103,12 @@ class Literal::SerializationContext
 			raise Literal::ArgumentError, "Value #{value.inspect} was not serialized correctly"
 		end
 
-		serialized
+		# Strict serialization is the entry point — serializers recurse with
+		# strict: false — so the finished payload is sorted here in one pass:
+		# object keys at every depth, including any nested objects custom
+		# serializers return. Deserialization reads objects by key, so it
+		# accepts payloads in any order.
+		strict ? Literal::Serializer.sort_keys(serialized) : serialized
 	end
 
 	def deserialize(value, type:, strict: true)

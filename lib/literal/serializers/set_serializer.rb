@@ -41,9 +41,11 @@ class Literal::SetSerializer < Literal::Serializer
 	def serialize(value, type:)
 		member_type = set_type_for(type).type
 
-		value.map do |item|
-			serialize_contents(item, type: member_type)
-		end
+		sort_canonically(
+			value.map do |item|
+				serialize_contents(item, type: member_type)
+			end,
+		)
 	end
 
 	def deserialize(raw, type:)

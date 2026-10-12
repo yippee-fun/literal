@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 class Literal::Serializer
 	extend Literal::Types
 	include Literal::Types
@@ -114,6 +116,71 @@ class Literal::Serializer
 	# This gives you an opportunity to coerce raw values before type checking and deserialization.
 	def coerce(raw)
 		raw
+	end
+
+	# Sorts the keys of every object within serialized JSON data, at every
+	# depth. Arrays keep their order.
+	def self.sort_keys(value)
+		case value
+		when Hash
+			if value.compare_by_identity?
+				# Identity hashes can repeat a key, so entries sharing a key sort
+				# canonically among themselves.
+				sorted = {}.compare_by_identity
+				value.group_by { |key, _| key }.sort_by { |key, _| key }.each do |_, entries|
+					sort_canonically(entries).each { |key, item| sorted[key] = sort_keys(item) }
+				end
+				sorted
+			else
+				value.sort_by { |key, _| key }.to_h { |key, item| [key, sort_keys(item)] }
+			end
+		when Array
+			value.map { |item| sort_keys(item) }
+		else
+			value
+		end
+	end
+
+	# Sorts serialized elements whose order carries no meaning — set members
+	# and hash entry pairs — by their canonical JSON encoding, so they
+	# serialize predictably regardless of insertion order. Elements JSON can't
+	# encode sort after those it can, and ties break on the elements' Marshal
+	# bytes, or failing that their inspection, so the order is total.
+	def self.sort_canonically(elements)
+		return elements if elements.size < 2
+
+		elements
+			.map { |element| [canonical_sort_key(element), element] }
+			.sort { |(a_key, a), (b_key, b)| (a_key <=> b_key).nonzero? || (tiebreak_sort_key(a) <=> tiebreak_sort_key(b)) }
+			.map(&:last)
+	end
+
+	# Elements haven't been validated yet — the strict check runs on the
+	# finished payload — and invalid ones can run user code (to_json, _dump,
+	# inspect), so neither key may raise, leaving that check to report them.
+	# JSON data has no nesting limit, so neither does the encoding.
+	def self.canonical_sort_key(element)
+		[0, JSON.generate(sort_keys(element), max_nesting: false)]
+	rescue
+		[1, ""]
+	end
+
+	def self.tiebreak_sort_key(element)
+		sorted = sort_keys(element)
+
+		begin
+			Marshal.dump(sorted)
+		rescue
+			sorted.inspect
+		end
+	rescue
+		""
+	end
+
+	private_class_method :canonical_sort_key, :tiebreak_sort_key
+
+	private def sort_canonically(elements)
+		Literal::Serializer.sort_canonically(elements)
 	end
 
 	private def json_type_for(type)
