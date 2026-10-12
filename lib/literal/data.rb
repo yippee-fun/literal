@@ -42,4 +42,20 @@ class Literal::Data < Literal::DataStructure
 			end
 		end
 	end
+
+	def with(**changes)
+		return self if changes.empty?
+
+		properties = self.class.literal_properties
+		props = to_h
+
+		changes.each do |name, value|
+			property = properties[name] || raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
+			props[name] = (seal = property.seal) ? seal.call(value) : value
+		end
+
+		instance = self.class.__send__(:__literal_from_props__, props, seal: false)
+		instance.__send__(:__literal_run_checks__)
+		instance
+	end
 end

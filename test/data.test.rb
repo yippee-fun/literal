@@ -436,3 +436,54 @@ test "indexed access raises for invalid key types" do
 	person = Person.new(name: "John")
 	assert_raises(TypeError) { person[0] }
 end
+
+class WithExample < Literal::Data
+	prop :x, Integer, :positional
+	prop :label, String
+	prop :note, _Nilable(String)
+
+	check(:label, "must not be blank") { |label:| !label.empty? }
+end
+
+test "with returns a copy with the given properties replaced" do
+	original = WithExample.new(1, label: "home", note: "hi")
+	copy = original.with(x: 2, note: nil)
+
+	assert_equal copy, WithExample.new(2, label: "home", note: nil)
+	assert_equal original, WithExample.new(1, label: "home", note: "hi")
+	assert copy.frozen?
+end
+
+test "with and no arguments returns self" do
+	original = WithExample.new(1, label: "home")
+
+	assert_same original, original.with
+end
+
+test "with type checks the new values" do
+	original = WithExample.new(1, label: "home")
+
+	assert_raises(Literal::TypeError) { original.with(x: "2") }
+end
+
+test "with runs the checks" do
+	original = WithExample.new(1, label: "home")
+
+	assert_raises(Literal::CheckError) { original.with(label: "") }
+end
+
+test "with raises for unknown attributes" do
+	original = WithExample.new(1, label: "home")
+
+	assert_raises(NameError) { original.with(nope: 1) }
+end
+
+test "with seals the new values" do
+	sealed = Class.new(Literal::Data) do
+		prop :name, String, &Literal::Coercions::Immutable
+	end
+
+	copy = sealed.new(name: "a").with(name: +"b")
+
+	assert copy.name.frozen?
+end
