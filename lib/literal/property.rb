@@ -135,7 +135,7 @@ class Literal::Property
 	def generate_reader_method(buffer = +"")
 		buffer <<
 			(@reader ? @reader.name : "public") <<
-			"\ndef " <<
+			" def " <<
 			@name.name <<
 			"\n  value = @" <<
 			@name.name <<

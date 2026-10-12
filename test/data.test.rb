@@ -436,3 +436,14 @@ test "indexed access raises for invalid key types" do
 	person = Person.new(name: "John")
 	assert_raises(TypeError) { person[0] }
 end
+
+test "a non-public reader keeps hash, == and eql? public" do
+	example = Class.new(Literal::Data) do
+		prop :a, Integer, reader: :protected
+	end
+
+	assert_equal example.new(a: 1), example.new(a: 1)
+	assert example.new(a: 1).eql?(example.new(a: 1))
+	assert_equal example.new(a: 1).hash, example.new(a: 1).hash
+	refute example.new(a: 1).respond_to?(:a)
+end
