@@ -494,7 +494,7 @@ test "with coerces the new values before sealing them" do
 			Integer(it)
 		end
 
-		prop :name, String, &(Literal::Coercion { |it| it.strip } >> Literal::Coercions::Immutable)
+		prop :name, String, &(Literal::Coercion(&:strip) >> Literal::Coercions::Immutable)
 	end
 
 	copy = coerced.new(id: 1, name: "a").with(id: "2", name: +" b ")
@@ -563,7 +563,7 @@ test "with copies stored members regardless of a custom to_h" do
 		prop :secret, String
 
 		def to_h
-			{ "ID" => @id, type: "custom" }
+			{ "ID" => @id, "type" => "custom" }
 		end
 	end
 
@@ -593,4 +593,52 @@ test "with on a shape without properties" do
 
 	assert_same empty, empty.with
 	assert_raises(NameError) { empty.with(a: 1) }
+end
+
+test "with coerces against the copy, after its earlier properties" do
+	prefixed = Class.new(Literal::Data) do
+		prop :prefix, String
+		prop :name, String do |it|
+			"#{@prefix}-#{it}"
+		end
+	end
+
+	copy = prefixed.new(prefix: "old", name: "x").with(prefix: "new", name: "y")
+
+	assert_equal "new-y", copy.name
+end
+
+test "with resolves the default for an undefined value" do
+	defaulted = Class.new(Literal::Data) do
+		prop :count, Integer, default: 0
+	end
+
+	copy = defaulted.new(count: 1).with(count: Literal::Undefined)
+
+	assert_equal 0, copy.count
+end
+
+test "with runs checks across changed and carried-over properties" do
+	range = Class.new(Literal::Data) do
+		prop :min, Integer
+		prop :max, Integer
+
+		check(:max, "must be at least %{min}") { |max:, min:| max >= min }
+	end
+
+	original = range.new(min: 1, max: 5)
+
+	assert_raises(Literal::CheckError) { original.with(min: 6) }
+	assert_raises(Literal::CheckError) { original.with(max: 0) }
+	assert_equal range.new(min: 6, max: 7), original.with(min: 6, max: 7)
+end
+
+test "a property named with keeps its reader" do
+	named = Class.new(Literal::Data) do
+		prop :a, Integer
+		prop :with, String
+		prop :b, Integer
+	end
+
+	assert_equal "x", named.new(a: 1, with: "x", b: 2).with
 end
