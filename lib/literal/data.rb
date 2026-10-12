@@ -32,6 +32,12 @@ class Literal::Data < Literal::DataStructure
 			)
 		end
 
+		private def __generate_literal_methods__(new_property, buffer = +"")
+			super
+			literal_properties.generate_with(buffer, checked: literal_checks.any?)
+			buffer
+		end
+
 		def literal_properties
 			return @literal_properties if defined?(@literal_properties)
 
@@ -43,30 +49,10 @@ class Literal::Data < Literal::DataStructure
 		end
 	end
 
+	# Generated per class once it has properties; see DataSchema#generate_with.
 	def with(**changes)
 		return self if changes.empty?
 
-		properties = self.class.literal_properties
-		# Read the stored members rather than to_h, which a subclass may override.
-		props = {}
-		properties.each do |property|
-			props[property.name] = instance_variable_get(:"@#{property.name.name}")
-		end
-
-		changes.each do |name, value|
-			property = properties[name] || raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
-			value = property.coerce(value, context: self) if property.coercion
-			value = property.seal.call(value) if property.seal
-			props[name] = value
-		end
-
-		# The initializer's lifecycle, minus the coercion carried-over values
-		# already went through: assign, after_initialize, freeze, then checks.
-		copy = self.class.allocate
-		copy.__send__(:__literal_assign_props__, props, "#with", seal: false)
-		copy.__send__(:after_initialize) if copy.respond_to?(:after_initialize, true)
-		copy.freeze
-		copy.__send__(:__literal_run_checks__)
-		copy
+		raise NameError.new("unknown attribute: #{changes.each_key.first.inspect} for #{self.class}")
 	end
 end

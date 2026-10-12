@@ -572,3 +572,25 @@ test "with copies stored members regardless of a custom to_h" do
 	assert_equal 2, copy.id
 	assert_equal "s", copy.secret
 end
+
+test "with on a subclass includes inherited and added properties" do
+	parent = Class.new(Literal::Data) do
+		prop :a, Integer
+	end
+
+	child = Class.new(parent) do
+		prop :b, String
+	end
+
+	copy = child.new(a: 1, b: "x").with(b: "y")
+
+	assert_equal child.new(a: 1, b: "y"), copy
+	assert_raises(Literal::TypeError) { child.new(a: 1, b: "x").with(a: "1") }
+end
+
+test "with on a shape without properties" do
+	empty = Empty.new
+
+	assert_same empty, empty.with
+	assert_raises(NameError) { empty.with(a: 1) }
+end
