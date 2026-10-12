@@ -47,7 +47,11 @@ class Literal::Data < Literal::DataStructure
 		return self if changes.empty?
 
 		properties = self.class.literal_properties
-		props = to_h
+		# Read the stored members rather than to_h, which a subclass may override.
+		props = {}
+		properties.each do |property|
+			props[property.name] = instance_variable_get(:"@#{property.name.name}")
+		end
 
 		changes.each do |name, value|
 			property = properties[name] || raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))

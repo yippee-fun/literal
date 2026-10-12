@@ -556,3 +556,19 @@ test "with runs checks against the finished copy" do
 
 	assert_raises(Literal::CheckError) { checked.new(n: 1).with(n: 5) }
 end
+
+test "with copies stored members regardless of a custom to_h" do
+	custom = Class.new(Literal::Data) do
+		prop :id, Integer
+		prop :secret, String
+
+		def to_h
+			{ "ID" => @id, type: "custom" }
+		end
+	end
+
+	copy = custom.new(id: 1, secret: "s").with(id: 2)
+
+	assert_equal 2, copy.id
+	assert_equal "s", copy.secret
+end
