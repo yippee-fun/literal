@@ -169,14 +169,26 @@ class Literal::Array
 		Literal::Undefined
 	end
 
+	# Assigns a single element. With a Range, the range is replaced by that one
+	# element — the value is never splatted into the array, even if it responds
+	# to `to_ary`.
 	def []=(index, value)
 		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#[]=")
 		end
 
-		__check_padding__(index)
-
-		@__value__[index] = value
+		case index
+		when Integer
+			__check_padding__(index)
+			@__value__[index] = value
+		when Range
+			range = __integer_range__(index, "#[]=")
+			__check_padding__(range.begin || 0)
+			@__value__[range] = [value]
+			value
+		else
+			raise ArgumentError.new("Cannot assign to a Literal::Array with an index of #{index.inspect}. Use an Integer or a Range of Integers.")
+		end
 	end
 
 	def clear
@@ -317,6 +329,17 @@ class Literal::Array
 	end
 
 	def insert(index, *values)
+		# Inserting nothing is a no-op that can't pad, so we defer entirely to
+		# Ruby, which still converts the index and checks for frozenness.
+		if values.empty?
+			@__value__.insert(index)
+			return self
+		end
+
+		unless Integer === index
+			raise ArgumentError.new("Cannot insert into a Literal::Array at #{index.inspect}. Use an Integer index.")
+		end
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#insert")
@@ -809,10 +832,23 @@ class Literal::Array
 		end
 	end
 
+	# Ruby converts non-Integer range bounds with `to_int`, which we don't
+	# support, since we need to know the bounds to check for padding. We return
+	# a plain Range built from the bounds we checked, because a Range subclass
+	# could report different bounds from the ones `Array#[]=` actually uses.
+	private def __integer_range__(range, method)
+		case [range.begin, range.end, range.exclude_end?]
+		in [Integer | nil => first, Integer | nil => last, exclude_end]
+			::Range.new(first, last, exclude_end)
+		else
+			raise ArgumentError.new("Cannot call `#{method}` on a Literal::Array with a range of #{range.inspect}. Use a Range of Integers.")
+		end
+	end
+
 	# Writing beyond the end of the array pads the gap with nils, which is only
 	# valid if our element type admits nil.
 	private def __check_padding__(index)
-		if Integer === index && index > @__value__.length && !(@__type__ === nil)
+		if index > @__value__.length && !(@__type__ === nil)
 			raise Literal::TypeError.new(
 				context: Literal::TypeError::Context.new(
 					expected: @__type__,
