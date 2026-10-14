@@ -99,7 +99,7 @@ class Literal::Hash
 
 		@__key_type__ = key_type
 		@__value_type__ = value_type
-		@__value__ = value.dup
+		@__value__ = __plain_copy__(value)
 		@__collection_type__ = collection_type
 	end
 
@@ -335,11 +335,19 @@ class Literal::Hash
 		__with__(@__value__.slice(*keys))
 	end
 
-	def to_h
+	# Returns a detached plain copy. Given a block, maps each pair to a new pair
+	# like `Hash#to_h`.
+	def to_h(&block)
+		return @__value__.to_h(&block) if block
+
 		@__value__.dup
 	end
 
-	alias_method :to_hash, :to_h
+	# The implicit conversion, which also enables double-splatting. Like
+	# `Hash#to_hash`, it ignores a block.
+	def to_hash
+		@__value__.dup
+	end
 
 	def transform_keys(type, &block)
 		raise ArgumentError.new("#transform_keys requires a block.") unless block
@@ -437,6 +445,15 @@ class Literal::Hash
 		else
 			raise ArgumentError.new("Cannot perform `#{method}` between a Literal::Hash and #{other.class.inspect}.")
 		end
+	end
+
+	# Copies the entries into a plain `Hash`. Unlike `dup`, this leaves behind
+	# the input's default and default proc, which were never type checked, and
+	# any subclass overrides, while keeping identity comparison of keys.
+	private def __plain_copy__(value)
+		copy = {}
+		copy.compare_by_identity if ::Hash.instance_method(:compare_by_identity?).bind_call(value)
+		copy.update(value)
 	end
 
 	private def inspect_generic
