@@ -90,3 +90,16 @@ assert_allocations(_Tuple(String, Integer), ["a", 1]) => 0
 assert_allocations(_Union(String, "Hello", "World"), "World") => 0
 
 assert_allocations(_Void, nil) => 0
+
+class SignedAllocations
+	extend Literal::Signatures
+
+	sig(String, count: Integer) >> String
+	def repeat(text, count:) = text
+end
+
+signed = SignedAllocations.new
+
+count_warm_allocations { signed.repeat("a", count: 2) }.tap do |n|
+	puts "#{n} allocations for a signed method with required parameters"
+end => 0

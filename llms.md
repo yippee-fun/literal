@@ -196,6 +196,28 @@ First-match over ordered serializer list, shallow `handles_type?`; recursion/cyc
 
 Notables: DataStructures = closed objects via props/`from_props`; enums = backing value; `_Optional` props omitted on write, restored to Undefined on read (never defaulted); untagged unions must be natural (members distinguishable by JSON type or object shape); `_TaggedUnion` writes `"$type"` discriminator (merged into object members, else `{"$type":, "value":}`); non-string-keyed Hashes → arrays of pairs; object keys are sorted (bytewise) at every depth and sets and pair arrays are sorted by each element's JSON text, so output is predictable (reading accepts any order); `description:` → schema.
 
+## Signatures — `extend Literal::Signatures`
+
+Runtime-checked method signatures, on the line above a plain `def`, in the shape of an RBS inline annotation (`#: (String, ?greeting: String?) -> String`). `extend` brings `sig` and the type helpers.
+
+```ruby
+class Greeter
+	extend Literal::Signatures
+
+	sig(String, greeting: _Nilable(String)) >> String
+	def greet(name, greeting: nil) = "#{greeting || "Hello"}, #{name}"
+
+	sig(_Integer(1..)) >> _Array(String)
+	def self.cheers(times) = Array.new(times) { "Hip hip!" }
+end
+```
+
+Positional types line up with the positional parameters, keyword types match keywords by name, and `>>` gives the return type (`_Void` to check nothing). A signature binds to the **next method defined**, instance or singleton, and keeps its visibility (`private def` works). Each argument the caller **passes** is checked before the method runs and the return value after, raising `Literal::TypeError` labelled with the method and argument; a default is the author's and is not checked, and arity is left to Ruby.
+
+Refused **when the class loads**, as `Literal::ArgumentError`: types that don't match the parameters by count or keyword name, a `sig` with no `>>`, two `sig`s in a row, a class body that ends on a `sig` (no `end` event in a `Class.new` block or on TruffleRuby, so there the next `sig` catches it), and parameters a sig cannot type yet — `*rest`, `**rest`, destructuring, a required argument after an optional one.
+
+The checking method is compiled to the method's own parameter list and calls the original through a private alias, so stack traces still read `Greeter#greet` and one taking only required parameters allocates nothing; optional parameters may cost the Array or Hash that carries them, depending on the Ruby.
+
 ## Rails
 
 Auto-loads with Rails. AM/AR attribute types `:literal_enum`/`:literal_flags` (`attribute :color, :literal_enum, type: Color`); ActiveJob enum serializer; `ActiveRecord.Relation(Model)` relation type.
