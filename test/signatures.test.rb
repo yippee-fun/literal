@@ -162,19 +162,22 @@ test "refuses a sig with no method after it before the next" do
 	assert error.message.include?("has no method after it")
 end
 
-test "refuses to load a class body that ends on a sig" do
-	error = assert_raises(Literal::ArgumentError) do
-		Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-			class Dangling
-				extend Literal::Signatures
+# TruffleRuby has no TracePoint, so there the next sig catches a dangling one.
+unless RUBY_ENGINE == "truffleruby"
+	test "refuses to load a class body that ends on a sig" do
+		error = assert_raises(Literal::ArgumentError) do
+			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				class Dangling
+					extend Literal::Signatures
 
-				sig(String) >> String
-			end
-		RUBY
+					sig(String) >> String
+				end
+			RUBY
+		end
+
+		assert error.message.include?("Dangling: the sig at")
+		assert error.message.include?("has no method after it")
 	end
-
-	assert error.message.include?("Dangling: the sig at")
-	assert error.message.include?("has no method after it")
 end
 
 test "does not watch for an end once the method is defined" do

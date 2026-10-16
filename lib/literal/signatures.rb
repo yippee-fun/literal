@@ -24,8 +24,8 @@
 #
 # The checking method is compiled to the method's own parameter list, so one
 # that takes only required parameters allocates nothing to be checked; any
-# optional positional or keyword parameters cost the Array or Hash that
-# carries them through.
+# optional positional or keyword parameters may cost the Array or Hash that
+# carries them through, depending on the Ruby.
 module Literal::Signatures
 	include Literal::Types
 
