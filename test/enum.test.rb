@@ -54,6 +54,43 @@ test ".coerce with invalid symbol raises an ArgumentError" do
 	end
 end
 
+test ".coerce with the name of a constant outside the enum raises an ArgumentError" do
+	assert_raises ArgumentError do
+		Color.coerce(:String)
+	end
+
+	assert_raises ArgumentError do
+		Color.coerce(:Object)
+	end
+end
+
+test ".coerce with the name of a non-member constant raises an ArgumentError" do
+	enum = Class.new(Literal::Enum(String)) do
+		const_set(:Red, new("r"))
+		const_set(:Helper, 5)
+	end
+
+	assert_equal enum.coerce(:Red), enum::Red
+
+	assert_raises ArgumentError do
+		enum.coerce(:Helper)
+	end
+end
+
+test ".coerce on a subclass does not return members of the superclass" do
+	subclass = Class.new(Color)
+
+	assert_raises ArgumentError do
+		subclass.coerce(:Red)
+	end
+end
+
+test ".coerce with an invalid constant name raises an ArgumentError" do
+	assert_raises ArgumentError do
+		Color.coerce(:invalid)
+	end
+end
+
 test ".coerce with invalid value raises an ArgumenError" do
 	assert_raises ArgumentError do
 		Color.coerce("invalid value")
