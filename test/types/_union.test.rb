@@ -185,3 +185,29 @@ test "error message" do
 		  Actual (Symbol): :symbol
 	ERROR
 end
+
+test "#=== does not hash a value that cannot be one of its primitives" do
+	hashed = []
+	value = Object.new
+	value.define_singleton_method(:hash) { hashed << self; object_id }
+
+	refute _Union(:a, 1, String) === value
+	refute _Union(String, Integer) === value
+	assert _Union(Object) === value
+	assert_equal _Union(:a, Object).resolve(value), Object
+
+	assert_equal hashed, []
+end
+
+test "#=== matches a primitive given an instance of a subclass of its class" do
+	subclass = Class.new(String)
+
+	assert _Union("a", Integer) === subclass.new("a")
+	refute _Union("a", Integer) === subclass.new("b")
+end
+
+test "#=== matches a primitive given a delegator to it" do
+	assert _Union("a", Integer) === SimpleDelegator.new("a")
+	assert _Union(:a, Integer) === SimpleDelegator.new(:a)
+	refute _Union(:a, Integer) === SimpleDelegator.new(:b)
+end

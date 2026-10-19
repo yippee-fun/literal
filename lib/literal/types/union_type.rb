@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "delegate"
+
 class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
@@ -33,6 +35,11 @@ class Literal::Types::UnionType
 		types.uniq!
 		@types = types.freeze
 		@primitives = primitives.freeze
+		# A value can only equal a primitive of its own class, of String, Array or Hash when it is
+		# an instance of a subclass (no other primitive class can be subclassed and instantiated),
+		# or when it is a delegator, which forwards eql? and hash to the object it wraps
+		@primitive_classes = primitives.to_h { |primitive| [primitive.class, true] }.freeze
+		@open_primitive_classes = [*(@primitive_classes.keys & [String, Array, Hash]), Delegator].freeze
 
 		freeze
 	end
@@ -78,7 +85,7 @@ class Literal::Types::UnionType
 	end
 
 	def resolve(value)
-		if @primitives.include?(value)
+		if primitive_match?(value)
 			value
 		else
 			types = @types
@@ -174,8 +181,20 @@ class Literal::Types::UnionType
 			@types.any? { |member| Literal.subtype?(type, member, context:) }
 	end
 
+	# Values that cannot equal a primitive skip the Set lookup, which hashes the value - on Ruby 4
+	# even when the set is empty - and hashing a struct or an array hashes everything inside it.
 	private def primitive_match?(value)
-		@primitives.include?(value)
+		return false if @primitive_classes.empty?
+		return @primitives.include?(value) if @primitive_classes[value.class]
+
+		classes = @open_primitive_classes
+		i, len = 0, classes.size
+		while i < len
+			return @primitives.include?(value) if classes[i] === value
+			i += 1
+		end
+
+		false
 	rescue
 		@primitives.any? { |primitive| primitive == value }
 	end
