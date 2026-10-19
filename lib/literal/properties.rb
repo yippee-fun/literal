@@ -173,7 +173,8 @@ module Literal::Properties
 	# The checks whose outcome depends on one property — what its writer
 	# enforces on every assignment.
 	def literal_checks_for(name)
-		return __literal_checks_for__(name) if frozen?
+		# Other Ractors may neither read nor write the cache.
+		return __literal_checks_for__(name) if frozen? || (defined?(Ractor) && !Ractor.current.equal?(Ractor.main))
 
 		table = (@literal_checks_for ||= {})
 		table[name] ||= __literal_checks_for__(name)
@@ -236,6 +237,11 @@ module Literal::Properties
 
 		unless description.nil? || String === description
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
+		end
+
+		# Frozen by Ractor.make_shareable.
+		if literal_properties.frozen?
+			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because its properties are frozen.")
 		end
 
 		queue = subclasses

@@ -6,4 +6,7 @@ class Literal::Checks::Error < Literal::Data
 	# Integer is admitted now so that indexed paths into collections can come
 	# later without changing this public schema.
 	prop :path, _Array(_Union(Symbol, Integer)), default: -> { [] }
+
+	# So that a failed check can be reported inside any Ractor.
+	Ractor.make_shareable(literal_properties) if defined?(Ractor)
 end
