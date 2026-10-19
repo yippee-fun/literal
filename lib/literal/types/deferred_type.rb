@@ -27,6 +27,14 @@ class Literal::Types::DeferredType
 
 	def materialize
 		return @materialized unless UNMATERIALIZED.equal?(@materialized)
+		# Frozen before its first use, say by Ractor.make_shareable ahead of the
+		# constants the block names, so it can no longer remember the answer.
+		return @block.call if frozen?
+
+		__materialize__
+	end
+
+	private def __materialize__
 		return self if @materializing
 
 		@materializing = true
