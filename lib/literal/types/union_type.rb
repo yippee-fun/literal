@@ -33,6 +33,7 @@ class Literal::Types::UnionType
 		types.uniq!
 		@types = types.freeze
 		@primitives = primitives.freeze
+		@primitive_classes = primitives.map(&:class).uniq.freeze
 
 		freeze
 	end
@@ -78,7 +79,7 @@ class Literal::Types::UnionType
 	end
 
 	def resolve(value)
-		if @primitives.include?(value)
+		if primitive_match?(value)
 			value
 		else
 			types = @types
@@ -174,8 +175,18 @@ class Literal::Types::UnionType
 			@types.any? { |member| Literal.subtype?(type, member, context:) }
 	end
 
+	# Only a value of a primitive's class can equal it, so anything else skips the Set lookup.
+	# That lookup hashes the value - on Ruby 4 even when the set is empty - and hashing a
+	# struct or an array hashes everything inside it.
 	private def primitive_match?(value)
-		@primitives.include?(value)
+		classes = @primitive_classes
+		i, len = 0, classes.size
+		while i < len
+			return @primitives.include?(value) if classes[i] === value
+			i += 1
+		end
+
+		false
 	rescue
 		@primitives.any? { |primitive| primitive == value }
 	end
