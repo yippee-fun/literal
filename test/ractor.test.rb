@@ -20,17 +20,33 @@ if RUBY_ENGINE == "ruby"
 		prop :count, Integer, :positional, reader: :public
 	end
 
+	class RactorRange < Literal::Struct
+		prop :min, Integer
+		prop :max, Integer
+
+		checks do |errors, min:, max:|
+			errors.add(:min, "must not be greater than max") if min > max
+		end
+	end
+
 	module RactorTypes
 		extend Literal::Types
 
 		# Frozen before the constant it names exists.
 		Later = Ractor.make_shareable(_Deferred { Pair })
 		Pair = _Tuple(String, Integer)
+
+		Itself = Ractor.make_shareable(_Deferred { Itself.materialize })
 	end
 
-	[RactorStruct, RactorData, RactorObject].each do |shape|
+	[RactorStruct, RactorData, RactorObject, RactorRange].each do |shape|
 		Ractor.make_shareable(shape.literal_properties)
 	end
+
+	Ractor.make_shareable(RactorRange.literal_checks)
+
+	# Ruby 3.3 cannot autoload outside the main Ractor.
+	Literal::Checks::Collector
 
 	class Quickdraw::Test
 		def in_ractor(&)
@@ -85,6 +101,33 @@ if RUBY_ENGINE == "ruby"
 		matches = in_ractor { [RactorTypes::Later === ["a", 1], RactorTypes::Later === [1, "a"]] }
 
 		assert_equal matches, [true, false]
+	end
+
+	test "checks run inside a Ractor once they are shareable" do
+		outcome = in_ractor do
+			range = RactorRange.new(min: 1, max: 2)
+			failures = []
+
+			begin
+				RactorRange.new(min: 3, max: 2)
+			rescue Literal::CheckError => error
+				failures << error.message
+			end
+
+			begin
+				range.min = 5
+			rescue Literal::CheckError => error
+				failures << error.message
+			end
+
+			[range.min, failures]
+		end
+
+		assert_equal outcome, [1, ["Unsound #{RactorRange}\n  min must not be greater than max\n"] * 2]
+	end
+
+	test "a frozen deferred type that resolves to itself does not recurse forever" do
+		assert_same RactorTypes::Itself.materialize, RactorTypes::Itself
 	end
 
 	test "the types with nested types are shareable as built" do

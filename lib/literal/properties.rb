@@ -173,7 +173,8 @@ module Literal::Properties
 	# The checks whose outcome depends on one property — what its writer
 	# enforces on every assignment.
 	def literal_checks_for(name)
-		return __literal_checks_for__(name) if frozen?
+		# Other Ractors may neither read nor write the cache.
+		return __literal_checks_for__(name) if frozen? || (defined?(Ractor) && !Ractor.current.equal?(Ractor.main))
 
 		table = (@literal_checks_for ||= {})
 		table[name] ||= __literal_checks_for__(name)
