@@ -35,6 +35,8 @@ Options `reader:/writer:/predicate:`: `false | :public | :protected | :private`;
 
 Inheritance checked: redefined prop keeps kind, ≥ visibility, narrows type (LSP). No new props after a subclass inherited. `K.literal_properties` → Schema (Enumerable of `Literal::Property`, sorted positional → * → keyword → ** → &).
 
+Ractors: once a class's props are all defined, `Ractor.make_shareable(K.literal_properties)` from the main Ractor (for each class, subclasses too) lets any Ractor build and read `K`; no props can be added after. Defaults, coercions and `_Deferred` blocks are frozen with it, so they must not capture mutable state. On Ruby 3.3, which cannot autoload outside the main Ractor, touch the Literal constants they use (such as `Literal::Undefined`) from the main Ractor first.
+
 ### Slices
 
 ```ruby
