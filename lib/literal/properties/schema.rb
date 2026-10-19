@@ -4,10 +4,15 @@
 class Literal::Properties::Schema
 	include Enumerable
 
+	# One lock for every schema rather than one each: a Mutex can never be
+	# Ractor-shareable, and a schema must be for its class to be built in another
+	# Ractor. Properties are only added while classes are defined, so it is
+	# never contended.
+	MUTEX = Mutex.new
+
 	def initialize(properties_index: {}, sorted_properties: [])
 		@properties_index = properties_index
 		@sorted_properties = sorted_properties
-		@mutex = Mutex.new
 	end
 
 	attr_reader :properties_index
@@ -25,7 +30,7 @@ class Literal::Properties::Schema
 	end
 
 	def <<(value)
-		@mutex.synchronize do
+		MUTEX.synchronize do
 			@properties_index[value.name] = value
 			# ruby's sort is unstable, this trick makes it stable
 			n = 0

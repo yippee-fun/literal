@@ -238,6 +238,11 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
 		end
 
+		# Frozen by Ractor.make_shareable.
+		if literal_properties.frozen?
+			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because its properties are frozen.")
+		end
+
 		queue = subclasses
 		until queue.empty?
 			subclass = queue.shift
