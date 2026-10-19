@@ -25,14 +25,20 @@ class Literal::Types::DeferredType
 		"_Deferred"
 	end
 
+	# Only a call that materializes writes to the type, so once materialized it can be frozen
+	# (or made shareable with Ractor.make_shareable). A type frozen before its first use
+	# cannot cache, and evaluates its block every time.
 	def materialize
 		return @materialized unless UNMATERIALIZED.equal?(@materialized)
+		return @block.call if frozen?
 		return self if @materializing
 
-		@materializing = true
-		@materialized = @block.call
-	ensure
-		@materializing = false
+		begin
+			@materializing = true
+			@materialized = @block.call
+		ensure
+			@materializing = false
+		end
 	end
 
 	# Wrapped rather than materialized: the deferred constant may not be
@@ -41,8 +47,11 @@ class Literal::Types::DeferredType
 		Literal::Types::DeferredType.new { relax.call(materialize) }
 	end
 
+	# A check made while the block is still running - say, one it sets off by autoloading a
+	# constant - gets the type straight from the block, since materialize can only return self
 	def ===(other)
-		materialize === other
+		type = materialize
+		type.equal?(self) ? @block.call === other : type === other
 	end
 
 	def >=(other, context: nil)

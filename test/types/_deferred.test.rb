@@ -57,3 +57,34 @@ test "subtype handles deferred fresh-wrapper cycles" do
 
 	assert_equal false, Literal.subtype?(Proc, recursive)
 end
+
+test "a materialized _Deferred still matches once frozen" do
+	type = _Deferred { String }
+	assert type === "a"
+
+	type.freeze
+
+	assert type === "b"
+	refute type === 1
+end
+
+test "a _Deferred frozen before it is used still matches" do
+	type = _Deferred { String }.freeze
+
+	assert type === "a"
+	refute type === 1
+end
+
+test "a check made while a _Deferred is materializing gets an answer" do
+	# Like a constant whose autoload checks a value against the type being resolved
+	nested = nil
+	runs = 0
+	type = _Deferred do
+		runs += 1
+		nested = type === "a" if runs == 1
+		String
+	end
+
+	assert type === "b"
+	assert_equal nested, true
+end
