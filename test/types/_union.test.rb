@@ -205,3 +205,9 @@ test "#=== matches a primitive given an instance of a subclass of its class" do
 	assert _Union("a", Integer) === subclass.new("a")
 	refute _Union("a", Integer) === subclass.new("b")
 end
+
+test "#=== matches a primitive given a delegator to it" do
+	assert _Union("a", Integer) === SimpleDelegator.new("a")
+	assert _Union(:a, Integer) === SimpleDelegator.new(:a)
+	refute _Union(:a, Integer) === SimpleDelegator.new(:b)
+end

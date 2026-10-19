@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "delegate"
+
 class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
@@ -33,10 +35,11 @@ class Literal::Types::UnionType
 		types.uniq!
 		@types = types.freeze
 		@primitives = primitives.freeze
-		# A value can only equal a primitive of its own class, or of String, Array or Hash when it
-		# is an instance of a subclass - no other primitive class can be subclassed and instantiated
+		# A value can only equal a primitive of its own class, of String, Array or Hash when it is
+		# an instance of a subclass (no other primitive class can be subclassed and instantiated),
+		# or when it is a delegator, which forwards eql? and hash to the object it wraps
 		@primitive_classes = primitives.to_h { |primitive| [primitive.class, true] }.freeze
-		@subclassable_primitive_classes = (@primitive_classes.keys & [String, Array, Hash]).freeze
+		@open_primitive_classes = [*(@primitive_classes.keys & [String, Array, Hash]), Delegator].freeze
 
 		freeze
 	end
@@ -184,7 +187,7 @@ class Literal::Types::UnionType
 		return false if @primitive_classes.empty?
 		return @primitives.include?(value) if @primitive_classes[value.class]
 
-		classes = @subclassable_primitive_classes
+		classes = @open_primitive_classes
 		i, len = 0, classes.size
 		while i < len
 			return @primitives.include?(value) if classes[i] === value
