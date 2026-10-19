@@ -33,7 +33,10 @@ class Literal::Types::UnionType
 		types.uniq!
 		@types = types.freeze
 		@primitives = primitives.freeze
-		@primitive_classes = primitives.map(&:class).uniq.freeze
+		# A value can only equal a primitive of its own class, or of String, Array or Hash when it
+		# is an instance of a subclass - no other primitive class can be subclassed and instantiated
+		@primitive_classes = primitives.to_h { |primitive| [primitive.class, true] }.freeze
+		@subclassable_primitive_classes = (@primitive_classes.keys & [String, Array, Hash]).freeze
 
 		freeze
 	end
@@ -175,11 +178,13 @@ class Literal::Types::UnionType
 			@types.any? { |member| Literal.subtype?(type, member, context:) }
 	end
 
-	# Only a value of a primitive's class can equal it, so anything else skips the Set lookup.
-	# That lookup hashes the value - on Ruby 4 even when the set is empty - and hashing a
-	# struct or an array hashes everything inside it.
+	# Values that cannot equal a primitive skip the Set lookup, which hashes the value - on Ruby 4
+	# even when the set is empty - and hashing a struct or an array hashes everything inside it.
 	private def primitive_match?(value)
-		classes = @primitive_classes
+		return false if @primitive_classes.empty?
+		return @primitives.include?(value) if @primitive_classes[value.class]
+
+		classes = @subclassable_primitive_classes
 		i, len = 0, classes.size
 		while i < len
 			return @primitives.include?(value) if classes[i] === value

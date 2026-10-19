@@ -193,7 +193,7 @@ test "#=== does not hash a value that cannot be one of its primitives" do
 
 	refute _Union(:a, 1, String) === value
 	refute _Union(String, Integer) === value
-	assert_equal _Union(Object) === value, true
+	assert _Union(Object) === value
 	assert_equal _Union(:a, Object).resolve(value), Object
 
 	assert_equal hashed, []
