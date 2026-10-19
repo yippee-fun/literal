@@ -5,7 +5,7 @@ class Literal::Types::MapType
 	include Literal::Type
 
 	def initialize(shape)
-		@shape = shape
+		@shape = shape.freeze
 		freeze
 	end
 
