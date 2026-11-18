@@ -35,11 +35,18 @@ class Literal::Enum
 			if subclass.name && RUBY_ENGINE != "truffleruby"
 				TracePoint.trace(:end) do |tp|
 					if tp.self == subclass
-						tp.self.__after_defined__
+						tp.self.__after_defined__ unless tp.self.frozen?
 						tp.disable
 					end
 				end
 			end
+		end
+
+		# A hook for anything that knows when the class body has closed, sparing
+		# the wait for the TracePoint — which never fires for an anonymous class.
+		private def defined
+			__after_defined__ unless frozen?
+			super if defined?(super)
 		end
 
 		def position_of(member)

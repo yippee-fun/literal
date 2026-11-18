@@ -287,6 +287,57 @@ module Literal::Properties
 		name
 	end
 
+	# Declare several properties as one batch. Each property is recorded, and its
+	# reader, writer and predicate defined, as it is declared; the methods
+	# generated from the whole schema — the initializer and to_h — are generated
+	# once when the block ends rather than once per property.
+	#
+	#   props do
+	#     prop :name, String
+	#     prop :age, Integer
+	#   end
+	def props
+		raise Literal::ArgumentError.new("props requires a block") unless block_given?
+
+		begin_props
+
+		begin
+			yield
+		ensure
+			commit_props
+		end
+
+		nil
+	end
+
+	# The two halves of `props`, for a caller that cannot wrap the declarations
+	# in a block. Batches nest: the schema-wide methods are generated when the
+	# outermost one is committed, or sooner if something needs them.
+	def begin_props
+		@__literal_open_batches__ = __literal_open_batches__ + 1
+		nil
+	end
+
+	def commit_props
+		# Freezing generated whatever was deferred.
+		return if frozen?
+
+		open_batches = __literal_open_batches__
+
+		unless open_batches > 0
+			raise Literal::ArgumentError.new("Cannot commit props on #{self}, because no batch is open.")
+		end
+
+		@__literal_open_batches__ = open_batches - 1
+		__literal_define_schema_methods__ if open_batches == 1
+		nil
+	end
+
+	def freeze
+		__literal_define_schema_methods__
+		super
+	end
+
 	def slice(*names)
 		properties = literal_properties
 
@@ -310,7 +361,9 @@ module Literal::Properties
 				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
 			end
 
-			sliced.each { |property| __literal_add_property__(property) }
+			props do
+				sliced.each { |property| __literal_add_property__(property) }
+			end
 		end.tap { |projection| projection.__send__(:__literal_slice_checks__, self, names) }
 	end
 
@@ -353,10 +406,66 @@ module Literal::Properties
 	end
 
 	private def __define_literal_methods__(new_property)
-		code =	__generate_literal_methods__(new_property)
+		if __literal_open_batches__ > 0
+			__literal_defer_schema_methods__
+			return unless new_property
+
+			code = __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
+		else
+			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
+			code = __generate_literal_methods__(new_property)
+		end
+
 		__literal_silence_redefinitions__(new_property) if new_property
 		# An explicit path, so every engine attributes these frames to Literal.
 		__literal_extension__.module_eval(code, __FILE__, __LINE__)
+	end
+
+	private def __literal_open_batches__
+		@__literal_open_batches__ || 0
+	end
+
+	SCHEMA_METHODS = [:initialize, :to_h, :to_hash].freeze
+	SCHEMA_METHODS_MUTEX = Mutex.new
+
+	private def __literal_schema_methods__
+		SCHEMA_METHODS
+	end
+
+	# The schema-wide methods are stale while a batch is open. Anything that
+	# calls one before the batch is committed — a Literal::Enum building its
+	# members in the class body — reaches a stand-in that generates the real
+	# methods and hands over to them.
+	private def __literal_defer_schema_methods__
+		return if @__literal_schema_methods_deferred__
+
+		@__literal_schema_methods_deferred__ = true
+
+		shape = self
+		extension = __literal_extension__
+
+		__literal_schema_methods__.each do |name|
+			extension.alias_method(name, name)
+			extension.define_method(name) do |*args, **kwargs, &block|
+				shape.__send__(:__literal_define_schema_methods__)
+				extension.instance_method(name).bind_call(self, *args, **kwargs, &block)
+			end
+		end
+	end
+
+	private def __literal_define_schema_methods__
+		return unless @__literal_schema_methods_deferred__
+
+		# A second thread reaching a stand-in waits here, then finds the real
+		# methods in place.
+		SCHEMA_METHODS_MUTEX.synchronize do
+			next unless @__literal_schema_methods_deferred__
+
+			extension = __literal_extension__
+			__literal_schema_methods__.each { |name| extension.alias_method(name, name) }
+			extension.module_eval(__generate_literal_methods__(nil), __FILE__, __LINE__)
+			@__literal_schema_methods_deferred__ = false
+		end
 	end
 
 	# Re-emitting a property's methods — a writer picking up a new check —
@@ -403,14 +512,15 @@ module Literal::Properties
 		buffer << "# frozen_string_literal: true\n"
 		literal_properties.generate_initializer(buffer, checked: literal_checks.any?)
 		literal_properties.generate_to_h(buffer)
-
 		# Nil when re-emitting for a new check rather than a new property.
-		if new_property
-			new_property.generate_writer_method(buffer, checked: __literal_checked_property__?(new_property.name)) if new_property.writer
-			new_property.generate_reader_method(buffer) if new_property.reader
-			new_property.generate_predicate_method(buffer) if new_property.predicate
-		end
+		__generate_literal_property_methods__(new_property, buffer) if new_property
+		buffer
+	end
 
+	private def __generate_literal_property_methods__(property, buffer)
+		property.generate_writer_method(buffer, checked: __literal_checked_property__?(property.name)) if property.writer
+		property.generate_reader_method(buffer) if property.reader
+		property.generate_predicate_method(buffer) if property.predicate
 		buffer
 	end
 end

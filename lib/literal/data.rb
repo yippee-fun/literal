@@ -12,7 +12,9 @@ class Literal::Data < Literal::DataStructure
 
 		def define(**properties)
 			Class.new(self) do
-				properties.each { |name, type| prop(name, type) }
+				props do
+					properties.each { |name, type| prop(name, type) }
+				end
 			end
 		end
 

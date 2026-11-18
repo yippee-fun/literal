@@ -205,6 +205,12 @@ class Literal::DataStructure
 
 	alias_method :eql?, :==
 
+	SCHEMA_METHODS = [*Literal::Properties::SCHEMA_METHODS, :hash, :==, :eql?].freeze
+
+	private_class_method def self.__literal_schema_methods__
+		SCHEMA_METHODS
+	end
+
 	def self.__generate_literal_methods__(new_property, buffer = +"")
 		super
 		literal_properties.generate_hash(buffer)
