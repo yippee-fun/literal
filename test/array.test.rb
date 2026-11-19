@@ -760,6 +760,109 @@ test "#[]= pads a nilable array with nils" do
 	assert_equal array.to_a, [1, nil, nil, 2]
 end
 
+test "#[]= converts the index with to_int before checking padding" do
+	array = Literal::Array(Integer).new(1, 2)
+
+	array[1.0] = 3
+	assert_equal array.to_a, [1, 3]
+
+	assert_raises(Literal::TypeError) { array[5.0] = 9 }
+	assert_raises(TypeError) { array["0"] = 9 }
+	assert_equal array.to_a, [1, 3]
+end
+
+test "#[]= with a range or a start and length splices elements" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	array[0..1] = 5
+	assert_equal array.to_a, [5, 3]
+
+	array[1, 1] = Literal::Array(Integer).new(6, 7)
+	assert_equal array.to_a, [5, 6, 7]
+
+	array[0, 2] = [8]
+	assert_equal array.to_a, [8, 7]
+
+	array[1..] = Literal::Tuple(Integer, Integer).new(9, 10)
+	assert_equal array.to_a, [8, 9, 10]
+
+	assert_raises(Literal::TypeError) { array[0, 1] = "a" }
+	assert_raises(Literal::TypeError) { array[0..0] = [1, "a"] }
+	assert_equal array.to_a, [8, 9, 10]
+end
+
+test "#[]= with a range or a start and length checks spliced elements, not the whole value" do
+	nested = Literal::Array(Literal::Array(Integer)).new(Literal::Array(Integer).new(1))
+
+	assert_raises(Literal::TypeError) { nested[0..0] = Literal::Array(Integer).new(5) }
+	assert_raises(Literal::TypeError) { nested[0, 1] = Literal::Array(Integer).new(5) }
+
+	nested[0..0] = [Literal::Array(Integer).new(5)]
+	assert_equal nested.to_a, [Literal::Array(Integer).new(5)]
+
+	plain = Literal::Array(_Array(String)).new(["a"])
+
+	assert_raises(Literal::TypeError) { plain[0..0] = ["b"] }
+
+	plain[0..0] = [["b"]]
+	assert_equal plain.to_a, [["b"]]
+end
+
+test "#[]= with a range or a start and length can't pad a non-nilable array with nils" do
+	array = Literal::Array(Integer).new(1, 2)
+
+	assert_raises(Literal::TypeError) { array[5..5] = 9 }
+	assert_raises(Literal::TypeError) { array[5, 0] = 9 }
+	assert_raises(Literal::TypeError) { array[3..] = [] }
+	assert_equal array.to_a, [1, 2]
+
+	array[2..] = 3
+	assert_equal array.to_a, [1, 2, 3]
+
+	nilable = Literal::Array(_Nilable(Integer)).new(1)
+	nilable[3, 0] = 2
+	assert_equal nilable.to_a, [1, nil, nil, 2]
+end
+
+test "#[]= with a range converts each endpoint once" do
+	array = Literal::Array(Integer).new(1, 2)
+	calls = 0
+	shifty = Object.new
+	shifty.define_singleton_method(:to_int) { ((calls += 1) == 1) ? 0 : 5 }
+	shifty.define_singleton_method(:<=>) { |_other| 0 }
+
+	array[Range.new(shifty, nil)] = [9]
+
+	assert_equal array.to_a, [9]
+	assert_equal calls, 1
+end
+
+test "#[]= with a range splices like core" do
+	endpoints = [nil, -(1 << 64), -4, -3, -1, 0, 1, 3, 4, 1 << 64]
+
+	endpoints.product(endpoints, [true, false]) do |first, last, exclusive|
+		range = Range.new(first, last, exclusive)
+		core = [1, 2, 3]
+		array = Literal::Array(_Nilable(Integer)).new(1, 2, 3)
+
+		expected = begin
+			core[range] = [7]
+			core
+		rescue RangeError => error
+			error.class
+		end
+
+		actual = begin
+			array[range] = [7]
+			array.to_a
+		rescue RangeError => error
+			error.class
+		end
+
+		assert_equal actual, expected
+	end
+end
+
 test "#insert checks values and padding" do
 	array = Literal::Array(Integer).new(1, 4)
 
@@ -768,6 +871,7 @@ test "#insert checks values and padding" do
 
 	assert_raises(Literal::TypeError) { array.insert(1, "2") }
 	assert_raises(Literal::TypeError) { array.insert(10, 5) }
+	assert_raises(Literal::TypeError) { array.insert(10.0, 5) }
 	assert_equal array.to_a, [1, 2, 3, 4]
 end
 

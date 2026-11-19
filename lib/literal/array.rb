@@ -169,14 +169,34 @@ class Literal::Array
 		Literal::Undefined
 	end
 
-	def []=(index, value)
-		Literal.check(value, @__type__) do |c|
-			c.fill_receiver(receiver: self, method: "#[]=")
+	# Like Ruby's Array, assigning to a slice (a range, or a start and length)
+	# splices in the elements of anything that converts with `to_ary`.
+	def []=(*arguments)
+		case arguments
+		in [Range => range, value]
+			range = __index_range__(range)
+			elements = __splice_elements__(value)
+			__check_padding__(range.begin || 0)
+			@__value__[range] = elements
+		in [index, value]
+			index = __to_index__(index)
+
+			Literal.check(value, @__type__) do |c|
+				c.fill_receiver(receiver: self, method: "#[]=")
+			end
+
+			__check_padding__(index)
+			@__value__[index] = value
+		in [start, length, value]
+			start = __to_index__(start)
+			elements = __splice_elements__(value)
+			__check_padding__(start)
+			@__value__[start, __to_index__(length)] = elements
+		else
+			raise ::ArgumentError.new("wrong number of arguments (given #{arguments.size}, expected 2..3)")
 		end
 
-		__check_padding__(index)
-
-		@__value__[index] = value
+		value
 	end
 
 	def clear
@@ -317,6 +337,8 @@ class Literal::Array
 	end
 
 	def insert(index, *values)
+		index = __to_index__(index)
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#insert")
@@ -809,10 +831,32 @@ class Literal::Array
 		end
 	end
 
+	private def __splice_elements__(value)
+		elements = ::Array.try_convert(value) || [value]
+
+		Literal.check(elements, @__collection_type__) do |c|
+			c.fill_receiver(receiver: self, method: "#[]=")
+		end
+
+		elements
+	end
+
+	private def __to_index__(index)
+		Integer.try_convert(index) || raise(::TypeError.new("no implicit conversion of #{index.class} into Integer"))
+	end
+
+	# Converts each endpoint once, so the bounds we check are the bounds we use.
+	private def __index_range__(range)
+		first = range.begin.nil? ? nil : __to_index__(range.begin)
+		last = range.end.nil? ? nil : __to_index__(range.end)
+
+		::Range.new(first, last, range.exclude_end?)
+	end
+
 	# Writing beyond the end of the array pads the gap with nils, which is only
 	# valid if our element type admits nil.
 	private def __check_padding__(index)
-		if Integer === index && index > @__value__.length && !(@__type__ === nil)
+		if index > @__value__.length && !(@__type__ === nil)
 			raise Literal::TypeError.new(
 				context: Literal::TypeError::Context.new(
 					expected: @__type__,
