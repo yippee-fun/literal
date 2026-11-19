@@ -58,7 +58,7 @@ class Literal::Types::ConstraintType
 
 			other_property_constraints = other.property_constraints
 			return false unless @property_constraints.all? do |k, v|
-				Literal.subtype?(other_property_constraints[k], v, context:) ||
+				(other_property_constraints.key?(k) && Literal.subtype?(other_property_constraints[k], v, context:)) ||
 					other_object_constraints.any? { |constraint| constraint_property_subtype?(constraint, k, v, context:) } ||
 					boolean_predicate_subtype?(other, k, v, context:)
 			end

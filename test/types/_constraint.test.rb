@@ -24,6 +24,8 @@ test "hierarchy" do
 
 	refute_subtype _Constraint(Array, size: 1..3), _Constraint(Array, size: 1..2)
 	refute_subtype _Constraint(String, size: 1), _Constraint(String, size: 4)
+	refute_subtype _Constraint(String, size: 1..), _Constraint(Object, zzz: _Any?)
+	refute_subtype _Constraint(Object), _Constraint(Object, name: _Nilable(String))
 	assert_subtype 3.14, _Float(finite?: _Truthy)
 	refute_subtype Float::INFINITY, _Float(finite?: _Truthy)
 	assert_subtype _Float(1..10), _Float(finite?: _Truthy)
