@@ -42,7 +42,7 @@ class Literal::DataStructure
 
 	def self.from_props(props)
 		instance = __literal_from_props__(props)
-		instance.__send__(:__literal_run_checks__)
+		Literal::SEND.bind_call(instance, :__literal_run_checks__)
 		instance
 	end
 
@@ -55,7 +55,7 @@ class Literal::DataStructure
 	# that caller — seals fix a representation once, not once per hop.
 	private_class_method def self.__literal_from_props__(props, seal: true)
 		instance = allocate
-		matched = instance.__send__(:__literal_assign_props__, props, ".from_props", seal:)
+		matched = Literal::SEND.bind_call(instance, :__literal_assign_props__, props, ".from_props", seal:)
 
 		if matched < props.size
 			unknown = props.each_key.find { |key| literal_properties[key].nil? }
@@ -96,10 +96,11 @@ class Literal::DataStructure
 		when String
 			key = key.intern
 		else
-			raise TypeError.new("expected a string or symbol, got #{key.class}")
+			::Kernel.raise TypeError.new("expected a string or symbol, got #{key.class}")
 		end
 
-		prop = self.class.literal_properties[key] || raise(NameError.new("unknown attribute: #{key.inspect} for #{self.class}"))
+		shape = Literal::CLASS.bind_call(self)
+		prop = shape.literal_properties[key] || ::Kernel.raise(NameError.new("unknown attribute: #{key.inspect} for #{shape}"))
 		Literal::INSTANCE_VARIABLE_GET.bind_call(self, prop.__ivar__)
 	end
 
@@ -134,7 +135,7 @@ class Literal::DataStructure
 		# frozen state recorded at dump is what gets restored.
 		__literal_assign_props__(attributes, "#marshal_load", seal: false)
 
-		freeze if was_frozen
+		Literal::FREEZE.bind_call(self) if was_frozen
 
 		# Restoring a dumped object is still construction: an object that breaks
 		# the shape's checks must not come back to life either.
@@ -150,7 +151,8 @@ class Literal::DataStructure
 	# that have since been removed. Returns the number of keys that matched a
 	# property so callers can be stricter.
 	private def __literal_assign_props__(props, method_name, seal: true)
-		properties = self.class.literal_properties
+		shape = Literal::CLASS.bind_call(self)
+		properties = shape.literal_properties
 		matched = 0
 
 		properties.each do |property|
@@ -160,7 +162,7 @@ class Literal::DataStructure
 				matched += 1
 				value = props[name]
 			else
-				value = self.class.__send__(:missing_prop_value, property, self)
+				value = shape.__send__(:missing_prop_value, property, self)
 			end
 
 			if seal && property.seal
@@ -171,7 +173,7 @@ class Literal::DataStructure
 				context.fill_receiver(receiver: self, method: method_name, label: name.name)
 			end
 
-			instance_variable_set(:"@#{name.name}", value)
+			Literal::INSTANCE_VARIABLE_SET.bind_call(self, property.__ivar__, value)
 		end
 
 		matched
@@ -192,15 +194,15 @@ class Literal::DataStructure
 			end
 		end
 
-		[2, attributes, frozen?, frozen_values.freeze].freeze
+		[2, attributes, Literal::FROZEN.bind_call(self), frozen_values.freeze].freeze
 	end
 
 	def hash
-		self.class.hash
+		Literal::CLASS.bind_call(self).hash
 	end
 
 	def ==(other)
-		self.class == other.class
+		Kernel === other && Literal::CLASS.bind_call(self).equal?(Literal::CLASS.bind_call(other))
 	end
 
 	alias_method :eql?, :==

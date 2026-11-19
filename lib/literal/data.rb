@@ -7,7 +7,7 @@ class Literal::Data < Literal::DataStructure
 		# Frozen before its checks see it, so a check judges a finished value
 		# exactly as it does on the initializer path.
 		private def __literal_from_props__(props, seal: true)
-			super.freeze
+			Literal::FREEZE.bind_call(super)
 		end
 
 		def define(**properties)
@@ -36,6 +36,6 @@ class Literal::Data < Literal::DataStructure
 	# Copies stay frozen, like Ruby's Data.
 	private def initialize_copy(source)
 		super
-		freeze
+		Literal::FREEZE.bind_call(self)
 	end
 end

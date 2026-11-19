@@ -108,7 +108,7 @@ class ::TypedLevel < Literal::Enum(Integer)
 end
 
 class ::TypedBlankSymbol < Literal::Enum(Symbol)
-	Blank = new(:"")
+	Empty = new(:"")
 end
 
 class ::TypedSwitch < Literal::Enum(Literal::Types._Boolean)
@@ -117,7 +117,7 @@ class ::TypedSwitch < Literal::Enum(Literal::Types._Boolean)
 end
 
 class ::TypedCode < Literal::Enum(String)
-	Blank = new("")
+	Empty = new("")
 	Filled = new("x")
 end
 
@@ -164,8 +164,8 @@ test "blank input casts to nil" do
 end
 
 test "a blank string that is a backing value casts to its member" do
-	assert_equal code.cast(""), TypedCode::Blank
-	assert_equal Literal::Rails::EnumType.new(TypedBlankSymbol).deserialize(""), TypedBlankSymbol::Blank
+	assert_equal code.cast(""), TypedCode::Empty
+	assert_equal Literal::Rails::EnumType.new(TypedBlankSymbol).deserialize(""), TypedBlankSymbol::Empty
 end
 
 test "input with no member raises" do

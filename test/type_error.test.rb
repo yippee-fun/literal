@@ -68,3 +68,10 @@ test "renders a BasicObject's own inspect" do
 
 	assert error.message.include?("): custom\n")
 end
+
+test "a value with a __send__ property is rendered" do
+	shape = Class.new(Literal::Data) { prop :__send__, String }
+	error = assert_raises(Literal::TypeError) { Literal.check(shape.new(__send__: "x"), String) }
+
+	assert error.message.include?("Expected: String\n")
+end

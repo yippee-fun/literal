@@ -15,7 +15,7 @@ class Literal::Serializer::StructureType
 	# Values only match if their whole structure type is serializable, so that
 	# matching context.type agrees with what serialization will accept.
 	def ===(object)
-		Literal::DataStructure === object && @context.serializable_type?(object.class)
+		Literal::DataStructure === object && @context.serializable_type?(Literal::CLASS.bind_call(object))
 	end
 
 	def matches?(other)
@@ -49,7 +49,7 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		value.class if type === value
+		Literal::CLASS.bind_call(value) if type === value
 	end
 
 	def object_shape(type)

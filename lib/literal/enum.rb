@@ -102,10 +102,30 @@ class Literal::Enum
 			object = const_get(name)
 
 			if self === object
+				snake_case = name.name.gsub(/(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z\d])(?=[A-Z])/, "_").downcase
+				predicate = :"#{snake_case}?"
+
+				if method_defined?(predicate) || private_method_defined?(predicate)
+					owner = instance_method(predicate).owner
+
+					# Ruby has published the constant and `new` the member; neither
+					# may outlive the refusal. A member built before others keeps
+					# its place, as an unnamed one, so their positions hold.
+					remove_const(name)
+
+					if !@names.key?(object) && @members.last.equal?(object)
+						@values.delete_if { |_, member| member.equal?(object) }
+						@members.pop
+					end
+
+					raise Literal::ArgumentError.new(
+						"The member #{name} can't define the predicate ##{predicate}, because it would override #{owner}##{predicate}."
+					)
+				end
+
 				@names[object] ||= name
-				predicate_name = name.to_s.gsub(/(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z\d])(?=[A-Z])/, "_").downcase
-				define_method("#{predicate_name}?") { self == object }
-				object.freeze
+				define_method(predicate) { self == object }
+				Literal::FREEZE.bind_call(object)
 			end
 		end
 
@@ -118,8 +138,8 @@ class Literal::Enum
 			# are judged on the state the block left — and a failure leaves
 			# nothing behind.
 			if block
-				new_object.instance_exec(&block)
-				new_object.__send__(:__literal_run_checks__) if literal_checks.any?
+				Literal::INSTANCE_EXEC.bind_call(new_object, &block)
+				Literal::SEND.bind_call(new_object, :__literal_run_checks__) if literal_checks.any?
 			end
 
 			if @values.key?(new_object.value)
@@ -128,7 +148,7 @@ class Literal::Enum
 
 			@values[new_object.value] = new_object
 
-			new_object.instance_variable_set(:@__position__, @members.length)
+			Literal::INSTANCE_VARIABLE_SET.bind_call(new_object, :@Position, @members.length)
 
 			@members << new_object
 
@@ -233,14 +253,14 @@ class Literal::Enum
 	include Comparable
 
 	def name
-		klass = self.class
+		klass = Literal::CLASS.bind_call(self)
 		"#{klass.name || klass.inspect}::#{klass.names[self]}"
 	end
 
 	alias_method :inspect, :name
 
 	def to_sym
-		self.class.names[self]
+		Literal::CLASS.bind_call(self).names[self]
 	end
 
 	def to_s
@@ -265,7 +285,7 @@ class Literal::Enum
 		in true | nil
 			self
 		in false
-			raise ArgumentError.new("can't unfreeze #{self.class.inspect}")
+			raise ArgumentError.new("can't unfreeze #{Literal::CLASS.bind_call(self).inspect}")
 		else
 			raise ArgumentError.new("unexpected value for freeze: #{Literal::CLASS.bind_call(freeze)}")
 		end
@@ -276,23 +296,28 @@ class Literal::Enum
 	end
 
 	def <=>(other)
+		shape = Literal::CLASS.bind_call(self)
+
 		case other
-		when self.class
-			@__position__ <=> other.__position__ if other.class == self.class
+		when shape
+			@Position <=> other.__position__ if Literal::CLASS.bind_call(other).equal?(shape)
 		end
 	end
 
 	def succ
-		self.class.members[@__position__ + 1]
+		Literal::CLASS.bind_call(self).members[@Position + 1]
 	end
 
 	def pred
-		if @__position__ <= 0
+		if @Position <= 0
 			nil
 		else
-			self.class.members[@__position__ - 1]
+			Literal::CLASS.bind_call(self).members[@Position - 1]
 		end
 	end
 
-	attr_reader :__position__
+	# Capitalized, so no property's slot can be this one.
+	def __position__
+		@Position
+	end
 end

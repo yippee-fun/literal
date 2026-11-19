@@ -261,7 +261,7 @@ end
 test "a property named hash never displaces the generated hash" do
 	declarations = proc do
 		prop :name, String
-		prop :hash, String
+		prop :hash, String, reader: false
 	end
 
 	unbatched = Class.new(Literal::Struct, &declarations)
@@ -512,14 +512,14 @@ test "Literal::Enum.defined hands on to a hook defined further up" do
 	assert_equal reached, [example]
 end
 
-test "a reader named after a schema-wide method does not displace it while the batch is open" do
+test "a property named after a schema-wide method does not displace it while the batch is open" do
 	early = nil
 
 	example = Class.new(Literal::Struct) do
 		prop :name, String
 
 		begin_props
-		prop :hash, _Nilable(String)
+		prop :hash, _Nilable(String), reader: false
 		early = { from_props(name: "Joel") => 1 }[from_props(name: "Joel")]
 		commit_props
 	end
@@ -549,23 +549,14 @@ test "generating can define another shape with a batch of its own" do
 	assert_equal outer.new(child: inner.new(name: "Joel")).child.name, "Joel"
 end
 
-test "a reader named after a schema-wide method fares as it would without a batch" do
-	last = proc do
-		prop :name, String
-		prop :to_h, String, reader: :public
-	end
+test "a reader named after a schema-wide method is refused, batch or not" do
+	declarations = proc { prop :to_h, String, reader: :public }
 
-	earlier = proc do
-		prop :to_h, String, reader: :public
-		prop :name, String
-	end
+	assert_raises(Literal::ArgumentError) { Class.new { extend Literal::Properties }.class_exec(&declarations) }
+	assert_raises(Literal::ArgumentError) { Class.new { extend Literal::Properties }.tap { |it| it.props { it.class_exec(&declarations) } } }
 
-	[last, earlier].each do |declarations|
-		unbatched = Class.new { extend Literal::Properties }.tap { |it| it.class_exec(&declarations) }
-		batched = Class.new { extend Literal::Properties }.tap { |it| it.props { it.class_exec(&declarations) } }
-
-		assert_equal batched.new(name: "Joel", to_h: "x").to_h, unbatched.new(name: "Joel", to_h: "x").to_h
-	end
+	example = Class.new { extend Literal::Properties }.tap { |it| it.props { it.prop :to_h, String } }
+	assert_equal example.new(to_h: "x").to_h, { to_h: "x" }
 end
 
 test "a Literal::Enum frozen by hand is not mistaken for a finished one" do

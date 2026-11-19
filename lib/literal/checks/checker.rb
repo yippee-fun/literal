@@ -63,7 +63,7 @@ module Literal::Checks::Checker
 		case input
 		when Literal::Draft
 			unless Literal::Draft(shape) === input
-				drafted = input.class.__type__
+				drafted = Literal::CLASS.bind_call(input).__type__
 				expected = shape.name || shape.inspect
 				actual = drafted&.name || drafted&.inspect || "an untyped draft"
 
@@ -72,7 +72,7 @@ module Literal::Checks::Checker
 				)
 			end
 
-			input.class.__type__
+			Literal::CLASS.bind_call(input).__type__
 		else
 			shape
 		end
@@ -90,10 +90,10 @@ module Literal::Checks::Checker
 			)
 		end
 
-		draft_properties = draft.class.literal_properties
+		draft_properties = Literal::CLASS.bind_call(draft).literal_properties
 		run_checks(shape, errors) do |name|
 			ivar = draft_properties[name].__ivar__
-			draft.instance_variable_defined?(ivar) ? draft.instance_variable_get(ivar) : Literal::Undefined
+			Literal::INSTANCE_VARIABLE_DEFINED.bind_call(draft, ivar) ? Literal::INSTANCE_VARIABLE_GET.bind_call(draft, ivar) : Literal::Undefined
 		end
 
 		[draft, sound]
@@ -105,12 +105,13 @@ module Literal::Checks::Checker
 	# Identity with the current draft class proves the input is current; a stale
 	# draft is read defensively onto a fresh one.
 	private def check_draft(shape, input, errors, depth)
-		draft = input.class.equal?(Literal::Draft(shape)) ? input.dup : Literal::Draft(shape).new
-		input_properties = input.class.literal_properties
+		input_class = Literal::CLASS.bind_call(input)
+		draft = input_class.equal?(Literal::Draft(shape)) ? Literal::DUP.bind_call(input) : Literal::Draft(shape).new
+		input_properties = input_class.literal_properties
 
 		each_property(shape, draft, errors) do |property|
 			slot = input_properties[property.name]
-			value = slot ? input.instance_variable_get(slot.__ivar__) : Literal::Undefined
+			value = slot ? Literal::INSTANCE_VARIABLE_GET.bind_call(input, slot.__ivar__) : Literal::Undefined
 
 			if Literal::Undefined == value
 				assign_missing(shape, draft, property, errors)
@@ -138,7 +139,7 @@ module Literal::Checks::Checker
 			# On the dup path the slot still holds the input's unjudged value,
 			# which no check may read.
 			ivar = property.__ivar__
-			draft.remove_instance_variable(ivar) if draft.instance_variable_defined?(ivar)
+			Literal::REMOVE_INSTANCE_VARIABLE.bind_call(draft, ivar) if Literal::INSTANCE_VARIABLE_DEFINED.bind_call(draft, ivar)
 			sound = false
 		end
 
@@ -287,7 +288,7 @@ module Literal::Checks::Checker
 			# A draft the prop's type takes as it is stays one, as at finalize.
 			return nil if property.type === value
 
-			drafted = value.class.__type__
+			drafted = Literal::CLASS.bind_call(value).__type__
 			return nil unless Class === drafted
 
 			# The draft's own class, not the declared shape it fits: a subclass

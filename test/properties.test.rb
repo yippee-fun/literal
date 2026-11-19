@@ -952,3 +952,125 @@ test "prop? refuses a default" do
 		end
 	end
 end
+
+# Names the generated code and Literal's internals once dispatched through or
+# used as locals.
+COLLIDING_NAMES = %i[
+	class
+	__class__
+	__property__
+	__properties__
+	binding
+	caller
+	raise
+	error
+	freeze
+	dup
+	__send__
+	instance_exec
+	instance_variable_get
+	instance_variable_set
+	instance_variable_defined
+	remove_instance_variable
+	respond_to
+	frozen
+	block_given
+	value
+].freeze
+
+test "props can be named after anything Literal's internals use" do
+	data = Class.new(Literal::Data) do
+		COLLIDING_NAMES.each { |name| prop name, String }
+		prop :end, String, default: "end"
+	end
+
+	struct = Class.new(Literal::Struct) do
+		COLLIDING_NAMES.each { |name| prop name, String, predicate: :public }
+		prop :initialized, String, default: -> { "#{instance_variable_get}!" }
+		check(:raise, "must not be empty") { |raise:| !raise.empty? }
+	end
+
+	values = COLLIDING_NAMES.to_h { |name| [name, name.name] }
+
+	value = data.new(**values)
+
+	assert Literal::FROZEN.bind_call(value)
+	assert_equal value.to_h, { **values, end: "end" }
+	assert_equal value.class, "class"
+	assert_equal value[:freeze], "freeze"
+	assert_equal value, data.new(**values)
+	assert_equal value.hash, data.new(**values).hash
+	refute_equal value, data.new(**values, raise: "x")
+	assert_equal data.from_props(value.to_h), value
+	assert_equal data.from_pack(value.as_pack), value
+	assert_equal data.build(**values), value
+	assert_equal Literal::Draft(data).check(values).value!, value
+
+	error = assert_raises(Literal::TypeError) { data.new(**values, binding: 1) }
+	assert error.message.include?("#initialize")
+
+	instance = struct.new(**values)
+
+	assert instance.respond_to?
+	assert instance.frozen?
+
+	assert_equal instance.initialized, "instance_variable_get!"
+	instance[:raise] = "raised"
+	assert_equal instance.raise, "raised"
+	assert_raises(Literal::TypeError) { instance.freeze = 1 }
+	assert_raises(Literal::CheckError) { instance[:raise] = "" }
+	assert_equal Literal::DUP.bind_call(instance), instance
+end
+
+test "positional and keyword props can share an escape" do
+	keyword = Class.new(Literal::Data) do
+		prop :class, String
+		prop :__class__, String
+		prop :___class__, String
+	end
+
+	positional = Class.new(Literal::Data) do
+		prop :class, String, :positional
+		prop :__class__, String, :positional
+	end
+
+	assert_equal keyword.new(class: "a", __class__: "b", ___class__: "c").to_h, { class: "a", __class__: "b", ___class__: "c" }
+	assert_equal positional.new("a", "b").to_h, { class: "a", __class__: "b" }
+end
+
+test "a reader or predicate that would replace a method Literal relies on is refused" do
+	[
+		[Literal::Struct, :to_h, {}],
+		[Literal::Struct, :hash, {}],
+		[Literal::Struct, :deconstruct, {}],
+		[Literal::Struct, :marshal_dump, {}],
+		[Literal::Struct, :as_pack, {}],
+		[Literal::Struct, :__literal_run_checks__, {}],
+		[Literal::Data, :initialize_copy, {}],
+		[Literal::Data, :initialize, {}],
+		[Literal::Data, :eql, { reader: false, predicate: :public }],
+		[Literal::Object, :to_hash, { reader: :public }],
+	].each do |base, name, options|
+		error = assert_raises(Literal::ArgumentError) { Class.new(base) { prop name, String, **options } }
+		assert error.message.include?("which Literal relies on")
+		assert error.message.include?(options[:predicate] ? "predicate: false" : "reader: false")
+	end
+
+	error = assert_raises(Literal::ArgumentError) { Class.new(Literal::Enum(Integer)) { prop :succ, String } }
+	assert error.message.include?("Literal::Enum#succ")
+
+	assert_equal Class.new(Literal::Struct) { prop :hash, String, reader: false }.new(hash: "x")[:hash], "x"
+end
+
+test "readers may replace Ruby's own methods" do
+	klass = Class.new(Literal::Data) do
+		prop :method, String
+		prop :display, String
+		prop :format, String
+		prop :class, String
+	end
+
+	value = klass.new(method: "a", display: "b", format: "c", class: "d")
+
+	assert_equal [value.method, value.display, value.format, value.class], ["a", "b", "c", "d"]
+end

@@ -19,7 +19,7 @@ class Literal::EnumSerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		value.class if Literal::Enum === value
+		Literal::CLASS.bind_call(value) if Literal::Enum === value
 	end
 
 	def json_schema(type, generator: nil)
@@ -60,7 +60,7 @@ class Literal::EnumSerializer < Literal::Serializer
 	private def enum_class(type)
 		case type
 		when Literal::Enum
-			type.class
+			Literal::CLASS.bind_call(type)
 		else
 			type
 		end

@@ -113,7 +113,7 @@ class Literal::Property
 	def coerce(value, context:)
 		return value if Literal::Undefined == value && undefinable?
 
-		context.instance_exec(value, &@coercion)
+		Literal::INSTANCE_EXEC.bind_call(context, value, &@coercion)
 	end
 
 	def apply_seal(value)
@@ -132,7 +132,7 @@ class Literal::Property
 
 	def default_value(receiver)
 		case @default
-			when Proc then receiver.instance_exec(&@default)
+			when Proc then Literal::INSTANCE_EXEC.bind_call(receiver, &@default)
 			else @default
 		end
 	end
@@ -167,7 +167,7 @@ class Literal::Property
 			" def " <<
 			@name.name <<
 			"=(value)\n" <<
-			"  __property__ = self.class.literal_properties[:" <<
+			"  __property__ = PROPERTIES[:" <<
 			@name.name <<
 			"]\n"
 
@@ -191,7 +191,7 @@ class Literal::Property
 		buffer << "  @" << @name.name << " = value\n"
 
 		buffer <<
-			"rescue Literal::TypeError => error\n  error.set_backtrace(caller(1))\n  raise\n" <<
+			"rescue ::Literal::TypeError => error\n  error.set_backtrace(::Kernel.caller(1))\n  ::Kernel.raise\n" <<
 			"end\n"
 	end
 
@@ -207,7 +207,7 @@ class Literal::Property
 		# the extra comparison.
 		if undefinable?
 			buffer <<
-				"  Literal::Undefined != @" <<
+				"  ::Literal::Undefined != @" <<
 				@name.name <<
 				" && !!@" <<
 				@name.name <<
@@ -222,76 +222,32 @@ class Literal::Property
 		buffer << "end\n"
 	end
 
-	def generate_initializer_handle_property(buffer = +"")
+	# `local` is the variable holding this property's value, and
+	# `property_local` the one holding this property — names the schema
+	# chose so that no property's name collides with them.
+	def generate_initializer_handle_property(buffer, local:, property_local:)
 		buffer << "  # " << @name.name << "\n" <<
-			"  __property__ = __properties__[:" << @name.name << "]\n"
+			"  " << property_local << " = PROPERTIES[:" << @name.name << "]\n"
 
 		if @kind == :keyword && ruby_keyword?
-			generate_initializer_escape_keyword(buffer)
+			buffer << "  " << local << " = ::Kernel.binding.local_variable_get(:" << @name.name << ")\n"
 		end
 
 		if default?
-			generate_initializer_assign_default(buffer)
+			buffer << "  if " << ((@kind == :&) ? "nil" : "::Literal::Undefined") << " == " << local << "\n"
+			buffer << "    " << local << " = " << property_local << ".default_value(self)\n"
+			buffer << "  end\n"
 		end
 
 		if @coercion
-			generate_initializer_coerce_property(buffer)
+			buffer << "  " << local << " = " << property_local << ".coerce(" << local << ", context: self)\n"
 		end
 
 		if @seal
-			generate_initializer_seal_property(buffer)
+			buffer << "  " << local << " = " << property_local << ".apply_seal(" << local << ")\n"
 		end
 
-		generate_initializer_check_type(buffer)
-		generate_initializer_assign_value(buffer)
-	end
-
-	private def generate_initializer_escape_keyword(buffer = +"")
-		buffer <<
-			escaped_name <<
-			" = binding.local_variable_get(:" <<
-			@name.name <<
-			")\n"
-	end
-
-	private def generate_initializer_coerce_property(buffer = +"")
-		buffer <<
-			escaped_name <<
-			"= __property__.coerce(" <<
-			escaped_name <<
-			", context: self)\n"
-	end
-
-	private def generate_initializer_seal_property(buffer = +"")
-		buffer <<
-			escaped_name <<
-			"= __property__.apply_seal(" <<
-			escaped_name <<
-			")\n"
-	end
-
-	private def generate_initializer_assign_default(buffer = +"")
-		buffer <<
-			"  if " <<
-			((@kind == :&) ? "nil" : "Literal::Undefined") <<
-			" == " <<
-			escaped_name <<
-			"\n    " <<
-			escaped_name <<
-			" = __property__.default_value(self)\n  end\n"
-	end
-
-	private def generate_initializer_check_type(buffer = +"")
-		buffer <<
-			"  __property__.check_initializer(self, " << escaped_name << ")\n"
-	end
-
-	private def generate_initializer_assign_value(buffer = +"")
-		buffer <<
-			"  @" <<
-			@name.name <<
-			" = " <<
-			escaped_name <<
-			"\n"
+		buffer << "  " << property_local << ".check_initializer(self, " << local << ")\n"
+		buffer << "  @" << @name.name << " = " << local << "\n"
 	end
 end

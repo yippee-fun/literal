@@ -110,6 +110,6 @@ class Literal::TypeError < TypeError
 	end
 
 	private def inspect_object(object)
-		Literal.implements?(object, :inspect) ? object.__send__(:inspect) : Literal::INSPECT.bind_call(object)
+		Literal.implements?(object, :inspect) ? Literal::SEND.bind_call(object, :inspect) : Literal::INSPECT.bind_call(object)
 	end
 end

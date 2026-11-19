@@ -68,15 +68,17 @@ class Literal::Properties::Schema
 	def generate_initializer(buffer = +"", checked: false)
 		check_signature
 
+		locals, property_local = initializer_locals
+
 		buffer << "alias initialize initialize\n" \
 			"def initialize("
-		generate_initializer_params(buffer)
+		generate_initializer_params(buffer, locals)
 		buffer << ")\n"
-		generate_initializer_body(buffer)
+		generate_initializer_body(buffer, locals, property_local)
 		buffer << "" \
-			"rescue Literal::TypeError => error\n" \
-			"  error.set_backtrace(caller(2))\n" \
-			"  raise\n" \
+			"rescue ::Literal::TypeError => error\n" \
+			"  error.set_backtrace(::Kernel.caller(2))\n" \
+			"  ::Kernel.raise\n" \
 			"else\n"
 		generate_after_initializer(buffer)
 
@@ -90,7 +92,7 @@ class Literal::Properties::Schema
 	end
 
 	def generate_after_initializer(buffer = +"")
-		buffer << "  after_initialize if respond_to?(:after_initialize, true)\n"
+		buffer << "  after_initialize if ::Literal::RESPOND_TO.bind_call(self, :after_initialize, true)\n"
 	end
 
 	def generate_to_h(buffer = +"")
@@ -111,7 +113,7 @@ class Literal::Properties::Schema
 
 	def generate_hash(buffer = +"")
 		buffer << "alias hash hash\n" \
-			"def hash\n  [self.class,\n"
+			"def hash\n  [::Literal::CLASS.bind_call(self),\n"
 
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
@@ -133,13 +135,13 @@ class Literal::Properties::Schema
 	private def generate_comparison(buffer, operator)
 		buffer << "alias " << operator << " " << operator << "\n" \
 			"def " << operator << "(other)\n"
-		buffer << "  return false unless self.class == other.class\n"
+		buffer << "  return false unless ::Kernel === other && ::Literal::CLASS.bind_call(self).equal?(::Literal::CLASS.bind_call(other))\n"
 
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
 		while i < n
 			property = sorted_properties[i]
-			buffer << "  @#{property.name.name}.#{operator}(other.instance_variable_get(:@#{property.name.name}))"
+			buffer << "  @#{property.name.name}.#{operator}(::Literal::INSTANCE_VARIABLE_GET.bind_call(other, :@#{property.name.name}))"
 			buffer << " &&\n  " if i < n - 1
 			i += 1
 		end
@@ -187,7 +189,7 @@ class Literal::Properties::Schema
 		end
 	end
 
-	private def generate_initializer_params(buffer = +"")
+	private def generate_initializer_params(buffer, locals)
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
 		while i < n
@@ -195,22 +197,22 @@ class Literal::Properties::Schema
 
 			case property.kind
 			when :*
-				buffer << "*" << property.escaped_name
+				buffer << "*" << locals[property.name]
 			when :**
-				buffer << "**" << property.escaped_name
+				buffer << "**" << locals[property.name]
 			when :&
-				buffer << "&" << property.escaped_name
+				buffer << "&" << locals[property.name]
 			when :positional
 				if property.default? || property.undefinable? # optional
-					buffer << property.escaped_name << " = Literal::Undefined"
+					buffer << locals[property.name] << " = ::Literal::Undefined"
 				elsif property.type === nil # optional
-					buffer << property.escaped_name << " = nil"
+					buffer << locals[property.name] << " = nil"
 				else # required
-					buffer << property.escaped_name
+					buffer << locals[property.name]
 				end
 			when :keyword
 				if property.default? || property.undefinable? # optional
-					buffer << property.name.name << ": Literal::Undefined"
+					buffer << property.name.name << ": ::Literal::Undefined"
 				elsif property.type === nil
 					buffer << property.name.name << ": nil" # optional
 				else # required
@@ -227,18 +229,35 @@ class Literal::Properties::Schema
 		buffer
 	end
 
-	private def generate_initializer_body(buffer = +"")
-		buffer << "  __properties__ = self.class.literal_properties.properties_index\n"
-		generate_initializer_handle_properties(@sorted_properties, buffer)
-	end
-
-	private def generate_initializer_handle_properties(properties, buffer = +"")
-		i, n = 0, properties.size
+	private def generate_initializer_body(buffer, locals, property_local)
+		sorted_properties = @sorted_properties
+		i, n = 0, sorted_properties.size
 		while i < n
-			properties[i].generate_initializer_handle_property(buffer)
+			property = sorted_properties[i]
+			property.generate_initializer_handle_property(buffer, local: locals[property.name], property_local:)
 			i += 1
 		end
 
 		buffer
+	end
+
+	# Every name a local variable could take is also a property name, so the
+	# initializer's own locals — a Ruby keyword's escape, and the property
+	# being handled — take the first name with enough leading underscores that
+	# no property has it.
+	private def initializer_locals
+		taken = Set.new(@properties_index.each_key.map(&:name))
+
+		locals = @properties_index.to_h do |name, property|
+			[name, property.ruby_keyword? ? unique_local("__#{name.name}__", taken) : name.name]
+		end
+
+		[locals, unique_local("__property__", taken)]
+	end
+
+	private def unique_local(name, taken)
+		name = "_#{name}" while taken.include?(name)
+		taken << name
+		name
 	end
 end

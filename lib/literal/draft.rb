@@ -56,7 +56,7 @@ class Literal::Draft < Literal::Struct
 		# matches, regardless of which Literal::Draft() call built its class.
 		def ===(value)
 			if __type__ && Literal::Draft === value
-				Literal.subtype?(value.class.__type__, __type__)
+				Literal.subtype?(Literal::CLASS.bind_call(value).__type__, __type__)
 			else
 				super
 			end
@@ -82,6 +82,12 @@ class Literal::Draft < Literal::Struct
 			else
 				super(other)
 			end
+		end
+
+		# A draft mirrors its type's accessors, which the type has already
+		# vetted, and its own API is prepended over them.
+		private def __literal_relied_on__(method_name)
+			nil
 		end
 
 		private def __draft__(type)
@@ -161,7 +167,7 @@ class Literal::Draft < Literal::Struct
 		end
 
 		def ===(value)
-			Literal::Draft === value && (drafted = value.class.__type__) &&
+			Literal::Draft === value && (drafted = Literal::CLASS.bind_call(value).__type__) &&
 				Literal.subtype?(drafted, @type)
 		end
 
@@ -202,7 +208,7 @@ class Literal::Draft < Literal::Struct
 		# A block receives the draft after any props are assigned and before the
 		# value is built — for last touches like conditional assignment.
 		def finalize(**props, &)
-			self.class.__type__.from_props(__finalize_attributes__(props, &))
+			Literal::CLASS.bind_call(self).__type__.from_props(__finalize_attributes__(props, &))
 		end
 
 		# Finalize without enforcing the drafted type's checks or sealing again, for
@@ -210,20 +216,20 @@ class Literal::Draft < Literal::Struct
 		# or any caller could turn a failing draft into a value that breaks its
 		# shape's checks.
 		private def __finalize_unchecked__
-			type = self.class.__type__
+			type = Literal::CLASS.bind_call(self).__type__
 			type.__send__(:__literal_from_props__, __finalize_attributes__({}), seal: false)
 		end
 
-		private def __finalize_attributes__(props)
-			type = self.class.__type__
+		private def __finalize_attributes__(props, &block)
+			type = Literal::CLASS.bind_call(self).__type__
 
 			unless type.respond_to?(:from_props)
-				raise Literal::ArgumentError.new("Cannot finalize a draft into #{type}, because it doesn't support from_props.")
+				::Kernel.raise Literal::ArgumentError.new("Cannot finalize a draft into #{type}, because it doesn't support from_props.")
 			end
 
 			props.each { |name, value| self[name] = value }
 
-			yield self if block_given?
+			block&.call(self)
 
 			properties = type.literal_properties
 			attributes = {}
@@ -245,7 +251,7 @@ class Literal::Draft < Literal::Struct
 		# the type errors and, once the types hold, the shape's checks. The draft
 		# itself is never mutated.
 		def check
-			Literal::Checks::Checker.check(self.class.__checked_type__, self)
+			Literal::Checks::Checker.check(Literal::CLASS.bind_call(self).__checked_type__, self)
 		end
 
 		def sound?
@@ -255,10 +261,11 @@ class Literal::Draft < Literal::Struct
 		# For the checker, which has already coerced the value and checked it
 		# against the prop's real type, and must not do either twice.
 		def __store__(name, value)
-			property = self.class.literal_properties[name] ||
-				raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
+			shape = Literal::CLASS.bind_call(self)
+			property = shape.literal_properties[name] ||
+				::Kernel.raise(NameError.new("unknown attribute: #{name.inspect} for #{shape}"))
 
-			instance_variable_set(property.__ivar__, value)
+			Literal::INSTANCE_VARIABLE_SET.bind_call(self, property.__ivar__, value)
 		end
 
 		# Coercions and defaults are written for the drafted type — they may call
@@ -268,19 +275,20 @@ class Literal::Draft < Literal::Struct
 		# each use. One instance per draft, shared with the checker, kept in a
 		# capitalized slot because no property can be named one.
 		def __context__
-			context = (@Context ||= self.class.__type__.allocate)
+			type = Literal::CLASS.bind_call(self).__type__
+			context = (@Context ||= type.allocate)
 
-			self.class.__type__.literal_properties.each do |property|
-				value = instance_variable_get(property.__ivar__)
+			type.literal_properties.each do |property|
+				value = Literal::INSTANCE_VARIABLE_GET.bind_call(self, property.__ivar__)
 
 				if Literal::Undefined == value
 					# An unset slot reads as unset — including one set and then reset,
 					# whose earlier sync must not linger.
-					if context.instance_variable_defined?(property.__ivar__)
-						context.remove_instance_variable(property.__ivar__)
+					if Literal::INSTANCE_VARIABLE_DEFINED.bind_call(context, property.__ivar__)
+						Literal::REMOVE_INSTANCE_VARIABLE.bind_call(context, property.__ivar__)
 					end
 				else
-					context.instance_variable_set(property.__ivar__, value)
+					Literal::INSTANCE_VARIABLE_SET.bind_call(context, property.__ivar__, value)
 				end
 			end
 
@@ -301,6 +309,9 @@ class Literal::Draft < Literal::Struct
 	# the original can still reach.
 	private def initialize_copy(source)
 		super
-		remove_instance_variable(:@Context) if instance_variable_defined?(:@Context)
+
+		if Literal::INSTANCE_VARIABLE_DEFINED.bind_call(self, :@Context)
+			Literal::REMOVE_INSTANCE_VARIABLE.bind_call(self, :@Context)
+		end
 	end
 end

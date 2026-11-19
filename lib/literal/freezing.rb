@@ -8,11 +8,13 @@ module Literal::Freezing
 	# Plain data (strings, arrays, hashes and sets) is frozen all the way down,
 	# copying anything not already frozen, so the raw input it may share is
 	# never mutated. Any other object is frozen by its own #freeze, and left as
-	# it is when nested in plain data.
+	# it is when nested in plain data. A shape's own #freeze may be a reader.
 	def deep_frozen(value)
 		case value
-		when String, Array, Hash, Set
+		in String | Array | Hash | Set
 			frozen_data(value)
+		in _ if Literal::Properties === Literal::CLASS.bind_call(value)
+			Literal::FREEZE.bind_call(value)
 		else
 			value.freeze
 		end

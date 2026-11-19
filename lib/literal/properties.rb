@@ -125,7 +125,7 @@ module Literal::Properties
 			errors = Literal::Checks::Collector.new
 
 			checks.each do |check|
-				check.run(self, errors) { |name| instance.instance_variable_get(properties[name].__ivar__) }
+				check.run(self, errors) { |name| Literal::INSTANCE_VARIABLE_GET.bind_call(instance, properties[name].__ivar__) }
 			end
 
 			next unless errors.any?
@@ -235,9 +235,11 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The predicate must be one of #{Literal::Property::VISIBILITY_OPTIONS.map(&:inspect).join(', ')}.")
 		end
 
-		if reader && :class == name
+		{ reader: [reader, name], predicate: [predicate, :"#{name.name}?"] }.each do |option, (visibility, method_name)|
+			next unless visibility && (replaced = __literal_relied_on__(method_name))
+
 			raise Literal::ArgumentError.new(
-				"The `:class` property should not be defined as a reader because it breaks Ruby's `Object#class` method, which Literal itself depends on.",
+				"The #{option} for #{name.inspect} would replace #{replaced}, which Literal relies on. Declare the property with `#{option}: false`."
 			)
 		end
 
@@ -349,6 +351,8 @@ module Literal::Properties
 	end
 
 	def freeze
+		# Memoized while it still can be, so a frozen shape keeps one schema.
+		literal_properties
 		__literal_define_schema_methods__
 		super
 	end
@@ -414,6 +418,26 @@ module Literal::Properties
 		Literal::Property
 	end
 
+	LIBRARY = "#{__dir__}/".freeze
+
+	# The method of this shape's instances that Literal relies on and that a
+	# reader or predicate of this name would replace — a schema-wide method the
+	# shape generates, or one defined by Literal's own classes and modules —
+	# or nil. Methods from Ruby itself, the application, or an inherited
+	# property's accessors are the shape's to replace.
+	private def __literal_relied_on__(method_name)
+		return "the generated ##{method_name.name}" if __literal_schema_methods__.include?(method_name)
+		return unless method_defined?(method_name) || private_method_defined?(method_name)
+
+		owner = instance_method(method_name).owner
+		file, = owner.name && Object.const_source_location(owner.name)
+
+		"#{owner.name}##{method_name.name}" if file&.start_with?(LIBRARY)
+	rescue NameError
+		# A temporary name, which a generated module carries.
+		nil
+	end
+
 	private def __literal_add_property__(property)
 		schema = literal_properties
 
@@ -434,7 +458,6 @@ module Literal::Properties
 		batching = __literal_open_batches__ > 0
 
 		if batching
-			@__literal_last_deferred_property__ = new_property
 			code = new_property && __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
 		else
 			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
@@ -447,7 +470,7 @@ module Literal::Properties
 			__literal_extension__.module_eval(code, __FILE__, __LINE__)
 		end
 
-		__literal_defer_schema_methods__(new_property) if batching
+		__literal_defer_schema_methods__ if batching
 	end
 
 	private def __literal_open_batches__
@@ -465,26 +488,15 @@ module Literal::Properties
 	# calls one before the batch is committed — a Literal::Enum building its
 	# members in the class body — reaches a stand-in that generates the real
 	# methods and hands over to them.
-	private def __literal_defer_schema_methods__(new_property)
-		names = __literal_schema_methods__
-
-		if @__literal_schema_methods_deferred__
-			return unless new_property
-
-			# A reader or predicate named after a schema-wide method has just
-			# replaced its stand-in.
-			names = names.select do |name|
-				(new_property.reader && name == new_property.name) ||
-					(new_property.predicate && name.name == "#{new_property.name.name}?")
-			end
-		end
+	private def __literal_defer_schema_methods__
+		return if @__literal_schema_methods_deferred__
 
 		@__literal_schema_methods_deferred__ = true
 
 		shape = self
 		extension = __literal_extension__
 
-		names.each do |name|
+		__literal_schema_methods__.each do |name|
 			extension.alias_method(name, name)
 			extension.define_method(name) do |*args, **kwargs, &block|
 				shape.__send__(:__literal_define_schema_methods__)
@@ -502,17 +514,12 @@ module Literal::Properties
 		SCHEMA_METHODS_LOCK.synchronize do
 			next unless @__literal_schema_methods_deferred__
 
-			# What the last declaration would have emitted without a batch, so a
-			# reader that takes a schema-wide method's name fares the same.
-			last_property = @__literal_last_deferred_property__
-			code = __generate_literal_methods__(last_property)
+			code = __generate_literal_methods__(nil)
 
 			extension = __literal_extension__
 			__literal_schema_methods__.each { |name| extension.alias_method(name, name) }
-			__literal_silence_redefinitions__(last_property) if last_property
 			extension.module_eval(code, __FILE__, __LINE__)
 
-			@__literal_last_deferred_property__ = nil
 			@__literal_schema_methods_deferred__ = false
 		end
 	end
@@ -541,9 +548,16 @@ module Literal::Properties
 		if defined?(@__literal_extension__)
 			@__literal_extension__
 		else
+			properties = literal_properties.properties_index
+
 			@__literal_extension__ = Module.new do
+				# What the generated methods look their properties up in, rather than
+				# through `self.class`, which a property's reader could replace.
+				const_set(:PROPERTIES, properties)
+				private_constant :PROPERTIES
+
 				def initialize
-					after_initialize if respond_to?(:after_initialize, true)
+					after_initialize if Literal::RESPOND_TO.bind_call(self, :after_initialize, true)
 				end
 
 				def to_h

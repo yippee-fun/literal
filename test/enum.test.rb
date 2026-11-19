@@ -357,3 +357,59 @@ test "a member of an anonymous enum is named after the enum's inspect" do
 	error = assert_raises(ArgumentError) { enum.new(1) }
 	assert_equal error.message, "The value 1 is already used by #{enum.inspect}::A."
 end
+
+test "a member whose predicate would override an existing method is refused" do
+	[[:Nil, :nil?], [:Frozen, :frozen?], [:Between, :between?]].each do |member, predicate|
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(Literal::Enum(Integer)) { const_set(member, new(1)) }
+		end
+
+		assert error.message.include?("The member #{member}")
+		assert error.message.include?("##{predicate}")
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Enum(Integer)) do
+			prop :active, _Boolean, predicate: :public
+			const_set(:Active, new(1, active: true))
+		end
+	end
+end
+
+test "refusing a member built before others keeps their positions" do
+	enum = Class.new(Literal::Enum(Integer))
+	first = enum.new(1)
+	second = enum.new(2)
+	assert_raises(Literal::ArgumentError) { enum.const_set(:Nil, first) }
+	enum.const_set(:Second, second)
+
+	assert_equal enum::Second.pred, first
+	assert_equal enum.position_of(enum::Second), 1
+end
+
+test "a property named __position__ keeps its own slot" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop :__position__, Integer, reader: false
+		const_set(:A, new(1, __position__: 10))
+		const_set(:B, new(2, __position__: 20))
+	end
+
+	assert_equal enum::A.succ, enum::B
+	assert_equal enum::A.to_h[:__position__], 10
+	assert enum::A < enum::B
+end
+
+test "a refused member leaves nothing behind" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		const_set(:A, new(1))
+	end
+
+	assert_raises(Literal::ArgumentError) { enum.const_set(:Nil, enum.new(2)) }
+
+	refute enum.const_defined?(:Nil, false)
+	assert_equal enum[2], nil
+	assert_equal enum.members, [enum::A]
+
+	enum.const_set(:B, enum.new(2))
+	assert_equal enum::B.__position__, 1
+end

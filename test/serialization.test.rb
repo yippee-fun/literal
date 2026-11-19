@@ -1966,6 +1966,23 @@ test "structure properties without readers serialization roundtrip" do
 	assert_equal(Example.serialize(shadowing.new(instance_variable_get: "x"), type: shadowing), { "instance_variable_get" => "x" })
 end
 
+test "a class reader doesn't confuse serialization" do
+	struct = Class.new(Literal::Data) { prop :class, String }
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop :class, String
+		const_set(:A, new(1, class: "a"))
+	end
+
+	value = struct.new(class: "admin")
+
+	assert_equal(Example.serialize(value, type: struct), { "class" => "admin" })
+	assert_equal(Example.serialize(value, type: Example.type), { "class" => "admin" })
+	assert_equal(Example.deserialize({ "class" => "admin" }, type: struct), value)
+	assert_equal(Example.serialize(enum::A, type: enum), 1)
+	assert_equal(Example.serialize(enum::A, type: Example.type), 1)
+	assert_equal(Example.deserialize(1, type: enum), enum::A)
+end
+
 test "optional structure property serialization roundtrip" do
 	type = SerializationDraft
 	without_subtitle = SerializationDraft.new(title: "Draft")
@@ -4347,6 +4364,16 @@ test "frozen members discriminate like their thawed types" do
 	assert Example.deserialize({ "name" => "a" }, type:).frozen?
 
 	refute Example.serializable_type?(_Union(_String(/\Ax/), _Frozen(_String(/\Ay/))))
+end
+
+test "types requiring frozen shapes freeze them whatever their props are named" do
+	shape = Class.new(Literal::Struct) { prop :freeze, String }
+	type = _Frozen(shape)
+
+	loaded = Literal::SerializationContext.new.deserialize({ "freeze" => "x" }, type:)
+
+	assert loaded.frozen?
+	assert_equal loaded[:freeze], "x"
 end
 
 test "types requiring frozen values see through deferred types and refuse frozen cycles" do
