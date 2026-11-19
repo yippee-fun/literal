@@ -89,7 +89,7 @@ class Literal::StructureSerializer < Literal::Serializer
 
 	def serialize(value, type:)
 		type.literal_properties.filter_map do |property|
-			property_value = value.__send__(property.name)
+			property_value = Literal::INSTANCE_VARIABLE_GET.bind_call(value, property.__ivar__)
 			next if property_value == Literal::Undefined
 
 			[

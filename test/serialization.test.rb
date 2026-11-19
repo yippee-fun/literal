@@ -129,6 +129,11 @@ class SerializationSecret < Literal::Data
 	prop :secret, String
 end
 
+class SerializationReaderless < Literal::Data
+	prop :secret, String, reader: false
+	prop :class, String, reader: false
+end
+
 class SerializationParent < Literal::Data
 	prop :a, Integer
 end
@@ -1732,6 +1737,17 @@ test "structure serialization roundtrip" do
 
 	assert_equal(serialized, { "name" => "Joel", "age" => 42 })
 	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "structure properties without readers serialization roundtrip" do
+	original = SerializationReaderless.new(secret: "hunter2", class: "admin")
+	serialized = Example.serialize(original, type: SerializationReaderless)
+
+	assert_equal(serialized, { "secret" => "hunter2", "class" => "admin" })
+	assert_equal(Example.deserialize(serialized, type: SerializationReaderless), original)
+
+	shadowing = Class.new(Literal::Data) { prop :instance_variable_get, String }
+	assert_equal(Example.serialize(shadowing.new(instance_variable_get: "x"), type: shadowing), { "instance_variable_get" => "x" })
 end
 
 test "optional structure property serialization roundtrip" do
