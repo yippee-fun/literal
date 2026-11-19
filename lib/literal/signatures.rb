@@ -132,35 +132,47 @@ module Literal::Signatures
 			"::Literal.check(#{value}, TYPES[#{index}]) { |c| c.fill_receiver(receiver: #{receiver}, method: #{method.inspect}, label: #{label.inspect}) }"
 		end
 
-		arguments = Array.new(required) { |index| "__literal_arg_#{index}__" }
-		arguments << "*__literal_optional__" if positional.size > required
+		taken = parameters.map { |_, param| param }
+		fresh = lambda do |local|
+			local = :"_#{local}" while taken.include?(local)
+			taken << local
+			local
+		end
+
+		required_locals = Array.new(required) { |index| fresh.(:"__literal_arg_#{index}__") }
+		optional = fresh.(:__literal_optional__)
+		options_local = fresh.(:__literal_options__)
+		returned = fresh.(:__literal_returned__)
+
+		arguments = required_locals.map(&:name)
+		arguments << "*#{optional}" if positional.size > required
 		arguments.concat(keywords.map { |key| "#{key}:" })
-		arguments << "**__literal_options__" if options.any?
+		arguments << "**#{options_local}" if options.any?
 		arguments << "**nil" if parameters.any? { |kind, _| :nokey == kind }
 		arguments << "&"
 
-		checks = Array.new(required) { |index| check.("__literal_arg_#{index}__", index, positional[index].to_s) }
+		checks = required_locals.each_with_index.map { |local, index| check.(local, index, positional[index].to_s) }
 		(required...(positional.size)).each_with_index do |index, offset|
-			checks << "#{check.("__literal_optional__[#{offset}]", index, positional[index].to_s)} if __literal_optional__.size > #{offset}"
+			checks << "#{check.("#{optional}[#{offset}]", index, positional[index].to_s)} if #{optional}.size > #{offset}"
 		end
 		keywords.each { |key| checks << check.(read.(key), positional.size + keyword_order.index(key), "#{key}:") }
 		options.each do |key|
-			checks << "#{check.("__literal_options__[:#{key}]", positional.size + keyword_order.index(key), "#{key}:")} if __literal_options__.key?(:#{key})"
+			checks << "#{check.("#{options_local}[:#{key}]", positional.size + keyword_order.index(key), "#{key}:")} if #{options_local}.key?(:#{key})"
 		end
 
-		call = Array.new(required) { |index| "__literal_arg_#{index}__" }
-		call << "*__literal_optional__" if positional.size > required
+		call = required_locals.map(&:name)
+		call << "*#{optional}" if positional.size > required
 		call.concat(keywords.map { |key| "#{key}: #{read.(key)}" })
-		call << "**__literal_options__" if options.any?
+		call << "**#{options_local}" if options.any?
 		call << "&"
 
 		<<~RUBY
 			# frozen_string_literal: true
 			def #{name}(#{arguments.join(', ')})
 				#{checks.join("\n")}
-				__literal_returned__ = #{unsigned}(#{call.join(', ')})
-				#{check.('__literal_returned__', positional.size + keyword_order.size, 'return')}
-				__literal_returned__
+				#{returned} = #{unsigned}(#{call.join(', ')})
+				#{check.(returned, positional.size + keyword_order.size, 'return')}
+				#{returned}
 			end
 		RUBY
 	end

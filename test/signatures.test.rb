@@ -340,6 +340,21 @@ test "types a method whose name def cannot spell, without evaluating it" do
 	assert_equal klass.new.public_send(:"run(text); end; raise 'injected'; def other", "a"), "a"
 end
 
+test "keeps its own locals apart from the method's parameters" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(Integer, __literal_arg_0__: String) >> Integer
+		def first(value, __literal_arg_0__:) = value
+
+		sig(_Nilable(Integer), __literal_optional__: String) >> _Nilable(Integer)
+		def second(value = nil, __literal_optional__:) = value
+	end
+
+	assert_equal klass.new.first(1, __literal_arg_0__: "a"), 1
+	assert_equal klass.new.second(1, __literal_optional__: "a"), 1
+end
+
 test "refuses to load a sig on a method with a required argument after an optional one" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new do
