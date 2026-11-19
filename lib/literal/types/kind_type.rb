@@ -5,10 +5,19 @@ class Literal::Types::KindType
 
 	def initialize(type)
 		@type = type
+		@hash = literal_hash(Literal::Types::KindType, type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::KindType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::KindType === other && @type.eql?(other.type)
+	end
 
 	def inspect
 		"_Kind(#{@type.inspect})"

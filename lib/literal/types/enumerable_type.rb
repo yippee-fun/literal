@@ -6,10 +6,19 @@ class Literal::Types::EnumerableType
 
 	def initialize(type)
 		@type = type
+		@hash = literal_hash(Literal::Types::EnumerableType, type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::EnumerableType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::EnumerableType === other && @type.eql?(other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

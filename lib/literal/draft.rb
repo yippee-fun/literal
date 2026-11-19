@@ -141,10 +141,19 @@ class Literal::Draft < Literal::Struct
 
 		def initialize(type)
 			@type = type
+			@hash = [Literal::Draft::Type, type].hash
 			freeze
 		end
 
-		attr_reader :type
+		attr_reader :type, :hash
+
+		def ==(other)
+			Literal::Draft::Type === other && @type == other.type
+		end
+
+		def eql?(other)
+			Literal::Draft::Type === other && @type.eql?(other.type)
+		end
 
 		def inspect
 			"Literal::Draft(#{@type.inspect})"

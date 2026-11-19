@@ -7,11 +7,25 @@ class Literal::Types::ConstraintType
 	def initialize(object_constraints, property_constraints)
 		@object_constraints = object_constraints
 		@property_constraints = property_constraints
+		@hash = literal_hash(Literal::Types::ConstraintType, object_constraints, property_constraints)
 		freeze
 	end
 
 	attr_reader :object_constraints
 	attr_reader :property_constraints
+	attr_reader :hash
+
+	def ==(other)
+		Literal::Types::ConstraintType === other &&
+			@object_constraints == other.object_constraints &&
+			@property_constraints == other.property_constraints
+	end
+
+	def eql?(other)
+		Literal::Types::ConstraintType === other &&
+			@object_constraints.eql?(other.object_constraints) &&
+			@property_constraints.eql?(other.property_constraints)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

@@ -16,8 +16,19 @@ class Literal::Types::PredicateType
 		@message = message
 		@block = block
 		@recursion = recursion
+		@hash = [Literal::Types::PredicateType, message, block, recursion].hash
 
 		freeze
+	end
+
+	attr_reader :message, :block, :recursion, :hash
+
+	def ==(other)
+		Literal::Types::PredicateType === other && @message == other.message && @block == other.block && @recursion == other.recursion
+	end
+
+	def eql?(other)
+		Literal::Types::PredicateType === other && @message.eql?(other.message) && @block.eql?(other.block) && @recursion.eql?(other.recursion)
 	end
 
 	def inspect

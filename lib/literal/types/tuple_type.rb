@@ -8,10 +8,19 @@ class Literal::Types::TupleType
 		raise Literal::ArgumentError.new("_Tuple type must have at least one type.") if types.size < 1
 
 		@types = types
+		@hash = literal_hash(Literal::Types::TupleType, types)
 		freeze
 	end
 
-	attr_reader :types
+	attr_reader :types, :hash
+
+	def ==(other)
+		Literal::Types::TupleType === other && @types == other.types
+	end
+
+	def eql?(other)
+		Literal::Types::TupleType === other && @types.eql?(other.types)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

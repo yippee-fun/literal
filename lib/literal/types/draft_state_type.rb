@@ -17,10 +17,19 @@ class Literal::Types::DraftStateType
 	def initialize(type)
 		@type = type
 		@relaxed = __relax__(type)
+		@hash = literal_hash(Literal::Types::DraftStateType, type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::DraftStateType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::DraftStateType === other && @type.eql?(other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

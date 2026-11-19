@@ -35,12 +35,15 @@ class Literal::Types::UnionType
 		@types = types.freeze
 		@primitives = primitives.freeze
 		@primitive_list = primitives.to_a.freeze
+		@hash = [Literal::Types::UnionType, @types, @primitive_list].hash
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
 
 		freeze
 	end
 
-	attr_reader :types, :primitives
+	attr_reader :types, :primitives, :hash
+
+	protected attr_reader :primitive_list
 
 	# The earliest of the matching members, in declaration order, that no other
 	# is a strict subtype of. Only matches are compared, so a deferred member
@@ -173,16 +176,22 @@ class Literal::Types::UnionType
 	end
 
 	# Member order is behaviourally meaningful — `resolve` breaks ties by it and
-	# JSON schemas list members in order — but it does not distinguish one
-	# type from another, so equality compares members as a set. `@primitives`
-	# already does; `@types` is uniqued by the constructor, so for equal sizes a
-	# subset is an equal set.
+	# JSON schemas list members in order — but it does not change which values
+	# a union admits, so `==` compares members as a set. `@primitives` already
+	# does; `@types` is uniqued with eql? by the constructor, so for equal sizes
+	# an eql? subset is an equal set. `eql?` (and so hash keys) also requires
+	# the same order, like 1 == 1.0 but not 1.eql?(1.0), so unions sharing a
+	# key behave alike.
+	def eql?(other)
+		Literal::Types::UnionType === other && @types.eql?(other.types) && @primitive_list.eql?(other.primitive_list)
+	end
+
 	def ==(other)
 		case other
 		when Literal::Types::UnionType
 			@primitives == other.primitives &&
 				@types.size == other.types.size &&
-				(@types == other.types || @types.all? { |type| other.types.include?(type) })
+				(@types.eql?(other.types) || @types.all? { |type| other.types.any? { |member| member.eql?(type) } })
 		else
 			false
 		end

@@ -22,10 +22,22 @@ class Literal::Types::TaggedUnionType
 		@members = flattened.freeze
 		@pairs = flattened.map(&:freeze).freeze
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(flattened.each_value)
+		@hash = [Literal::Types::TaggedUnionType, @pairs].hash
 		freeze
 	end
 
-	attr_reader :members
+	attr_reader :members, :hash
+
+	protected attr_reader :pairs
+
+	# Like UnionType: `==` ignores member order, `eql?` doesn't.
+	def ==(other)
+		Literal::Types::TaggedUnionType === other && @members == other.members
+	end
+
+	def eql?(other)
+		Literal::Types::TaggedUnionType === other && @pairs.eql?(other.pairs)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

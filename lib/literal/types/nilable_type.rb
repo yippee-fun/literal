@@ -7,10 +7,19 @@ class Literal::Types::NilableType
 
 	def initialize(type)
 		@type = type
+		@hash = literal_hash(Literal::Types::NilableType, type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::NilableType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::NilableType === other && @type.eql?(other.type)
+	end
 
 	def __relax__
 		Literal::Types._Nilable(yield(@type))

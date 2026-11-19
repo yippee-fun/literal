@@ -356,12 +356,15 @@ class Literal::SerializationContext
 	end
 
 	# Weakly keyed where the engine supports it, so ad-hoc types can be
-	# garbage collected; otherwise a bounded hash cleared when full.
+	# garbage collected; otherwise a bounded hash cleared when full. Both
+	# compare keys with eql?, so a type rebuilt per call shares the entry of an
+	# equal one: eql? types are built from eql? members in the same order, so
+	# they serialize alike.
 	private def new_type_cache
 		if defined?(ObjectSpace::WeakKeyMap)
 			ObjectSpace::WeakKeyMap.new
 		else
-			{}.compare_by_identity
+			{}
 		end
 	end
 

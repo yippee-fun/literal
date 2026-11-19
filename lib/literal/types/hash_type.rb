@@ -7,10 +7,19 @@ class Literal::Types::HashType
 	def initialize(key_type, value_type)
 		@key_type = key_type
 		@value_type = value_type
+		@hash = literal_hash(Literal::Types::HashType, key_type, value_type)
 		freeze
 	end
 
-	attr_reader :key_type, :value_type
+	attr_reader :key_type, :value_type, :hash
+
+	def ==(other)
+		Literal::Types::HashType === other && @key_type == other.key_type && @value_type == other.value_type
+	end
+
+	def eql?(other)
+		Literal::Types::HashType === other && @key_type.eql?(other.key_type) && @value_type.eql?(other.value_type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

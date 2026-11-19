@@ -12,10 +12,19 @@ class Literal::Types::InterfaceType
 	def initialize(methods)
 		raise Literal::ArgumentError.new("_Interface type must have at least one method.") if methods.size < 1
 		@methods = methods.to_set.freeze
+		@hash = [Literal::Types::InterfaceType, @methods].hash
 		freeze
 	end
 
-	attr_reader :methods
+	attr_reader :methods, :hash
+
+	def ==(other)
+		Literal::Types::InterfaceType === other && @methods == other.methods
+	end
+
+	def eql?(other)
+		Literal::Types::InterfaceType === other && @methods.eql?(other.methods)
+	end
 
 	def inspect
 		"_Interface(#{@methods.map(&:inspect).join(', ')})"

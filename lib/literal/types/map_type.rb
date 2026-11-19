@@ -6,10 +6,19 @@ class Literal::Types::MapType
 
 	def initialize(shape)
 		@shape = shape
+		@hash = literal_hash(Literal::Types::MapType, shape)
 		freeze
 	end
 
-	attr_reader :shape
+	attr_reader :shape, :hash
+
+	def ==(other)
+		Literal::Types::MapType === other && @shape == other.shape
+	end
+
+	def eql?(other)
+		Literal::Types::MapType === other && @shape.eql?(other.shape)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

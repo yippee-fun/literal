@@ -51,9 +51,9 @@ test "does not track immediate values" do
 	assert_equal Literal.const_ref(ConstantTrackerTest::FalseValue), []
 end
 
-test "does not raise for objects that cannot be weak map keys" do
-	assert_equal Literal.const_ref(ConstantTrackerTest::BasicObjectValue), []
-	assert_equal Literal.const_ref(ConstantTrackerTest::BadHashValue), []
+test "tracks objects by identity, without hashing them" do
+	assert_equal Literal.const_ref(ConstantTrackerTest::BasicObjectValue).map(&:const), [:BasicObjectValue]
+	assert_equal Literal.const_ref(ConstantTrackerTest::BadHashValue).map(&:const), [:BadHashValue]
 end
 
 test "returns frozen empty references for untracked constants" do
@@ -172,4 +172,15 @@ test "discarding stale references does not trigger autoloads" do
 
 	assert_equal Literal.const_ref(object), []
 	assert_equal owner.autoload?(:Payload), "constant_tracker_should_not_load"
+end
+
+test "an equal object's constant being collected keeps the other's name" do
+	owner = Module.new
+	owner.const_set(:First, Literal::Types._Array(String))
+	owner.const_set(:Second, Literal::Types._Array(String))
+	owner.__send__(:remove_const, :Second)
+
+	3.times { GC.start(full_mark: true, immediate_sweep: true) }
+
+	assert_equal Literal.const_ref(owner::First).map(&:const), [:First]
 end

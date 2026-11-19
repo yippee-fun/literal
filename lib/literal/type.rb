@@ -28,4 +28,12 @@ module Literal::Type
 	def name
 		Literal.const_name(self)
 	end
+
+	# A hash of the components, or of this type's identity when one has no
+	# #hash, as a BasicObject matcher may not.
+	private def literal_hash(*components)
+		components.hash
+	rescue NoMethodError
+		Literal::OBJECT_ID.bind_call(self).hash
+	end
 end
