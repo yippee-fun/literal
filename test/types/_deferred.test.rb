@@ -83,3 +83,75 @@ test "a cyclic value through a recursive hash does not match" do
 
 	refute recursive === hash
 end
+
+test "threads materializing at once all get the first published result" do
+	started = Queue.new
+	results = Queue.new
+	deferred = _Deferred do
+		started << true
+		results.pop
+	end
+
+	first = Thread.new { deferred.materialize }
+	started.pop
+	second = Thread.new { deferred.materialize }
+	Thread.pass while second.status == "run"
+	results << Integer
+	Thread.pass until first.status == false || second.status == false
+	results << String
+
+	assert_equal first.value, Integer
+	assert_equal second.value, Integer
+	assert_equal deferred.materialize, Integer
+end
+
+test "a deferred type that refers to itself materializes to itself on re-entry" do
+	deferred = _Deferred { deferred.materialize }
+
+	assert_equal deferred.materialize, deferred
+end
+
+# Waiting for another thread's materialization would deadlock here: the first
+# thread's block needs a lock the second thread holds while materializing.
+test "a thread materializing doesn't wait on another thread's block" do
+	lock = Monitor.new
+	entered = Queue.new
+	locked = Queue.new
+	go = Queue.new
+	deferred = _Deferred do
+		entered << true
+		lock.synchronize { Integer }
+	end
+
+	holder = Thread.new do
+		lock.synchronize do
+			locked << true
+			go.pop
+			deferred.materialize
+		end
+	end
+	locked.pop
+
+	waiter = Thread.new { deferred.materialize }
+	entered.pop
+	Thread.pass while waiter.status == "run"
+	go << true
+
+	assert holder.join(5)
+	assert waiter.join(5)
+	assert_equal holder.value, Integer
+	assert_equal waiter.value, Integer
+ensure
+	holder&.kill
+	waiter&.kill
+end
+
+if defined?(Ractor)
+	test "a materialized deferred type can be made Ractor-shareable" do
+		block = Ractor.make_shareable(nil.instance_exec { proc { Integer } })
+		deferred = _Deferred(&block)
+		deferred.materialize
+
+		assert Ractor.shareable?(Ractor.make_shareable(deferred))
+	end
+end
