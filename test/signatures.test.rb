@@ -369,6 +369,26 @@ test "passes on only the optional keywords given" do
 	assert_raises(Literal::TypeError) { klass.new.collect(1, if: "i", b: "6") }
 end
 
+test "keeps the method's parameters" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(Integer, _Nilable(Integer), key: String, option: Integer) >> Integer
+		def blocked(value, extra = nil, key:, option: 1, &callback) = value
+
+		sig(Integer, _Nilable(Integer), key: String, option: Integer) >> Integer
+		def plain(value, extra = nil, key:, option: 1) = value
+
+		sig(Integer, Integer) >> Array
+		def ignored(_, _) = []
+	end
+
+	assert_equal klass.instance_method(:blocked).parameters, [[:req, :value], [:opt, :extra], [:keyreq, :key], [:key, :option], [:block, :callback]]
+	assert_equal klass.instance_method(:plain).parameters.first(4), [[:req, :value], [:opt, :extra], [:keyreq, :key], [:key, :option]]
+	assert_equal klass.instance_method(:plain).arity, -3
+	assert_raises(Literal::TypeError) { klass.new.ignored(1, "2") }
+end
+
 test "keeps its own locals apart from the method's parameters" do
 	klass = Class.new do
 		extend Literal::Signatures
