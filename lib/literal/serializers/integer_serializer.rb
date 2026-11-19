@@ -27,7 +27,7 @@ class Literal::IntegerSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		value
+		representation(value, type)
 	end
 
 	def deserialize(value, type:)

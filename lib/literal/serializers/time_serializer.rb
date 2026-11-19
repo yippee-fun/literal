@@ -64,7 +64,7 @@ class Literal::TimeSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		serialize_time(value)
+		serialize_time(representation(value, type))
 	end
 
 	def deserialize(raw, type:)

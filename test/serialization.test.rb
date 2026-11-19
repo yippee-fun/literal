@@ -3391,6 +3391,49 @@ test "integral JSON numbers load as integer union members" do
 	assert_equal Example.deserialize(1e24, type: _Union(10 ** 24, 1e24.to_i, String)), 10 ** 24
 end
 
+test "values equal to a const type serialize as the const" do
+	date = Date.new(2026, 1, 1)
+	to_str = Object.new
+	def to_str.to_str = "a"
+	def to_str.==(other) = other == "a"
+
+	[
+		[1.0, 1, 1, 1],
+		[1r, 1, 1, 1],
+		[Complex(1), 1, 1, 1],
+		[1, 1.0, 1.0, 1.0],
+		[2.0, _Union(1, 2), 2, 2],
+		[2r, _Union(1, 2, "a"), 2, 2],
+		[1.0, _Nilable(1), 1, 1],
+		[1, BigDecimal("1"), "1.0", BigDecimal("1")],
+		[DateTime.new(2026, 1, 1), date, "2026-01-01", date],
+		[to_str, "a", "a", "a"],
+	].each do |value, type, written, loaded|
+		serialized = Example.serialize(value, type:)
+		assert serialized.eql?(written)
+		assert Example.deserialize(JSON.parse(JSON.generate(serialized)), type:).eql?(loaded)
+	end
+end
+
+test "values a const type matches but doesn't equal serialize as themselves" do
+	noon = DateTime.new(2026, 1, 1, 12)
+
+	assert_equal Example.serialize(noon, type: DateTime.new(2026, 1, 1, 3)), "2026-01-01T12:00:00+00:00"
+	assert_raises(Literal::ArgumentError) { Example.serialize(noon, type: Date.new(2026, 1, 1)) }
+end
+
+test "JSON numbers equal to a const type load as the const" do
+	[
+		[1.0, 1, 1],
+		[1, 1.0, 1.0],
+		[2.0, _Union(1, 2, "a"), 2],
+		[1e24, 10 ** 24, 10 ** 24],
+		[10 ** 24, 1e24, 1e24],
+	].each do |raw, type, const|
+		assert Example.deserialize(raw, type:).eql?(const)
+	end
+end
+
 test "enum members load from JSON equal values" do
 	enum = Class.new(Literal::Enum(_JSONData)) do
 		const_set(:One, new([1, { "a" => 1 }]))

@@ -25,6 +25,8 @@ class Literal::DateSerializer < Literal::Serializer
 
 	# DateTime is a Date, but a date format cannot hold its time.
 	def serialize(value, type:)
+		value = representation(value, type)
+
 		if DateTime === value
 			raise Literal::ArgumentError, "Value #{value.inspect} cannot be serialized as #{type.inspect} without losing its time; use a DateTime type"
 		end

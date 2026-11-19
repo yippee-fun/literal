@@ -33,7 +33,7 @@ class Literal::BigDecimalSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		serialize_decimal(value)
+		serialize_decimal(representation(value, type))
 	end
 
 	def deserialize(raw, type:)

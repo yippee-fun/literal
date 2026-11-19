@@ -48,6 +48,14 @@ class Literal::Serializer
 		end
 	end
 
+	# The value to write for a value of the type: a value equal to a const of
+	# the type is written as that const, so the type 1 writes 1.0 as 1. Only
+	# an equal value: a Date const's === admits any time on its day.
+	private def representation(value, type)
+		const = (Literal::Types::UnionType === type) ? type.resolve(value) : type
+		(self.type === const && const == value) ? const : value
+	end
+
 	# The child types this serializer would recurse into when serializing a
 	# value of the given type. These must be exactly the types serialize,
 	# deserialize and json_schema recurse into, so that the serializability walk
