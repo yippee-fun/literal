@@ -824,3 +824,24 @@ test "properties can be redefined with a literal type narrowing an inherited mod
 	refute_raises { example.new(tags: ["a"]) }
 	assert_raises(Literal::TypeError) { example.new(tags: [1]) }
 end
+
+test "slice works on a class that extends Literal::Properties directly" do
+	parent = Class.new do
+		def greeting = "hello"
+	end
+
+	shape = Class.new(parent) do
+		extend Literal::Properties
+
+		prop :a, String, reader: :public
+		prop :b, String
+	end
+
+	sliced = shape.slice(:a)
+
+	assert_equal sliced.superclass, parent
+	assert_equal sliced.literal_properties.map(&:name), [:a]
+	assert_equal sliced.new(a: "x").a, "x"
+	assert_equal sliced.new(a: "x").greeting, "hello"
+	assert_equal shape.slice(:a, :b).superclass, shape
+end

@@ -353,16 +353,19 @@ module Literal::Properties
 
 		context = Literal::SubtypeContext.new
 
+		# A shape extending Literal::Properties directly can slice down to its plain superclass.
 		base = self
-		until base.literal_properties.all? { |property| names.include?(property.name) && Literal.subtype?(properties[property.name].type, property.type, context:) }
+		while Literal::Properties === base && !base.literal_properties.all? { |property| names.include?(property.name) && Literal.subtype?(properties[property.name].type, property.type, context:) }
 			base = base.superclass
 		end
 
-		base_properties = base.literal_properties
+		base_properties = (Literal::Properties === base) ? base.literal_properties : Literal::Properties::Schema.new
 		sliced = properties.select { |property| names.include?(property.name) && !property.equal?(base_properties[property.name]) }
 		origin_name = name
 
 		Class.new(base) do
+			extend Literal::Properties unless Literal::Properties === self
+
 			if origin_name && respond_to?(:set_temporary_name)
 				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
 			end
