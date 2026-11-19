@@ -117,11 +117,11 @@ class Literal::Draft < Literal::Struct
 				default: Literal::Undefined,
 				description: property.description,
 				&(original_coercion && proc { |value|
-					# Coercions normalize input for the drafted type. Unset slots and
-					# nested drafts aren't that input yet — the draft meets the
-					# coercion's output contract at finalize, through its own
-					# construction — so both pass through untouched.
-					if Literal::Undefined == value || Literal::Draft === value
+					# Coercions normalize input for the drafted type. A nested draft
+					# isn't that input yet — it meets the coercion's output contract
+					# at finalize, through its own construction — so it passes
+					# through untouched, as unset slots do.
+					if Literal::Draft === value
 						value
 					else
 						__context__.instance_exec(value, &original_coercion)

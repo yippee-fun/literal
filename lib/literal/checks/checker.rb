@@ -214,7 +214,7 @@ module Literal::Checks::Checker
 	# representation, and that representation is what the prop's type describes;
 	# checking first would reject every value a sealed prop can hold.
 	private def store(draft, property, value, errors)
-		value = property.seal.call(value) if property.seal
+		value = property.apply_seal(value) if property.seal
 
 		unless property.type === value
 			errors.add(property.name, Literal::Checks::Message.for(property.type, value))

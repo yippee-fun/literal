@@ -82,3 +82,25 @@ test "composed coercion stages see the instance context like an uncomposed block
 	assert_equal object.sealed, "c!!"
 	assert object.sealed.frozen?
 end
+
+test "an unset optional prop passes through coercions and seals untouched" do
+	coerced = Class.new(Literal::Struct) { prop? :name, String, &:strip }
+	sealed = Class.new(Literal::Data) { prop? :name, String, &(Literal::Seal { |it| it.downcase.freeze }) }
+
+	assert_equal coerced.new.name, Literal::Undefined
+	assert_equal coerced.new(name: " a ").tap { |it| it.name = Literal::Undefined }.name, Literal::Undefined
+	assert_equal sealed.new.name, Literal::Undefined
+	assert_equal sealed.from_props({}).name, Literal::Undefined
+	assert Literal::Draft(coerced).new.check.success?
+	assert Literal::Draft(sealed).check({}).success?
+end
+
+test "a prop whose type can't be unset still coerces the sentinel" do
+	klass = Class.new(Literal::Struct) do
+		prop :name, String, default: Literal::Undefined do |value|
+			(Literal::Undefined == value) ? "fallback" : value
+		end
+	end
+
+	assert_equal klass.new.name, "fallback"
+end

@@ -108,8 +108,18 @@ class Literal::Property
 		ORDER[@kind] <=> ORDER[other.kind]
 	end
 
+	# An unset value isn't input yet, so it passes through coercions and seals.
+	# Only a property whose type admits the sentinel can be unset.
 	def coerce(value, context:)
+		return value if Literal::Undefined == value && undefinable?
+
 		context.instance_exec(value, &@coercion)
+	end
+
+	def apply_seal(value)
+		return value if Literal::Undefined == value && undefinable?
+
+		@seal.call(value)
 	end
 
 	def ruby_keyword?
@@ -166,7 +176,7 @@ class Literal::Property
 		end
 
 		if @seal
-			buffer << "  value = __property__.seal.call(value)\n"
+			buffer << "  value = __property__.apply_seal(value)\n"
 		end
 
 		buffer << "  __property__.check_writer(self, value)\n"
@@ -255,7 +265,7 @@ class Literal::Property
 	private def generate_initializer_seal_property(buffer = +"")
 		buffer <<
 			escaped_name <<
-			"= __property__.seal.call(" <<
+			"= __property__.apply_seal(" <<
 			escaped_name <<
 			")\n"
 	end

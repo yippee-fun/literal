@@ -163,8 +163,8 @@ class Literal::DataStructure
 				value = self.class.__send__(:missing_prop_value, property, self)
 			end
 
-			if seal && (property_seal = property.seal)
-				value = property_seal.call(value)
+			if seal && property.seal
+				value = property.apply_seal(value)
 			end
 
 			Literal.check(value, property.type) do |context|
