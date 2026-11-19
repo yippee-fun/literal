@@ -798,6 +798,8 @@ class Constrained < Literal::Data
 	prop :initial, _String(length: 1), default: -> { "a" }
 	prop :items, _Constraint(Array, size: 1..3), default: -> { [1] }
 	prop :anything, _Constraint(length: 1..), default: -> { "x" }
+	prop :short, _String(length: 1...3), default: -> { "x" }
+	prop :fractional, _String(length: 1...3.5), default: -> { "x" }
 	prop :kind, _Union("employee", "contractor", "vendor"), default: -> { "employee" }
 	prop :active, _Boolean, default: -> { true }
 	prop :either, _Union(String, Integer), default: -> { "x" }
@@ -829,6 +831,24 @@ end
 
 test "a length range reads in characters" do
 	assert_equal "must be between 2 and 10 characters", Constrained.message(code: "a")
+end
+
+test "an exclusive Integer length reads as its inclusive equivalent" do
+	assert_equal "must be between 1 and 2 characters", Constrained.message(short: "abc")
+end
+
+test "an exclusive Float length reads as exclusive" do
+	assert_equal "must be at least 1 characters and less than 3.5 characters", Constrained.message(fractional: "abcd")
+end
+
+test "an empty exclusive Float length doesn't read as exact" do
+	empty = Class.new(Literal::Data) do
+		prop :name, _String(length: 1.0...1.0)
+	end
+
+	message = Literal::Draft(empty).check(name: "x").error!.errors.fetch(0).message
+
+	assert_equal "must be at least 1.0 characters and less than 1.0 characters", message
 end
 
 # A constrained property takes any matcher, not only a Range, so a message has to
@@ -1496,9 +1516,11 @@ test "uses the current prop shape after the class changes" do
 		prop :name, String
 	end
 
-	assert Literal::Draft(klass).new(name: "Ada").check.success?
+	stale = Literal::Draft(klass)
 
 	klass.prop :age, Integer
+
+	refute Literal::Draft(klass).equal?(stale)
 
 	person = Literal::Draft(klass).new(name: "Ada", age: 42).check.value!
 	assert_equal 42, person.age

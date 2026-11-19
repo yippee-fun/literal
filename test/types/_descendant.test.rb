@@ -21,3 +21,7 @@ test "hierarchy" do
 	# _Class(Numeric) admits Numeric itself, which _Descendant(Numeric) excludes
 	refute_subtype _Class(Numeric), _Descendant(Numeric)
 end
+
+test "=== returns a boolean" do
+	assert_equal false, _Descendant(Integer) === String
+end

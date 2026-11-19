@@ -85,10 +85,24 @@ test "Generic#== compares the types" do
 	refute_equal Literal::Tuple(String, Integer), Literal::Tuple(String)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Tuple(String, Integer).eql?(Literal::Tuple(String, Integer))
+	refute Literal::Tuple(String, Integer).eql?(Literal::Tuple(Integer, String))
+	assert_equal({ Literal::Tuple(String, Integer) => 1 }[Literal::Tuple(String, Integer)], 1)
+	assert_equal [Literal::Tuple(String, Integer), Literal::Tuple(String, Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant per position" do
 	assert Literal.subtype?(Literal::Tuple(Integer, Float), Literal::Tuple(Numeric, Numeric))
 	refute Literal.subtype?(Literal::Tuple(Numeric, Numeric), Literal::Tuple(Integer, Float))
 	refute Literal.subtype?(Literal::Tuple(Integer), Literal::Tuple(Integer, Integer))
+end
+
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Tuple(Integer, String), Literal::Tuple)
+	assert Literal.subtype?(Literal::Tuple(Integer, String), Object)
+	assert Literal.subtype?(Literal::Tuple(Integer, String), _Nilable(Literal::Tuple))
+	refute Literal.subtype?(Literal::Tuple(Integer, String), Array)
 end
 
 test "literal tuple types and plain tuple types are never subtypes of each other" do
@@ -110,6 +124,23 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	input[0] = 2
 
 	assert_equal tuple.to_a, ["a", 1]
+end
+
+test "#initialize copies the types, so the caller's reference is harmless" do
+	types = [String, Integer]
+	tuple = Literal::Tuple.new(["a", 1], types:)
+
+	types[0] = Integer
+
+	assert_equal tuple.__types__, [String, Integer]
+	assert tuple.__types__.frozen?
+end
+
+test "#initialize copies the values into a plain array, not an Array subclass" do
+	subclass = Class.new(Array)
+	tuple = Literal::Tuple(String, Integer).coerce(subclass["a", 1])
+
+	assert_equal tuple.__value__.class, Array
 end
 
 # Equality

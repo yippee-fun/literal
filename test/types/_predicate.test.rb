@@ -28,3 +28,14 @@ test "predicate recursion can accept" do
 
 	assert predicate === :value
 end
+
+test "=== returns a boolean" do
+	predicate = _Predicate("has a name") { |it| it[:name] }
+
+	assert_equal true, predicate === { name: "Joel" }
+	assert_equal false, predicate === {}
+end
+
+test "inspect" do
+	assert_equal %(_Predicate("say \\"hi\\"")), _Predicate(%(say "hi")) { true }.inspect
+end

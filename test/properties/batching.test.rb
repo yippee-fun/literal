@@ -162,7 +162,6 @@ test "an exception inside props closes the batch and keeps the props declared be
 	end
 
 	assert_equal example.schema_compilations, 1
-	assert_equal example.new(name: "Joel").to_h, { name: "Joel" }
 
 	example.prop :age, Integer
 	assert_equal example.schema_compilations, 2
@@ -182,23 +181,26 @@ test "a prop added outside a batch after a batch recompiles" do
 	assert_equal example.new(name: "Joel", age: 30).to_h, { name: "Joel", age: 30 }
 end
 
-test "an instance built while the batch is open sees every prop declared so far" do
+test "an instance built while the batch is open sees every prop declared so far, and closes the shape" do
 	early = nil
-	early_hash = nil
+	refused = nil
 
 	example = counted do
 		props do
 			prop :name, String
 			prop :age, Integer
 			early = new(name: "Joel", age: 30)
-			early_hash = early.to_h
-			prop :email, _Nilable(String)
+			begin
+				prop :email, _Nilable(String)
+			rescue Literal::ArgumentError => error
+				refused = error
+			end
 		end
 	end
 
-	assert_equal early_hash, { name: "Joel", age: 30 }
-	assert_equal early.to_h, { name: "Joel", age: 30, email: nil }
-	assert_equal example.new(name: "Joel", age: 30, email: "joel@example.com").to_h, { name: "Joel", age: 30, email: "joel@example.com" }
+	assert_equal early.to_h, { name: "Joel", age: 30 }
+	assert refused.message.include?("because it already has instances")
+	assert_equal example.literal_properties.map(&:name), [:name, :age]
 end
 
 test "a user-defined initializer that calls super works while the batch is open" do
@@ -261,7 +263,7 @@ end
 test "a property named hash never displaces the generated hash" do
 	declarations = proc do
 		prop :name, String
-		prop :hash, String
+		prop :hash, String, reader: false
 	end
 
 	unbatched = Class.new(Literal::Struct, &declarations)
@@ -420,8 +422,8 @@ test "Literal::Enum members can be built while the batch is open" do
 	example = Class.new(Literal::Enum(String)) do
 		begin_props
 		prop :label, String
-		const_set(:A, new("a", label: "A"))
 		prop :rank, _Nilable(Integer)
+		const_set(:A, new("a", label: "A"))
 		const_set(:B, new("b", label: "B", rank: 2))
 		commit_props
 	end
@@ -512,14 +514,14 @@ test "Literal::Enum.defined hands on to a hook defined further up" do
 	assert_equal reached, [example]
 end
 
-test "a reader named after a schema-wide method does not displace it while the batch is open" do
+test "a property named after a schema-wide method does not displace it while the batch is open" do
 	early = nil
 
 	example = Class.new(Literal::Struct) do
 		prop :name, String
 
 		begin_props
-		prop :hash, _Nilable(String)
+		prop :hash, _Nilable(String), reader: false
 		early = { from_props(name: "Joel") => 1 }[from_props(name: "Joel")]
 		commit_props
 	end
@@ -533,7 +535,8 @@ test "generating can define another shape with a batch of its own" do
 
 	outer = Class.new(Literal::Struct) do
 		props do
-			prop :child, _Deferred {
+			# Asking the union whether it takes nil materializes the deferred member.
+			prop :child, _Union(String, _Deferred {
 				inner ||= Class.new(Literal::Struct) do
 					props do
 						prop :name, String
@@ -541,7 +544,7 @@ test "generating can define another shape with a batch of its own" do
 				end
 
 				_Nilable(inner)
-			}
+			})
 		end
 	end
 
@@ -549,23 +552,14 @@ test "generating can define another shape with a batch of its own" do
 	assert_equal outer.new(child: inner.new(name: "Joel")).child.name, "Joel"
 end
 
-test "a reader named after a schema-wide method fares as it would without a batch" do
-	last = proc do
-		prop :name, String
-		prop :to_h, String, reader: :public
-	end
+test "a reader named after a schema-wide method is refused, batch or not" do
+	declarations = proc { prop :to_h, String, reader: :public }
 
-	earlier = proc do
-		prop :to_h, String, reader: :public
-		prop :name, String
-	end
+	assert_raises(Literal::ArgumentError) { Class.new { extend Literal::Properties }.class_exec(&declarations) }
+	assert_raises(Literal::ArgumentError) { Class.new { extend Literal::Properties }.tap { |it| it.props { it.class_exec(&declarations) } } }
 
-	[last, earlier].each do |declarations|
-		unbatched = Class.new { extend Literal::Properties }.tap { |it| it.class_exec(&declarations) }
-		batched = Class.new { extend Literal::Properties }.tap { |it| it.props { it.class_exec(&declarations) } }
-
-		assert_equal batched.new(name: "Joel", to_h: "x").to_h, unbatched.new(name: "Joel", to_h: "x").to_h
-	end
+	example = Class.new { extend Literal::Properties }.tap { |it| it.props { it.prop :to_h, String } }
+	assert_equal example.new(to_h: "x").to_h, { to_h: "x" }
 end
 
 test "a Literal::Enum frozen by hand is not mistaken for a finished one" do

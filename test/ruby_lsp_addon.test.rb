@@ -75,22 +75,25 @@ if ruby_lsp_available
 end
 
 if ruby_lsp_available && defined?(RubyIndexer::Enhancement)
+	STDERR_CAPTURE_LOCK = Mutex.new
+
 	def index_source(source)
 		index = RubyIndexer::Index.new
 		uri = URI::Generic.from_path(path: "/fake/#{SecureRandom.hex}.rb")
+		captured = StringIO.new
 
-		errors = []
-		original_stderr = $stderr
-		$stderr = StringIO.new
+		STDERR_CAPTURE_LOCK.synchronize do
+			original_stderr = $stderr
+			$stderr = captured
 
-		begin
-			index.index_single(uri, source)
-		ensure
-			errors = $stderr.string
-			$stderr = original_stderr
+			begin
+				index.index_single(uri, source)
+			ensure
+				$stderr = original_stderr
+			end
 		end
 
-		assert_equal errors, ""
+		assert_equal captured.string, ""
 
 		index
 	end

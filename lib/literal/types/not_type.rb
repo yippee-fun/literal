@@ -5,11 +5,20 @@ class Literal::Types::NotType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::NotType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::NotType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::NotType === other && Literal.member_eql?(@type, other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?

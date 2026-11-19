@@ -49,6 +49,8 @@ class Literal::SetSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Array === raw
+
 		member_type = set_type_for(type).type
 
 		raw.to_set do |item|

@@ -29,6 +29,8 @@ class Literal::SymbolSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless String === raw
+
 		raw.to_sym
 	end
 

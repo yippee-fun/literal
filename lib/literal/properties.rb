@@ -38,6 +38,12 @@ module Literal::Properties
 		base.include(DocString)
 		base.include(Literal::Checks::Enforced)
 		base.include(base.__send__(:__literal_extension__))
+		base.__send__(:__literal_watch_first_instance__)
+	end
+
+	def inherited(subclass)
+		super
+		subclass.__send__(:__literal_watch_first_instance__)
 	end
 
 	# The short form of `checks`: one predicate, one message, filed against
@@ -96,6 +102,13 @@ module Literal::Properties
 			)
 		end
 
+		# Only a shape that knows its instances can judge them against a new check.
+		if @__literal_used__ && !__literal_existing_instances__
+			raise Literal::ArgumentError.new(
+				"Cannot declare checks on #{self}, because it already has instances."
+			)
+		end
+
 		# Before the check installs, or a rescued failure would leave it live
 		# behind an instance that breaks it.
 		__literal_check_existing_instances__([check])
@@ -125,7 +138,7 @@ module Literal::Properties
 			errors = Literal::Checks::Collector.new
 
 			checks.each do |check|
-				check.run(self, errors) { |name| instance.instance_variable_get(properties[name].__ivar__) }
+				check.run(self, errors) { |name| Literal::INSTANCE_VARIABLE_GET.bind_call(instance, properties[name].__ivar__) }
 			end
 
 			next unless errors.any?
@@ -189,13 +202,22 @@ module Literal::Properties
 		literal_checks_for(name).any?
 	end
 
-	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, description: nil, &coercion)
+	# Forwarded, so each class's `prop` decides which options it takes and their defaults.
+	def prop?(name, type, kind = :keyword, **options, &coercion)
 		# The union admitting Literal::Undefined is what makes the property
 		# optional — see Literal::Property#undefinable? — so there's no default.
-		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, description:, &coercion)
+		if options.key?(:default)
+			raise Literal::ArgumentError.new("The optional property #{name.inspect} can't have a default.")
+		end
+
+		prop(name, _Union(type, Literal::Undefined), kind, **options, &coercion)
 	end
 
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
+		unless Literal::Property.valid_name?(name)
+			raise Literal::ArgumentError.new("The property name #{name.inspect} must be a Symbol that Ruby accepts as a local variable name.")
+		end
+
 		seal = nil
 
 		# A block built from a Literal::Coercion or Literal::Seal carries its
@@ -206,11 +228,11 @@ module Literal::Properties
 			seal = pipeline.seal_proc
 		end
 
-		if default && !(Proc === default || default.frozen?)
+		if default && !(Proc === default || Literal::FROZEN.bind_call(default))
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 
-		if !default.nil? && !(Proc === default) && !coercion && !seal && !(Literal::Types::DeferredType === type) && !(type === default)
+		if nil != default && !(Proc === default) && !coercion && !seal && !(Literal::Types::DeferredType === type) && !(type === default)
 			raise Literal::ArgumentError.new("The default for #{name.inspect} must match its type.")
 		end
 
@@ -226,9 +248,11 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The predicate must be one of #{Literal::Property::VISIBILITY_OPTIONS.map(&:inspect).join(', ')}.")
 		end
 
-		if reader && :class == name
+		{ reader: [reader, name], predicate: [predicate, :"#{name.name}?"] }.each do |option, (visibility, method_name)|
+			next unless visibility && (replaced = __literal_relied_on__(method_name))
+
 			raise Literal::ArgumentError.new(
-				"The `:class` property should not be defined as a reader because it breaks Ruby's `Object#class` method, which Literal itself depends on.",
+				"The #{option} for #{name.inspect} would replace #{replaced}, which Literal relies on. Declare the property with `#{option}: false`."
 			)
 		end
 
@@ -238,6 +262,10 @@ module Literal::Properties
 
 		unless description.nil? || String === description
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
+		end
+
+		if frozen?
+			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it is frozen.")
 		end
 
 		queue = subclasses
@@ -336,6 +364,8 @@ module Literal::Properties
 	end
 
 	def freeze
+		# Memoized while it still can be, so a frozen shape keeps one schema.
+		literal_properties
 		__literal_define_schema_methods__
 		super
 	end
@@ -349,16 +379,19 @@ module Literal::Properties
 
 		context = Literal::SubtypeContext.new
 
+		# A shape extending Literal::Properties directly can slice down to its plain superclass.
 		base = self
-		until base.literal_properties.all? { |property| names.include?(property.name) && Literal.subtype?(properties[property.name].type, property.type, context:) }
+		while Literal::Properties === base && !base.literal_properties.all? { |property| names.include?(property.name) && Literal.subtype?(properties[property.name].type, property.type, context:) }
 			base = base.superclass
 		end
 
-		base_properties = base.literal_properties
+		base_properties = (Literal::Properties === base) ? base.literal_properties : Literal::Properties::Schema.new
 		sliced = properties.select { |property| names.include?(property.name) && !property.equal?(base_properties[property.name]) }
 		origin_name = name
 
 		Class.new(base) do
+			extend Literal::Properties unless Literal::Properties === self
+
 			if origin_name && respond_to?(:set_temporary_name)
 				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
 			end
@@ -398,20 +431,140 @@ module Literal::Properties
 		Literal::Property
 	end
 
+	LIBRARY = "#{__dir__}/".freeze
+
+	# The method of this shape's instances that Literal relies on and that a
+	# reader or predicate of this name would replace — a schema-wide method the
+	# shape generates, or one defined by Literal's own classes and modules —
+	# or nil. Methods from Ruby itself, the application, or an inherited
+	# property's accessors are the shape's to replace.
+	private def __literal_relied_on__(method_name)
+		return "the generated ##{method_name.name}" if __literal_schema_methods__.include?(method_name)
+		return unless method_defined?(method_name) || private_method_defined?(method_name)
+
+		owner = instance_method(method_name).owner
+		file, = owner.name && Object.const_source_location(owner.name)
+
+		"#{owner.name}##{method_name.name}" if file&.start_with?(LIBRARY)
+	rescue NameError
+		# A temporary name, which a generated module carries.
+		nil
+	end
+
+	# Marks the shape used when `new` first makes one, then steps out of the
+	# way, so later instances cost nothing more. Included, not prepended, so
+	# the shape's own `new` — or its own `private_class_method :new` — still
+	# comes first, and as private as the `new` it stands in front of.
+	private def __literal_watch_first_instance__
+		watch = Module.new
+		private_new = singleton_class.private_method_defined?(:new)
+
+		watch.define_method(:new) do |*args, **kwargs, &block|
+			instance = __literal_constructing__ { super(*args, **kwargs, &block) }
+
+			SCHEMA_METHODS_LOCK.synchronize do
+				if watch.method_defined?(:new, false) || watch.private_method_defined?(:new, false)
+					watch.remove_method(:new)
+				end
+			end
+
+			instance
+		end
+
+		watch.__send__(:private, :new) if private_new
+		singleton_class.include(watch)
+	end
+
+	# A shape's properties are fixed while an instance is under construction,
+	# so none of its slots can be missing, and for good once it has one. So are
+	# its ancestors', which it holds too. A failed construction reopens them
+	# unless another is under way or has finished.
+	private def __literal_constructing__
+		return yield if true == @__literal_used__
+
+		__literal_count_constructions__(1)
+		finished = false
+
+		begin
+			instance = yield
+			finished = true
+		ensure
+			__literal_count_constructions__(-1) unless finished
+		end
+
+		__literal_used__
+		instance
+	end
+
+	private def __literal_used__
+		return if true == @__literal_used__
+
+		__literal_each_open_shape__ { |shape| shape.instance_variable_set(:@__literal_used__, true) }
+	end
+
+	private def __literal_count_constructions__(change)
+		__literal_each_open_shape__ do |shape|
+			count = (shape.instance_variable_get(:@__literal_used__) || 0) + change
+			shape.instance_variable_set(:@__literal_used__, count.zero? ? false : count)
+		end
+	end
+
+	# Each shape up from this one until one with an instance, under its own lock.
+	private def __literal_each_open_shape__
+		shape = self
+
+		while Literal::Properties === shape
+			closed = shape.__send__(:__literal_lock__).synchronize do
+				next true if true == shape.instance_variable_get(:@__literal_used__)
+
+				yield shape unless shape.frozen?
+				false
+			end
+
+			break if closed
+
+			shape = shape.superclass
+		end
+	end
+
+	# Guards whether the shape has instances. Its own, not one for every shape,
+	# so code a declaration runs, like a type's ===, can wait on another shape's
+	# construction. A frozen shape can't change.
+	private def __literal_lock__
+		@__literal_lock__ || SCHEMA_METHODS_LOCK.synchronize do
+			frozen? ? SCHEMA_METHODS_LOCK : (@__literal_lock__ ||= Monitor.new)
+		end
+	end
+
+	# Under the shape's lock, which a construction takes to close it, so the
+	# property either comes before every instance or is refused.
 	private def __literal_add_property__(property)
-		literal_properties << property
-		# After the change, so an entry labelled with the new generation was
-		# computed from it.
-		Literal::Properties.changed(self)
-		__define_literal_methods__(property)
-		include(__literal_extension__)
+		__literal_lock__.synchronize do
+			# An instance made or under way would be missing it.
+			if @__literal_used__
+				raise Literal::ArgumentError.new("Cannot define #{property.name.inspect} on #{self}, because it already has instances.")
+			end
+
+			schema = literal_properties
+
+			# A batch is judged whole when it commits: a declaration part way through
+			# it may pass through an order Ruby can't compile, or name a deferred type
+			# whose constant is still to come.
+			schema.check_signature(schema.sorted_with(property)) unless __literal_open_batches__ > 0
+
+			schema << property
+			# After the change, so an entry labelled with the new generation was
+			# computed from it.
+			Literal::Properties.changed(self)
+			__define_literal_methods__(property)
+			include(__literal_extension__)
+		end
 	end
 
 	private def __define_literal_methods__(new_property)
 		batching = __literal_open_batches__ > 0
 
 		if batching
-			@__literal_last_deferred_property__ = new_property
 			code = new_property && __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
 		else
 			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
@@ -424,7 +577,7 @@ module Literal::Properties
 			__literal_extension__.module_eval(code, __FILE__, __LINE__)
 		end
 
-		__literal_defer_schema_methods__(new_property) if batching
+		__literal_defer_schema_methods__ if batching
 	end
 
 	private def __literal_open_batches__
@@ -442,26 +595,15 @@ module Literal::Properties
 	# calls one before the batch is committed — a Literal::Enum building its
 	# members in the class body — reaches a stand-in that generates the real
 	# methods and hands over to them.
-	private def __literal_defer_schema_methods__(new_property)
-		names = __literal_schema_methods__
-
-		if @__literal_schema_methods_deferred__
-			return unless new_property
-
-			# A reader or predicate named after a schema-wide method has just
-			# replaced its stand-in.
-			names = names.select do |name|
-				(new_property.reader && name == new_property.name) ||
-					(new_property.predicate && name.name == "#{new_property.name.name}?")
-			end
-		end
+	private def __literal_defer_schema_methods__
+		return if @__literal_schema_methods_deferred__
 
 		@__literal_schema_methods_deferred__ = true
 
 		shape = self
 		extension = __literal_extension__
 
-		names.each do |name|
+		__literal_schema_methods__.each do |name|
 			extension.alias_method(name, name)
 			extension.define_method(name) do |*args, **kwargs, &block|
 				shape.__send__(:__literal_define_schema_methods__)
@@ -479,17 +621,12 @@ module Literal::Properties
 		SCHEMA_METHODS_LOCK.synchronize do
 			next unless @__literal_schema_methods_deferred__
 
-			# What the last declaration would have emitted without a batch, so a
-			# reader that takes a schema-wide method's name fares the same.
-			last_property = @__literal_last_deferred_property__
-			code = __generate_literal_methods__(last_property)
+			code = __generate_literal_methods__(nil)
 
 			extension = __literal_extension__
 			__literal_schema_methods__.each { |name| extension.alias_method(name, name) }
-			__literal_silence_redefinitions__(last_property) if last_property
 			extension.module_eval(code, __FILE__, __LINE__)
 
-			@__literal_last_deferred_property__ = nil
 			@__literal_schema_methods_deferred__ = false
 		end
 	end
@@ -518,9 +655,16 @@ module Literal::Properties
 		if defined?(@__literal_extension__)
 			@__literal_extension__
 		else
+			properties = literal_properties.properties_index
+
 			@__literal_extension__ = Module.new do
+				# What the generated methods look their properties up in, rather than
+				# through `self.class`, which a property's reader could replace.
+				const_set(:PROPERTIES, properties)
+				private_constant :PROPERTIES
+
 				def initialize
-					after_initialize if respond_to?(:after_initialize, true)
+					after_initialize if Literal::RESPOND_TO.bind_call(self, :after_initialize, true)
 				end
 
 				def to_h

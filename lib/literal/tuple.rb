@@ -18,7 +18,7 @@ class Literal::Tuple
 		def initialize(*types)
 			raise Literal::ArgumentError.new("Literal::Tuple type must have at least one type.") if types.empty?
 
-			@types = types.freeze
+			@types = Literal::Freezing.frozen_member(types)
 			freeze
 		end
 
@@ -46,6 +46,14 @@ class Literal::Tuple
 
 		def ==(other)
 			Generic === other && @types == other.types
+		end
+
+		def eql?(other)
+			Generic === other && Literal.member_eql?(@types, other.types)
+		end
+
+		def hash
+			literal_hash(Generic, @types)
 		end
 
 		def ===(value)
@@ -85,6 +93,10 @@ class Literal::Tuple
 			end
 		end
 
+		def literal_upper_bound
+			Literal::Tuple
+		end
+
 		def literal_child_types
 			return enum_for(__method__) unless block_given?
 
@@ -103,6 +115,7 @@ class Literal::Tuple
 	include Enumerable
 
 	def initialize(value, types:)
+		types = types.dup.freeze unless types.frozen?
 		collection_type = Literal::Types._Tuple(*types)
 
 		Literal.check(value, collection_type) do |c|
@@ -110,7 +123,7 @@ class Literal::Tuple
 		end
 
 		@__types__ = types
-		@__value__ = value.dup
+		@__value__ = ::Array.new(value)
 		@__collection_type__ = collection_type
 	end
 
