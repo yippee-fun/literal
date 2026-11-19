@@ -77,7 +77,7 @@ class Literal::Enum
 
 		def find_by(**kwargs)
 			unless kwargs.length == 1
-				raise ArgumentError.new("You can only specify one index when using `where`.")
+				raise ArgumentError.new("You can only specify one index when using `find_by`.")
 			end
 
 			key, value = kwargs.first

@@ -340,3 +340,8 @@ end
 test "loading a value that isn't a member raises" do
 	assert_raises(KeyError) { Color._load(Marshal.dump(99)) }
 end
+
+test "#find_by with more than one index names find_by" do
+	error = assert_raises(ArgumentError) { Color.find_by(hex: "#FF0000", lower_hex: "#ff0000") }
+	assert_equal error.message, "You can only specify one index when using `find_by`."
+end
