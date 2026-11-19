@@ -167,6 +167,18 @@ test "from_pack loads values without a frozen? method" do
 	assert value_class.from_pack(value_class.new(BasicObject.new).as_pack)
 end
 
+test "from_pack refreezes a value whose own freeze is private or overridden" do
+	private_freeze = Class.new { private def freeze = raise("private freeze called") }
+	overridden_freeze = Class.new(private_freeze) { public def freeze = raise("overridden freeze called") }
+
+	[private_freeze, overridden_freeze].each do |payload_class|
+		value_class = Literal::Value(payload_class)
+		loaded = value_class.from_pack(value_class.new(Literal::FREEZE.bind_call(payload_class.new)).as_pack)
+
+		assert Literal::FROZEN.bind_call(loaded.value)
+	end
+end
+
 test "from_pack restores frozen values that contain themselves" do
 	value_class = Literal::Value(Literal::Types._Frozen(Array))
 	looped = []
