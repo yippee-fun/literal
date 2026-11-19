@@ -119,7 +119,7 @@ class Literal::TimeSerializer < Literal::Serializer
 	private def serialize_time(value)
 		digits = @precision || (fraction_of(value).zero? ? 0 : 9)
 
-		case value
+		serialized = case value
 		when Time
 			@utc ? value.getutc.iso8601(digits) : value.iso8601(digits)
 		when DateTime
@@ -129,6 +129,13 @@ class Literal::TimeSerializer < Literal::Serializer
 				value.iso8601(digits)
 			end
 		end
+
+		# RFC 3339 date-times have four-digit years and offsets under a day.
+		unless rfc3339_date_time?(serialized, calendar: (DateTime === value) ? Date::ITALY : Date::GREGORIAN)
+			raise Literal::ArgumentError, "Value #{value.inspect} cannot be written as an RFC 3339 date-time, which needs a year in 0000-9999 and an offset under a day"
+		end
+
+		serialized
 	end
 
 	private def fraction_of(value)

@@ -52,7 +52,14 @@ class Literal::DateSerializer < Literal::Serializer
 		end
 	end
 
+	# RFC 3339 dates have four-digit years.
 	private def serialize_date(value)
-		value.strftime("%Y-%m-%d")
+		serialized = value.strftime("%Y-%m-%d")
+
+		unless Format.match?(serialized)
+			raise Literal::ArgumentError, "Value #{value.inspect} has a year outside 0000-9999, which an RFC 3339 date cannot hold"
+		end
+
+		serialized
 	end
 end

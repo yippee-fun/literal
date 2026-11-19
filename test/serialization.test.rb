@@ -1459,6 +1459,14 @@ test "date deserialization accepts only RFC 3339 dates" do
 	end
 end
 
+test "dates and times with years RFC 3339 cannot hold raise" do
+	assert_raises(Literal::ArgumentError) { Example.serialize(Date.new(12345, 1, 1), type: Date) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(Date.new(-1, 1, 1), type: Date) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(Time.utc(12345, 1, 1), type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(12345, 1, 1), type: DateTime) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(2024, 1, 1, 12, 0, 0, 1), type: DateTime) }
+end
+
 test "a union of time and datetime is not serializable" do
 	refute Example.serializable_type?(_Union(Time, DateTime))
 
