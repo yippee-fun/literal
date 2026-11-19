@@ -117,3 +117,7 @@ test "#each without a block returns an enumerator" do
 	assert_equal enumerator.size, 3
 	assert_equal enumerator.to_a, [[:bold, true], [:italic, false], [:underlined, false]]
 end
+
+test ".keys" do
+	assert_equal Example.keys, [:bold, :italic, :underlined]
+end

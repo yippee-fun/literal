@@ -95,7 +95,7 @@ class Literal::Flags
 
 	# () -> Array(Symbol)
 	def self.keys
-		@flags.keys
+		self::FLAGS.keys
 	end
 
 	# (String) -> Literal::Flags
