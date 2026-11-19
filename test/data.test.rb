@@ -263,6 +263,13 @@ test "define block runs with the new class as self" do
 	assert_equal(klass.superclass, Literal::Data)
 end
 
+test "define block receives the new class, like Ruby's Data.define" do
+	yielded = nil
+	klass = Literal::Data.define(name: String) { |it| yielded = it }
+
+	assert_same(yielded, klass)
+end
+
 test "define block can define instance and class methods" do
 	klass = Literal::Data.define(first: String, last: String) do
 		def self.anonymous = new(first: "Jane", last: "Doe")

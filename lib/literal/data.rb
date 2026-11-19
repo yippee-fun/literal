@@ -17,7 +17,7 @@ class Literal::Data < Literal::DataStructure
 				end
 
 				if block_given?
-					class_exec(&body)
+					class_eval(&body)
 				end
 			end
 		end
