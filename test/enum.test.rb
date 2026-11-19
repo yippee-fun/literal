@@ -183,6 +183,31 @@ test "#<=>" do
 	assert_equal Color::Red <=> Color::Green, -1
 	assert_equal Color::Red <=> Color::Red, 0
 	assert_equal Color::Green <=> Color::Red, 1
+	assert_equal Color::Red <=> Switch::On, nil
+	assert_equal Color::Red <=> 1, nil
+end
+
+test "members are Comparable" do
+	assert Color::Red < Color::Green
+	assert Color::Blue > Color::Green
+	assert Color::Green.between?(Color::Red, Color::Blue)
+	assert_equal Color::SPRING_GREEN.clamp(Color::Red, Color::Blue), Color::Blue
+	assert_equal [Color::Blue, Color::Red].max, Color::Blue
+
+	assert_raises(ArgumentError) { Color::Red < Switch::On }
+	refute Color::Red == Switch::On
+	refute Color::Red == 1
+	assert Color::Red == Color::Scarlet
+end
+
+test "members of a subclassed enum don't compare with the parent's" do
+	parent = Class.new(Literal::Enum(Integer)) { const_set(:One, new(1)) }
+	child = Class.new(parent) { const_set(:Two, new(2)) }
+
+	assert_equal parent::One <=> child::Two, nil
+	refute parent::One == child::Two
+	refute child::Two == parent::One
+	refute parent::One === child::Two
 end
 
 test "#name" do

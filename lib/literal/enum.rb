@@ -228,6 +228,8 @@ class Literal::Enum
 		end
 	end
 
+	include Comparable
+
 	def name
 		klass = self.class
 		"#{klass.name}::#{klass.names[self]}"
@@ -259,9 +261,7 @@ class Literal::Enum
 	def <=>(other)
 		case other
 		when self.class
-			@__position__ <=> other.__position__
-		else
-			raise ArgumentError.new("Can't compare instances of #{other.class} to instances of #{self.class}")
+			@__position__ <=> other.__position__ if other.class == self.class
 		end
 	end
 
