@@ -37,3 +37,10 @@ test "class inheritance" do
 	assert Email === email
 	refute String === email
 end
+
+test "collection values convert to their core collection" do
+	assert_equal [1], Literal::Value(Array).new([1]).to_a
+	assert_equal [1], Literal::Value(Array).new([1]).to_ary
+	assert_equal({ a: 1 }, Literal::Value(Hash).new({ a: 1 }).to_h)
+	assert_equal Set[1], Literal::Value(Set).new(Set[1]).to_set
+end

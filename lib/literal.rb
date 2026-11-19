@@ -49,14 +49,14 @@ module Literal
 		elsif subtype?(type, String)
 			value_class.alias_method :to_s, :value
 			value_class.alias_method :to_str, :value
-		elsif subtype?(type, Array)
+		elsif subtype?(type, ::Array)
 			value_class.alias_method :to_a, :value
 			value_class.alias_method :to_ary, :value
-		elsif subtype?(type, Hash)
+		elsif subtype?(type, ::Hash)
 			value_class.alias_method :to_h, :value
 		elsif subtype?(type, Float)
 			value_class.alias_method :to_f, :value
-		elsif subtype?(type, Set)
+		elsif subtype?(type, ::Set)
 			value_class.alias_method :to_set, :value
 		end
 
