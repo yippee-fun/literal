@@ -217,13 +217,7 @@ class Literal::Flags
 	alias_method :deconstruct, :to_a
 
 	def deconstruct_keys(keys = nil)
-		if keys
-			keys.to_h do |key|
-				[key, @value & (bitmap(key)) > 0]
-			end
-		else
-			to_h
-		end
+		keys ? to_h.slice(*keys) : to_h
 	end
 
 	private def bits_of(other)

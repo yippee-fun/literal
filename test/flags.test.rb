@@ -186,3 +186,16 @@ test ".define refuses bits the flags can't hold" do
 
 	assert_equal Class.new(Literal::Flags16) { define(big: 15) }.new(big: true).to_i, 1 << 15
 end
+
+test "a pattern with a key that isn't a flag doesn't match" do
+	flags = Example.new(bold: true)
+
+	matched = case flags
+	in { nope: true }
+		:nope
+	in { bold: true, italic: false }
+		:bold
+	end
+
+	assert_equal matched, :bold
+end
