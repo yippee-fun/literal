@@ -604,7 +604,7 @@ module Literal::Properties
 		extension = __literal_extension__
 
 		__literal_schema_methods__.each do |name|
-			extension.alias_method(name, name)
+			extension.alias_method(name, name) if extension.method_defined?(name, false) || extension.private_method_defined?(name, false)
 			extension.define_method(name) do |*args, **kwargs, &block|
 				shape.__send__(:__literal_define_schema_methods__)
 				extension.instance_method(name).bind_call(self, *args, **kwargs, &block)

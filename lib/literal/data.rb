@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::Data < Literal::DataStructure
+	SCHEMA_METHODS = [*Literal::DataStructure::SCHEMA_METHODS, :with].freeze
+
 	class << self
 		def [](...) = new(...)
 
@@ -22,14 +24,13 @@ class Literal::Data < Literal::DataStructure
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:, &coercion)
 		end
 
+		private def __literal_schema_methods__
+			SCHEMA_METHODS
+		end
+
 		private def __generate_literal_methods__(new_property, buffer = +"")
 			super
-
-			# A property named `with` keeps its reader, as a member of Ruby's Data does.
-			unless literal_properties[:with]&.reader
-				literal_properties.generate_with(buffer, checked: literal_checks.any?)
-			end
-
+			literal_properties.generate_with(buffer, checked: literal_checks.any?)
 			buffer
 		end
 
@@ -50,10 +51,10 @@ class Literal::Data < Literal::DataStructure
 		Literal::FREEZE.bind_call(self)
 	end
 
-	# Generated per class once it has properties; see DataSchema#generate_with.
+	# Generated per shape once it has properties; see DataSchema#generate_with.
 	def with(**changes)
 		return self if changes.empty?
 
-		raise NameError.new("unknown attribute: #{changes.each_key.first.inspect} for #{self.class}")
+		raise NameError.new("unknown attribute: #{changes.each_key.first.inspect} for #{Literal::CLASS.bind_call(self)}")
 	end
 end

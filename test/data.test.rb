@@ -726,12 +726,152 @@ test "with runs checks across changed and carried-over properties" do
 	assert_equal range.new(min: 6, max: 7), original.with(min: 6, max: 7)
 end
 
-test "a property named with keeps its reader" do
-	named = Class.new(Literal::Data) do
-		prop :a, Integer
-		prop :with, String
-		prop :b, Integer
+test "a reader named with is refused, but the property can be replaced" do
+	[[], [[:a, Integer]]].each do |before|
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(Literal::Data) do
+				before.each { |name, type| prop name, type }
+				prop :with, String
+			end
+		end
+
+		assert error.message.include?("reader: false")
 	end
 
-	assert_equal "x", named.new(a: 1, with: "x", b: 2).with
+	named = Class.new(Literal::Data) do
+		prop :a, Integer
+		prop :with, String, reader: false
+	end
+
+	copy = named.new(a: 1, with: "x").with(with: "y")
+
+	assert_equal copy[:with], "y"
+	assert_equal copy.a, 1
+end
+
+test "with doesn't call methods a property can replace" do
+	shadowing = Class.new(Literal::Data) do
+		prop :class, String
+		prop :freeze, String
+		prop :raise, String
+		prop :instance_exec, String
+		prop :changes, String
+		prop :shape, String
+		prop :copy, String
+		prop :__property__, String
+		prop :v0, String
+
+		check(:class, "must not be empty") { |class:| !binding.local_variable_get(:class).empty? }
+	end
+
+	values = %i[class freeze raise instance_exec changes shape copy __property__ v0].to_h { |name| [name, name.name] }
+	copy = shadowing.new(**values).with(class: "b", v0: "w")
+
+	assert_equal copy.to_h, values.merge(class: "b", v0: "w")
+	assert copy.frozen?
+	assert_raises(Literal::CheckError) { copy.with(class: "") }
+	assert_raises(Literal::TypeError) { copy.with(class: 1) }
+	assert_raises(NameError) { copy.with(nope: 1) }
+end
+
+test "with handles keyword-named, positional and block properties" do
+	callback = -> {}
+	other = -> {}
+
+	klass = Class.new(Literal::Data) do
+		prop :begin, Integer, :positional
+		prop :end, Integer
+		prop :block, Proc, :&
+	end
+
+	copy = klass.new(1, end: 2, &callback).with(end: 3, block: other)
+
+	assert_equal copy[:begin], 1
+	assert_equal copy[:end], 3
+	assert_same copy.block, other
+end
+
+test "with is generated in full within a batch" do
+	klass = Class.new(Literal::Data) do
+		prop :a, Integer
+
+		props do
+			prop :b, String
+			prop :c, Integer, default: 0
+
+			@copy = from_props(a: 1, b: "x", c: 2).with(b: "y")
+		end
+	end
+
+	assert_equal klass.instance_variable_get(:@copy).to_h, { a: 1, b: "y", c: 2 }
+end
+
+test "with unsets an optional property, and sets it" do
+	klass = Class.new(Literal::Data) do
+		prop? :nickname, String, predicate: :public
+		prop? :tags, _Array(String), &Literal::Coercions::Immutable
+		prop? :code, Integer do |it|
+			Integer(it)
+		end
+	end
+
+	original = klass.new(nickname: "Al", tags: ["a"], code: "1")
+	unset = original.with(nickname: Literal::Undefined, tags: Literal::Undefined, code: Literal::Undefined)
+
+	assert_equal unset.to_h, { nickname: Literal::Undefined, tags: Literal::Undefined, code: Literal::Undefined }
+	assert_equal unset.nickname?, false
+	assert_equal unset, klass.new
+
+	set = unset.with(nickname: "Bo", tags: ["t"], code: "2")
+
+	assert_equal set.to_h, { nickname: "Bo", tags: ["t"], code: 2 }
+	assert set.tags.frozen?
+	assert_equal set.nickname?, true
+end
+
+test "with resolves Proc defaults against the copy" do
+	klass = Class.new(Literal::Data) do
+		prop :first, String
+		prop :greeting, String, default: -> { "Hello #{@first}" }
+	end
+
+	copy = klass.new(first: "Ada").with(first: "Grace", greeting: Literal::Undefined)
+
+	assert_equal copy.greeting, "Hello Grace"
+end
+
+test "with type checks carried-over values" do
+	klass = Class.new(Literal::Data) do
+		prop :ids, _Array(Integer)
+		prop :n, Integer
+	end
+
+	ids = [1]
+	original = klass.new(ids:, n: 1)
+	ids << "2"
+
+	assert_raises(Literal::TypeError) { original.with(n: 2) }
+end
+
+test "with reports errors from its caller" do
+	original = WithExample.new(1, label: "home")
+	type_error = assert_raises(Literal::TypeError) { original.with(x: "2") }
+	check_error = assert_raises(Literal::CheckError) { original.with(label: "") }
+
+	assert type_error.message.include?("#with (from #{type_error.backtrace[1]})")
+	assert type_error.backtrace.first(2).any? { |frame| frame.include?("data.test.rb") }
+	assert check_error.backtrace.first.include?("data.test.rb")
+end
+
+test "with is generated where Object has no with" do
+	assert system(
+		RbConfig.ruby, "-I", File.expand_path("../lib", __dir__), "-r", "literal",
+		"-e", <<~RUBY
+			direct = Class.new(Literal::Data) { prop :a, Integer }
+			batched = Class.new(Literal::Data) { props { prop :a, Integer } }
+			exit !Object.method_defined?(:with) && [direct, batched].all? { |shape| shape.new(a: 1).with(a: 2).a == 2 }
+		RUBY
+	) do
+		"Expected with to be generated without Object#with to alias."
+	end
 end
