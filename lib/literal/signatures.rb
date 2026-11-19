@@ -71,24 +71,37 @@ module Literal::Signatures
 		end
 
 		@__literal_signature__ = Signature.new(positional.freeze, keywords.freeze, caller_locations(1, 1).first)
+		singleton_class.prepend(MethodHooks) unless singleton_class.include?(MethodHooks)
 		__literal_await_method__
 		@__literal_signature__
 	end
 
-	private def method_added(name)
-		super
-		__literal_bind_signature__(self, name)
-	end
+	# Prepended, so a class's own hooks cannot hide a method from its sig by not
+	# calling super. They see the method once it is signed, so one defining a
+	# method of its own cannot take the sig, and do not see the methods signing
+	# defines.
+	module MethodHooks
+		private def method_added(name)
+			return if @__literal_signing__
 
-	private def singleton_method_added(name)
-		super
-		__literal_bind_signature__(singleton_class, name)
+			__literal_bind_signature__(self, name)
+			super
+		end
+
+		private def singleton_method_added(name)
+			return if @__literal_signing__
+
+			__literal_bind_signature__(singleton_class, name)
+			super
+		end
 	end
+	private_constant :MethodHooks
 
 	private def __literal_bind_signature__(owner, name)
 		signature = @__literal_signature__ or return
 		@__literal_signature__ = nil
 		__literal_stop_watching__
+		@__literal_signing__ = true
 
 		singleton = !owner.equal?(self)
 		original = owner.instance_method(name)
@@ -123,6 +136,8 @@ module Literal::Signatures
 
 		owner.define_method(name, checker.instance_method(compiled))
 		owner.__send__(visibility, name)
+	ensure
+		@__literal_signing__ = false
 	end
 
 	# The checking method, taking the parameters the method takes under the same

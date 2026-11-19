@@ -177,6 +177,87 @@ test "refuses to load a sig with no return type" do
 	assert error.message.include?("has no return type")
 end
 
+test "binds past a class's own method hooks that do not call super" do
+	klass = Class.new do
+		def self.method_added(name) = nil
+		def self.singleton_method_added(name) = nil
+
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+
+		sig(String) >> String
+		def self.shout(text) = text
+	end
+
+	assert_raises(Literal::TypeError) { klass.new.greet(1) }
+	assert_raises(Literal::TypeError) { klass.shout(1) }
+end
+
+test "lets a class's own method hooks see each method once it is signed" do
+	klass = Class.new do
+		def self.seen = (@seen ||= [])
+
+		def self.method_added(name)
+			seen << [name, File.basename(instance_method(name).source_location.first)]
+			super
+		end
+
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+	end
+
+	assert_equal klass.seen, [[:greet, "signatures.rb"]]
+end
+
+test "keeps a visibility a class's own hook sets" do
+	klass = Class.new do
+		def self.method_added(name)
+			private(name)
+			super
+		end
+
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+	end
+
+	assert klass.private_method_defined?(:greet)
+end
+
+test "keeps the sig from a method a class's own hook defines" do
+	klass = Class.new do
+		def self.method_added(name)
+			alias_method(:"#{name}_unwrapped", name) unless name.end_with?("_unwrapped")
+			super
+		end
+
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+	end
+
+	assert_raises(Literal::TypeError) { klass.new.greet(1) }
+end
+
+test "binds through a module that includes Literal::Signatures" do
+	dsl = Module.new { include Literal::Signatures }
+
+	klass = Class.new do
+		extend dsl
+
+		sig(String) >> String
+		def greet(name) = name
+	end
+
+	assert_raises(Literal::TypeError) { klass.new.greet(1) }
+end
+
 test "takes Literal::Undefined as a return type" do
 	klass = Class.new do
 		extend Literal::Signatures
