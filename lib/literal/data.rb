@@ -22,18 +22,6 @@ class Literal::Data < Literal::DataStructure
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:, &coercion)
 		end
 
-		def prop?(name, type, kind = :keyword, reader: :public, predicate: false, description: nil, &coercion)
-			prop(
-				name,
-				Literal::Types._Union(type, Literal::Undefined),
-				kind,
-				reader:,
-				predicate:,
-				description:,
-				&coercion
-			)
-		end
-
 		def literal_properties
 			return @literal_properties if defined?(@literal_properties)
 

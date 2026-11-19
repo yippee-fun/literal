@@ -280,3 +280,15 @@ test "an alias keeps the member's name and gets a predicate of its own" do
 	refute Color::Green.scarlet?
 	assert_equal Color.coerce(:Scarlet), Color::Red
 end
+
+test "prop? defines an optional property with a public reader" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop? :label, String
+
+		const_set(:Labelled, new(1, label: "One"))
+		const_set(:Plain, new(2))
+	end
+
+	assert_equal enum::Labelled.label, "One"
+	assert_equal enum::Plain.label, Literal::Undefined
+end

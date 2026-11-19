@@ -189,10 +189,15 @@ module Literal::Properties
 		literal_checks_for(name).any?
 	end
 
-	def prop?(name, type, kind = :keyword, reader: false, writer: false, predicate: false, description: nil, &coercion)
+	# Forwarded, so each class's `prop` decides which options it takes and their defaults.
+	def prop?(name, type, kind = :keyword, **options, &coercion)
 		# The union admitting Literal::Undefined is what makes the property
 		# optional — see Literal::Property#undefinable? — so there's no default.
-		prop(name, _Union(type, Literal::Undefined), kind, reader:, writer:, predicate:, description:, &coercion)
+		if options.key?(:default)
+			raise Literal::ArgumentError.new("The optional property #{name.inspect} can't have a default.")
+		end
+
+		prop(name, _Union(type, Literal::Undefined), kind, **options, &coercion)
 	end
 
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)

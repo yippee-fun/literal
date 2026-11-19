@@ -942,3 +942,13 @@ test "prop accepts valid names in other encodings" do
 
 	assert_equal klass.new(name => "x").to_h, { name => "x" }
 end
+
+test "prop? refuses a default" do
+	assert_raises(Literal::ArgumentError) do
+		Class.new do
+			extend Literal::Properties
+
+			prop? :example, String, default: "x"
+		end
+	end
+end
