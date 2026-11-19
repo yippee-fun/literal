@@ -427,7 +427,12 @@ module Literal
 		begin_contained = case [range.begin, other.begin]
 		in [nil, _] then true
 		in [_, nil] then false
-		in [lower, other_lower] then (lower <=> other_lower) in -1 | 0
+		in [lower, other_lower]
+			# <=> may answer any number, like a difference, so only its sign counts.
+			case lower <=> other_lower
+			in Numeric => order then order <= 0
+			else false
+			end
 		end
 
 		end_contained = case [range.end, other.end]
@@ -435,8 +440,8 @@ module Literal
 		in [_, nil] then false
 		in [upper, other_upper]
 			case upper <=> other_upper
-			in 1 then true
-			in 0 then !range.exclude_end? || other.exclude_end?
+			in Numeric => order if order.zero? then !range.exclude_end? || other.exclude_end?
+			in Numeric => order then order > 0
 			else false
 			end
 		end

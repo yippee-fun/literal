@@ -97,6 +97,22 @@ test "range literals compare as continuous intervals" do
 	refute_subtype _Float(1...5), _Constraint(Numeric, 1..4)
 end
 
+test "range endpoints compare by the sign of <=>, whatever its magnitude" do
+	point = Struct.new(:n) do
+		include Comparable
+
+		def <=>(other) = n - other.n
+	end
+
+	below, zero, two, eight, ten, eleven = [-1, 0, 2, 8, 10, 11].map { |n| point.new(n) }
+
+	assert_subtype (two..eight), (zero..ten)
+	assert_subtype (zero...ten), (zero...ten)
+	refute_subtype (zero..eleven), (zero..ten)
+	refute_subtype (below..eight), (zero..ten)
+	refute_subtype (zero..ten), (zero...ten)
+end
+
 test "literal types are subtypes of the modules bounding their members" do
 	assert_subtype _Array(String), Array
 	assert_subtype _Array(String), Enumerable
