@@ -16,6 +16,8 @@ class Color < Literal::Enum(Integer)
 	Blue = new(3, hex: "#0000FF")
 	SPRING_GREEN = new(4, hex: "#00FF7F")
 
+	SPRING_GREEN_HEX = "#00FF7F"
+
 	__after_defined__ if RUBY_ENGINE == "truffleruby"
 end
 
@@ -51,6 +53,24 @@ end
 test ".coerce with invalid symbol raises an ArgumentError" do
 	assert_raises ArgumentError do
 		Color.coerce(:Invalid)
+	end
+end
+
+test ".coerce with the name of a constant that isn't a member raises an ArgumentError" do
+	assert_raises ArgumentError do
+		Color.coerce(:String)
+	end
+
+	assert_raises ArgumentError do
+		Color.coerce(:SPRING_GREEN_HEX)
+	end
+
+	parent = Class.new(Literal::Enum(Integer)) { const_set(:One, new(1)) }
+	child = Class.new(parent) { const_set(:Two, new(2)) }
+	parent.const_set(:Foreign, child::Two)
+
+	assert_raises ArgumentError do
+		parent.coerce(:Foreign)
 	end
 end
 

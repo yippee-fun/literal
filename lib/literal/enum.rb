@@ -192,13 +192,11 @@ class Literal::Enum
 			when self
 				value
 			when Symbol
-				self[value] || begin
-					const_get(value)
-				rescue NameError
-					raise ArgumentError.new(
+				self[value] || member_named(value) || raise(
+					ArgumentError.new(
 						"Can't coerce #{value.inspect} into a #{inspect}."
 					)
-				end
+				)
 			else
 				self[value] || raise(
 					ArgumentError.new(
@@ -206,6 +204,14 @@ class Literal::Enum
 					)
 				)
 			end
+		end
+
+		private def member_named(name)
+			member = const_get(name)
+		rescue NameError
+			nil
+		else
+			member if @members.include?(member)
 		end
 
 		def to_proc
