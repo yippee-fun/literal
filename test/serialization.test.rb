@@ -3127,6 +3127,45 @@ test "union of a structure and a map with distinct required keys serialization r
 	assert_equal(Example.deserialize(map_serialized, type:), map_original)
 end
 
+test "union of object members ignores keys no member declares when loading" do
+	assert_equal(
+		Example.deserialize({ "value" => "Joel", "extra" => 1 }, type: _Union(SerializationValueObject, String)),
+		SerializationValueObject.new(value: "Joel"),
+	)
+
+	type = _Union(SerializationValueObject, _Map(name: String))
+	assert_equal(Example.deserialize({ "value" => "Joel", "extra" => 1 }, type:), SerializationValueObject.new(value: "Joel"))
+	assert_equal(Example.deserialize({ "name" => "Joel", "extra" => 1 }, type:), { name: "Joel" })
+
+	type = _Union(SerializationUserEvent, SerializationAdminEvent)
+	assert_equal(
+		Example.deserialize({ "kind" => "admin", "name" => "Jill", "extra" => 1 }, type:),
+		SerializationAdminEvent.new(kind: "admin", name: "Jill"),
+	)
+
+	type = _Union(_Range(Integer), SerializationValueObject)
+	assert_equal(Example.deserialize({ "from" => 1, "to" => 2, "inclusive" => true, "extra" => 1 }, type:), 1..2)
+end
+
+test "union of object members refuses objects whose declared keys match several members" do
+	type = _Union(SerializationValueObject, _Map(name: String))
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.deserialize({ "value" => "Joel", "name" => "Joel" }, type:)
+	end
+	assert error.message.include?("No union member type for JSON object")
+end
+
+test "tagged unions ignore keys their members don't declare when loading" do
+	type = _TaggedUnion(person: SerializationValueObject, note: String)
+
+	assert_equal(
+		Example.deserialize({ "$type" => "person", "value" => "Joel", "extra" => 1 }, type:),
+		SerializationValueObject.new(value: "Joel"),
+	)
+	assert_equal(Example.deserialize({ "$type" => "note", "value" => "Hi", "extra" => 1 }, type:), "Hi")
+end
+
 test "union of a hash member and another object member is not naturally discriminated" do
 	type = _Union(_Hash(String, String), SerializationValueObject)
 

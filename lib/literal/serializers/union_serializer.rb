@@ -238,11 +238,23 @@ class Literal::UnionSerializer < Literal::Serializer
 			# pairwise distinguishable shapes or constants with disjoint domains,
 			# so at most one accepts. A constant member can be false itself, so
 			# the match is found by index.
-			index = members.index { |member| accepts_raw?(member, raw_value) } ||
+			candidate = (json_type == "object") ? declared_entries(raw_value, members) : raw_value
+			index = members.index { |member| accepts_raw?(member, candidate) } ||
 				raise(Literal::ArgumentError, "No union member type for JSON #{json_type} #{raw_value.inspect} in #{type.inspect}")
 
 			members[index]
 		end
+	end
+
+	# Loading ignores keys a shape doesn't declare, so data written under a
+	# compatible schema still loads. Keys no member declares can't tell the
+	# members apart, so they're dropped before matching shapes; keys another
+	# member declares still count, which keeps the match unambiguous.
+	private def declared_entries(raw_value, members)
+		declared = Set[]
+		members.each { |member| declared.merge(@context.object_shape(member).allowed) }
+
+		raw_value.select { |key, _| declared.include?(key) }
 	end
 
 	private def accepts_raw?(member, raw_value)
