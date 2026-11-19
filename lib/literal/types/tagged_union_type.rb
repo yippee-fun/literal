@@ -43,7 +43,7 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def eql?(other)
-		Literal::Types::TaggedUnionType === other && @pairs.eql?(other.pairs)
+		Literal::Types::TaggedUnionType === other && Literal.member_eql?(@pairs, other.pairs)
 	end
 
 	def literal_child_types

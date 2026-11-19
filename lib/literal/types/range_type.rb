@@ -17,7 +17,7 @@ class Literal::Types::RangeType
 	end
 
 	def eql?(other)
-		Literal::Types::RangeType === other && @type.eql?(other.type)
+		Literal::Types::RangeType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

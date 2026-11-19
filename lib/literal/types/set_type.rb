@@ -17,7 +17,7 @@ class Literal::Types::SetType
 	end
 
 	def eql?(other)
-		Literal::Types::SetType === other && @type.eql?(other.type)
+		Literal::Types::SetType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

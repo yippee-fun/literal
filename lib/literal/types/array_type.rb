@@ -17,7 +17,7 @@ class Literal::Types::ArrayType
 	end
 
 	def eql?(other)
-		Literal::Types::ArrayType === other && @type.eql?(other.type)
+		Literal::Types::ArrayType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

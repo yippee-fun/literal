@@ -18,7 +18,7 @@ class Literal::Types::HashType
 	end
 
 	def eql?(other)
-		Literal::Types::HashType === other && @key_type.eql?(other.key_type) && @value_type.eql?(other.value_type)
+		Literal::Types::HashType === other && Literal.member_eql?(@key_type, other.key_type) && Literal.member_eql?(@value_type, other.value_type)
 	end
 
 	def literal_child_types

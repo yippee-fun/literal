@@ -28,7 +28,7 @@ class Literal::Types::DraftStateType
 	end
 
 	def eql?(other)
-		Literal::Types::DraftStateType === other && @type.eql?(other.type)
+		Literal::Types::DraftStateType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

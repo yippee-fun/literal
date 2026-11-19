@@ -19,7 +19,7 @@ class Literal::Types::NilableType
 	end
 
 	def eql?(other)
-		Literal::Types::NilableType === other && @type.eql?(other.type)
+		Literal::Types::NilableType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def __relax__

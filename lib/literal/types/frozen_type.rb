@@ -2,7 +2,7 @@
 
 # @api private
 class Literal::Types::FrozenType
-	ALWAYS_FROZEN = Set[Symbol, Integer, Float, true, false, nil].freeze
+	ALWAYS_FROZEN = Set[Symbol, Integer, Float, true, false, nil].compare_by_identity.freeze
 
 	include Literal::Type
 	include Literal::Types::DraftTransparent
@@ -18,7 +18,7 @@ class Literal::Types::FrozenType
 		end
 
 		@type = type
-		@hash = [Literal::Types::FrozenType, type].hash
+		@hash = literal_hash(Literal::Types::FrozenType, type)
 		freeze
 	end
 
@@ -29,7 +29,7 @@ class Literal::Types::FrozenType
 	end
 
 	def eql?(other)
-		Literal::Types::FrozenType === other && @type.eql?(other.type)
+		Literal::Types::FrozenType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

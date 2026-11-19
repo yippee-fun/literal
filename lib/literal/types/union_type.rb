@@ -36,11 +36,17 @@ class Literal::Types::UnionType
 			end
 		end
 
-		types.uniq!
+		begin
+			types.uniq!
+		rescue NoMethodError
+			# A matcher without #hash, as a BasicObject may be, is unique by identity.
+			types.uniq! { |type| Literal.implements?(type, :hash) ? type : Literal::OBJECT_ID.bind_call(type) }
+		end
+
 		@types = types.freeze
 		@primitives = primitives.freeze
 		@primitive_list = primitives.to_a.freeze
-		@hash = [Literal::Types::UnionType, @types, @primitive_list].hash
+		@hash = literal_hash(Literal::Types::UnionType, @types, @primitive_list)
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
 
 		freeze
@@ -192,7 +198,7 @@ class Literal::Types::UnionType
 	# the same order, like 1 == 1.0 but not 1.eql?(1.0), so unions sharing a
 	# key behave alike.
 	def eql?(other)
-		Literal::Types::UnionType === other && @types.eql?(other.types) && @primitive_list.eql?(other.primitive_list)
+		Literal::Types::UnionType === other && Literal.member_eql?(@types, other.types) && @primitive_list.eql?(other.primitive_list)
 	end
 
 	def ==(other)
@@ -200,7 +206,7 @@ class Literal::Types::UnionType
 		when Literal::Types::UnionType
 			@primitives == other.primitives &&
 				@types.size == other.types.size &&
-				(@types.eql?(other.types) || @types.all? { |type| other.types.any? { |member| member.eql?(type) } })
+				(Literal.member_eql?(@types, other.types) || @types.all? { |type| other.types.any? { |member| Literal.member_eql?(member, type) } })
 		else
 			false
 		end

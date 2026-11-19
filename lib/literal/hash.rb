@@ -57,11 +57,11 @@ class Literal::Hash
 		end
 
 		def eql?(other)
-			Generic === other && @key_type.eql?(other.key_type) && @value_type.eql?(other.value_type)
+			Generic === other && Literal.member_eql?(@key_type, other.key_type) && Literal.member_eql?(@value_type, other.value_type)
 		end
 
 		def hash
-			[Generic, @key_type, @value_type].hash
+			literal_hash(Generic, @key_type, @value_type)
 		end
 
 		def ===(value)

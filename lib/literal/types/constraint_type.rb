@@ -23,8 +23,8 @@ class Literal::Types::ConstraintType
 
 	def eql?(other)
 		Literal::Types::ConstraintType === other &&
-			@object_constraints.eql?(other.object_constraints) &&
-			@property_constraints.eql?(other.property_constraints)
+			Literal.member_eql?(@object_constraints, other.object_constraints) &&
+			Literal.member_eql?(@property_constraints, other.property_constraints)
 	end
 
 	def literal_child_types

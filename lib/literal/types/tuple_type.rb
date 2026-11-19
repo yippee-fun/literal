@@ -19,7 +19,7 @@ class Literal::Types::TupleType
 	end
 
 	def eql?(other)
-		Literal::Types::TupleType === other && @types.eql?(other.types)
+		Literal::Types::TupleType === other && Literal.member_eql?(@types, other.types)
 	end
 
 	def literal_child_types

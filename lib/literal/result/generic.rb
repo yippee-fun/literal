@@ -29,11 +29,11 @@ class Literal::Result::Generic
 	end
 
 	def eql?(other)
-		Literal::Result::Generic === other && @success_type.eql?(other.success_type) && @failure_type.eql?(other.failure_type)
+		Literal::Result::Generic === other && Literal.member_eql?(@success_type, other.success_type) && Literal.member_eql?(@failure_type, other.failure_type)
 	end
 
 	def hash
-		[Literal::Result::Generic, @success_type, @failure_type].hash
+		literal_hash(Literal::Result::Generic, @success_type, @failure_type)
 	end
 
 	def >=(other, context: nil)

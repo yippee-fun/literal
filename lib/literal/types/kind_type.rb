@@ -16,7 +16,7 @@ class Literal::Types::KindType
 	end
 
 	def eql?(other)
-		Literal::Types::KindType === other && @type.eql?(other.type)
+		Literal::Types::KindType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def inspect

@@ -20,11 +20,11 @@ class Literal::Success < Literal::Result
 		end
 
 		def eql?(other)
-			Generic === other && @type.eql?(other.type)
+			Generic === other && Literal.member_eql?(@type, other.type)
 		end
 
 		def hash
-			[Generic, @type].hash
+			literal_hash(Generic, @type)
 		end
 
 		def >=(other, context: nil)

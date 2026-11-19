@@ -17,7 +17,7 @@ class Literal::Types::NotType
 	end
 
 	def eql?(other)
-		Literal::Types::NotType === other && @type.eql?(other.type)
+		Literal::Types::NotType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

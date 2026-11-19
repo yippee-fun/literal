@@ -49,11 +49,11 @@ class Literal::Tuple
 		end
 
 		def eql?(other)
-			Generic === other && @types.eql?(other.types)
+			Generic === other && Literal.member_eql?(@types, other.types)
 		end
 
 		def hash
-			[Generic, @types].hash
+			literal_hash(Generic, @types)
 		end
 
 		def ===(value)

@@ -17,7 +17,7 @@ class Literal::Types::MapType
 	end
 
 	def eql?(other)
-		Literal::Types::MapType === other && @shape.eql?(other.shape)
+		Literal::Types::MapType === other && Literal.member_eql?(@shape, other.shape)
 	end
 
 	def literal_child_types

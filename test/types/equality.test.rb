@@ -103,23 +103,53 @@ test "serialization reuses the cache entry of an equal type" do
 end
 
 test "types can hold matchers without a hash method" do
-	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
+	matcher_class = Class.new(BasicObject) { def ===(_value) = true }
+	matcher, other = matcher_class.new, matcher_class.new
 
-	[
-		_Array(matcher),
-		_Set(matcher),
-		_Hash(matcher, matcher),
-		_Map(a: matcher),
-		_Tuple(matcher),
-		_Nilable(matcher),
-		_Not(matcher),
-		_Enumerable(matcher),
-		_Range(matcher),
-		_Constraint(matcher, size: 1),
-	].each do |type|
+	types = -> (member) do
+		[
+			_Array(member),
+			_Set(member),
+			_Hash(member, member),
+			_Map(a: member),
+			_Tuple(member),
+			_Nilable(member),
+			_Not(member),
+			_Enumerable(member),
+			_Range(member),
+			_Constraint(member, size: 1),
+			_Union(member, nil),
+			_Union(member, other, member),
+			_TaggedUnion(a: member),
+			_Frozen(member),
+			_Kind(member),
+			Literal::Array(member),
+			Literal::Hash(member, member),
+			Literal::Set(member),
+			Literal::Tuple(member),
+			Literal::Result(member, member),
+			Literal::Success(member),
+			Literal::Failure(member),
+		]
+	end
+
+	types.(matcher).zip(types.(matcher), types.(other)).each do |type, same, different|
 		assert Integer === type.hash
 		assert type == type
+		assert type.eql?(same)
+		assert_equal type.hash, same.hash
+		refute type.eql?(different)
+		assert_equal({ type => true }[same], true)
 	end
+end
+
+test "types can hold literals that contain themselves and matchers without a hash method" do
+	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
+	looped = [matcher]
+	looped << looped
+
+	assert_equal _Array(looped).hash, _Array(looped).hash
+	assert _Array(looped).eql?(_Array(looped))
 end
 
 test "types hold frozen copies of their members, so eql? and hash stay in agreement" do

@@ -17,7 +17,7 @@ class Literal::Types::EnumerableType
 	end
 
 	def eql?(other)
-		Literal::Types::EnumerableType === other && @type.eql?(other.type)
+		Literal::Types::EnumerableType === other && Literal.member_eql?(@type, other.type)
 	end
 
 	def literal_child_types

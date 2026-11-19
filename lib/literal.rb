@@ -68,6 +68,60 @@ module Literal
 		implements?(payload, :hash) ? SEND.bind_call(payload, :hash) : HASH.bind_call(payload)
 	end
 
+	# Compares and hashes a type's members, which may be matchers without eql?
+	# or hash, like a BasicObject: those compare by identity. A container met
+	# again is met through a cycle, and answers true or 0, as Ruby's recursive
+	# eql? and hash do.
+	def self.member_eql?(member, other, active = nil)
+		member.eql?(other)
+	rescue NoMethodError
+		case member
+		when ::Array, ::Hash
+			active ||= {}.compare_by_identity
+			return true if active.key?(member)
+
+			active[member] = true
+
+			begin
+				case member
+				when ::Array
+					::Array === other && member.size == other.size && member.each_index.all? { |i| member_eql?(member[i], other[i], active) }
+				else
+					::Hash === other && member.size == other.size && member.all? { |key, item| other.key?(key) && member_eql?(item, other[key], active) }
+				end
+			ensure
+				active.delete(member)
+			end
+		else
+			payload_eql?(member, other)
+		end
+	end
+
+	def self.member_hash(member, active = nil)
+		member.hash
+	rescue NoMethodError
+		case member
+		when ::Array, ::Hash
+			active ||= {}.compare_by_identity
+			return 0 if active.key?(member)
+
+			active[member] = true
+
+			begin
+				case member
+				when ::Array
+					member.map { |item| member_hash(item, active) }.hash
+				else
+					member.to_h { |key, item| [member_hash(key, active), member_hash(item, active)] }.hash
+				end
+			ensure
+				active.delete(member)
+			end
+		else
+			payload_hash(member)
+		end
+	end
+
 	def self.const_name(object)
 		const_ref(object).first&.name
 	end
