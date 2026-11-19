@@ -360,3 +360,24 @@ test "#resolve prefers a matching type to a literal the value is merely == to" d
 	assert_equal union.resolve(1.0), Float
 	assert_equal union.resolve(1r), 1
 end
+
+test "a value re-entering a union through its own methods does not match" do
+	union = nil
+	reader = Class.new { define_method(:name) { union === self } }
+	responder = Class.new { define_method(:respond_to_missing?) { |*| union === self } }
+	enumerable = Class.new do
+		include Enumerable
+		define_method(:size) { 1 }
+		define_method(:each) { |&block| block.(union === self) }
+	end
+
+	[
+		[_Constraint(name: true), reader],
+		[_Interface(:name), responder],
+		[_Enumerable(true), enumerable],
+	].each do |(member, value_class)|
+		union = _Union(String, member)
+
+		refute union === value_class.new
+	end
+end

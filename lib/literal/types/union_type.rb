@@ -59,10 +59,10 @@ class Literal::Types::UnionType
 		end or raise Literal::ArgumentError.new("No most specific member of #{matches.inspect}: they are strict subtypes of one another in a cycle.")
 	end
 
-	# Whether matching any of these types can run opaque code — a proc, or an
-	# object or module with its own `===` — without first passing a deferred
-	# type's guard. Opaque code can re-enter the match, so a union that reaches
-	# it needs a guard of its own.
+	# Whether matching any of these types can run opaque code — a proc, an
+	# object or module with its own `===`, or a method the value defines —
+	# without first passing a deferred type's guard. Opaque code can re-enter
+	# the match, so a union that reaches it needs a guard of its own.
 	def self.reaches_opaque_match?(types, seen = {}.compare_by_identity)
 		types.any? do |type|
 			next false if seen.key?(type)
@@ -72,6 +72,10 @@ class Literal::Types::UnionType
 			case type
 			in Literal::Types::DeferredType
 				false
+			in Literal::Types::ConstraintType if type.property_constraints.any?
+				true
+			in Literal::Types::InterfaceType | Literal::Types::EnumerableType
+				true
 			in Literal::Type
 				reaches_opaque_match?(type.literal_child_types, seen)
 			in Module

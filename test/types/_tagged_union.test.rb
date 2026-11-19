@@ -205,3 +205,11 @@ test "a tagged union can hold a matcher without a hash method" do
 
 	assert _TaggedUnion(any: matcher) === 1
 end
+
+test "a value re-entering a tagged union through its own methods does not match" do
+	tagged = nil
+	reader = Class.new { define_method(:name) { tagged === self } }
+	tagged = _TaggedUnion(string: String, named: _Constraint(name: true))
+
+	refute tagged === reader.new
+end
