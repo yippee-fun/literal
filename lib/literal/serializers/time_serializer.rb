@@ -116,17 +116,23 @@ class Literal::TimeSerializer < Literal::Serializer
 		end
 	end
 
+	# Fractions are rounded half to even at the written precision, never
+	# finer than a nanosecond. Times built from Floats sit a binary hair
+	# either side of the decimal they were written as, and rounding recovers
+	# it where truncating would turn 30.7 into 30.699999999.
 	private def serialize_time(value)
-		digits = @precision || (fraction_of(value).zero? ? 0 : 9)
+		digits = @precision || 9
+		time = rounded(value, digits)
+		digits = 0 if @precision.nil? && fraction_of(time).zero?
 
-		serialized = case value
+		serialized = case time
 		when Time
-			@utc ? value.getutc.iso8601(digits) : value.iso8601(digits)
+			@utc ? time.getutc.iso8601(digits) : time.iso8601(digits)
 		when DateTime
 			if @utc
-				"#{value.new_offset(0).iso8601(digits).delete_suffix('+00:00')}Z"
+				"#{time.new_offset(0).iso8601(digits).delete_suffix('+00:00')}Z"
 			else
-				value.iso8601(digits)
+				time.iso8601(digits)
 			end
 		end
 
@@ -136,6 +142,20 @@ class Literal::TimeSerializer < Literal::Serializer
 		end
 
 		serialized
+	end
+
+	private def rounded(value, digits)
+		# The whole second counts, so a tie at zero digits rounds to an even second.
+		seconds = value.sec + fraction_of(value)
+		scale = 10 ** digits
+		adjustment = Rational((seconds * scale).round(half: :even), scale) - seconds
+
+		case value
+		when Time
+			value + adjustment
+		when DateTime
+			value + (adjustment / 86_400)
+		end
 	end
 
 	private def fraction_of(value)

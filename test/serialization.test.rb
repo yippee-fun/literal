@@ -1465,6 +1465,34 @@ test "dates and times with years RFC 3339 cannot hold raise" do
 	assert_raises(Literal::ArgumentError) { Example.serialize(Time.utc(12345, 1, 1), type: Time) }
 	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(12345, 1, 1), type: DateTime) }
 	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(2024, 1, 1, 12, 0, 0, 1), type: DateTime) }
+
+	last_instant = 59 + (9_999_999_999r / 10_000_000_000)
+	assert_raises(Literal::ArgumentError) { Example.serialize(Time.utc(9999, 12, 31, 23, 59, last_instant), type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(9999, 12, 31, 23, 59, last_instant), type: DateTime) }
+end
+
+test "time fractions round half to even at nanosecond precision" do
+	time = Time.new(2024, 1, 1, 12, 0, 30.7, "+00:00")
+	serialized = Example.serialize(time, type: Time)
+	loaded = Example.deserialize(serialized, type: Time)
+
+	assert_equal serialized, "2024-01-01T12:00:30.700000000+00:00"
+	assert_equal loaded, Time.new(2024, 1, 1, 12, 0, 30.7r, "+00:00")
+	assert_equal Example.serialize(loaded, type: Time), serialized
+
+	assert_equal Example.serialize(Time.utc(2024, 1, 1, 0, 0, 5r / 10_000_000_000), type: Time), "2024-01-01T00:00:00Z"
+	assert_equal Example.serialize(Time.utc(2024, 1, 1, 0, 0, 15r / 10_000_000_000), type: Time), "2024-01-01T00:00:00.000000002Z"
+	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 2r / 3), type: DateTime), "2024-01-01T00:00:00.666666667+00:00"
+	assert_equal Example.json_schema(time)["const"], serialized
+
+	one = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 1))
+	assert_equal one.serialize(time, type: Time), "2024-01-01T12:00:30.7+00:00"
+	assert_equal one.serialize(Time.utc(2024, 1, 1, 0, 0, 25r / 100), type: Time), "2024-01-01T00:00:00.2Z"
+
+	zero = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 0))
+	assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 3r / 2), type: Time), "2024-01-01T00:00:02Z"
+	assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 5r / 2), type: Time), "2024-01-01T00:00:02Z"
+	assert_equal zero.serialize(DateTime.new(2024, 1, 1, 0, 0, 3r / 2), type: DateTime), "2024-01-01T00:00:02+00:00"
 end
 
 test "a union of time and datetime is not serializable" do
