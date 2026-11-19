@@ -70,7 +70,7 @@ module Literal::Signatures
 		if (pending = @__literal_signature__)
 			@__literal_signature__ = nil
 			__literal_stop_watching__
-			raise Literal::ArgumentError, "#{self}: the sig at #{pending.site} has no method after it"
+			raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{pending.site} has no method after it"
 		end
 
 		@__literal_signature__ = Signature.new(positional.freeze, keywords.freeze, caller_locations(1, 1).first)
@@ -179,7 +179,7 @@ module Literal::Signatures
 		prepended = !Literal::EQUAL.bind_call(Literal::INSTANCE_METHOD.bind_call(owner, name).owner, owner)
 		original = exported || __literal_own_method__(owner, name)
 		parameters = original.parameters
-		__literal_refuse_mismatch__(signature, parameters, "#{self}#{singleton ? '.' : '#'}#{name}")
+		__literal_refuse_mismatch__(signature, parameters, "#{__literal_label__}#{singleton ? '.' : '#'}#{name}")
 
 		visibility = __literal_visibility__(owner, name)
 		checker = Module.new
@@ -201,7 +201,7 @@ module Literal::Signatures
 		checker.const_set(:TYPES, [*signature.positional, *keywords, signature.returns].freeze)
 		checker.const_set(:OMITTED, OMITTED)
 		compiled = (IDENTIFIER.match?(name) || OPERATORS.include?(name)) ? name : :__literal_checker__
-		code = __literal_checker_code__(compiled, callee, parameters, singleton ? "#{self}.#{name}" : "##{name}", singleton)
+		code = __literal_checker_code__(compiled, callee, parameters, singleton ? "#{__literal_label__}.#{name}" : "##{name}", singleton)
 		# An explicit path, so every engine attributes these frames to Literal.
 		checker.module_eval(code, __FILE__, __LINE__)
 
@@ -298,6 +298,12 @@ module Literal::Signatures
 
 	private def __literal_keywords__(parameters) = parameters.filter_map { |kind, param| param if KEYWORD.include?(kind) }
 
+	# Through core methods, so a class's own name, to_s or inspect cannot fail
+	# signing it.
+	private def __literal_label__
+		((Module === self) && Literal::MODULE_NAME.bind_call(self)) || Literal::TO_S.bind_call(self)
+	end
+
 	# Every mismatch here is a typo the class should not load with.
 	private def __literal_refuse_mismatch__(signature, parameters, label)
 		site = "#{label} (sig at #{signature.site})"
@@ -359,14 +365,14 @@ module Literal::Signatures
 			in :raise
 				unwinding << tp.raised_exception
 			in :rescue
-				unwinding.reject! { |error| error.equal?(tp.raised_exception) }
+				unwinding.reject! { |error| Literal::EQUAL.bind_call(error, tp.raised_exception) }
 			in :end
 				next unless Literal::EQUAL.bind_call(tp.self, owner)
 
 				tp.disable
 				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
 				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature_watch__, nil)
-				raise Literal::ArgumentError, "#{owner}: the sig at #{signature.site} has no method after it" if unwinding.empty?
+				raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{signature.site} has no method after it" if unwinding.empty?
 			end
 		end
 		@__literal_signature_watch__.enable

@@ -452,6 +452,44 @@ test "signs past a class's own reflection methods" do
 	assert_raises(Literal::TypeError) { klass.shout(1) }
 end
 
+test "labels a class past its own name, to_s and inspect" do
+	labelled = Class.new do
+		def self.name = raise("called name")
+		def self.to_s = raise("called to_s")
+		def self.inspect = raise("called inspect")
+
+		extend Literal::Signatures
+	end
+
+	klass = Class.new(labelled) do
+		sig(String) >> String
+		def greet(name) = name
+
+		sig(String) >> String
+		def self.shout(text) = text
+	end
+
+	assert_raises(Literal::TypeError) { klass.new.greet(1) }
+	error = assert_raises(Literal::TypeError) { klass.shout(1) }
+	assert error.message.include?("#<Class:0x")
+
+	mismatch = assert_raises(Literal::ArgumentError) do
+		Class.new(labelled) do
+			sig(String, String) >> String
+			def greet(name) = name
+		end
+	end
+	assert mismatch.message.start_with?("#<Class:0x")
+
+	dangling = assert_raises(Literal::ArgumentError) do
+		Class.new(labelled) do
+			sig(String) >> String
+			sig(String) >> String
+		end
+	end
+	assert dangling.message.start_with?("#<Class:0x")
+end
+
 test "lets a class's own method hooks see each method once it is signed" do
 	klass = Class.new do
 		def self.seen = (@seen ||= [])
@@ -657,6 +695,22 @@ unless RUBY_ENGINE == "truffleruby"
 
 		assert error.message.include?("Dangling: the sig at")
 		assert error.message.include?("has no method after it")
+	end
+
+	test "labels a class body that ends on a sig past its own to_s" do
+		error = assert_raises(Literal::ArgumentError) do
+			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				class Dangling
+					def self.to_s = raise("called to_s")
+
+					extend Literal::Signatures
+
+					sig(String) >> String
+				end
+			RUBY
+		end
+
+		assert error.message.include?("Dangling: the sig at")
 	end
 
 	test "lets go of the watch once it is done" do
