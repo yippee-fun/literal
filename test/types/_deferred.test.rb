@@ -315,6 +315,76 @@ test "a recursive type under _Not swaps sides" do
 	refute_subtype _Not(Integer), _Not(node)
 end
 
+test "a type that refers to itself under _Not is not assumed through its cycle" do
+	negated = _Deferred { _Not(negated) }
+	either = _Deferred { _Union(either, _Not(either)) }
+	other = nil
+	mutual = _Deferred { _Not(other) }
+	other = _Deferred { _Not(mutual) }
+
+	assert negated === 1
+	refute mutual === 1
+	assert either === nil
+	refute _Any === nil
+
+	refute_subtype negated, mutual
+	refute_subtype either, _Not(either)
+	refute_subtype either, _Any
+end
+
+test "a type that refers to itself under _Not inside a container is still assumed" do
+	guarded = _Deferred { _Union(String, guarded, _Array(_Not(guarded))) }
+	later = _Deferred { _Union(later, _Array(_Deferred { LaterUndefinedType })) }
+
+	assert_subtype guarded, _Union(String, Array)
+	assert_subtype later, Array
+end
+
+test "a type that refers to itself under _Not through a property constraint is still assumed" do
+	sized = _Deferred { _Union(sized, _Constraint(String, size: _Not(sized))) }
+
+	assert_subtype sized, String
+end
+
+test "an assumption made in a failed branch doesn't block a branch that succeeds" do
+	type = _Deferred { _Constraint(_Union(type, _Not(type)), String) }
+
+	assert_subtype type, String
+	assert_equal _Union(Object, type).resolve("s"), type
+end
+
+test "a refused cycle leaves the proof free to try another way" do
+	type = _Deferred { _Constraint(type, String, _Not(type)) }
+	hidden = _Deferred { _Constraint(hidden, String, _Deferred { _Not(hidden) }) }
+
+	assert_subtype type, String
+	assert_equal true, Literal.subtype?(hidden, String)
+	assert_equal true, Literal.subtype?(hidden, String)
+end
+
+test "a deferred matcher that only answers === is walked without calling its methods" do
+	matcher = BasicObject.new
+	def matcher.===(value) = String === value
+	leaf = _Deferred { matcher }
+	type = _Deferred { _Constraint(leaf, type) }
+
+	assert_subtype type, String
+end
+
+test "a failing recursive check doesn't force deferred members it doesn't need" do
+	type = _Deferred { _Union(type, String, _Deferred { NeverDefinedType }) }
+
+	refute_subtype type, Integer
+end
+
+test "a recursive type with a matcher that only answers === is still assumed" do
+	matcher = BasicObject.new
+	def matcher.===(value) = String === value
+	type = _Deferred { _Union(type, _Constraint(String, _Not(matcher))) }
+
+	assert_subtype type, String
+end
+
 test "a deferred alias of a deferred chain matches it without forcing the shared tail" do
 	inner = _Deferred { _Deferred { FutureType } }
 	type = _Deferred { inner }

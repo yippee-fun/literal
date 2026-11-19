@@ -308,7 +308,7 @@ module Literal
 		# exact pair, assume it holds — provided the cycle justifies it (see
 		# SubtypeContext#assume). This is what makes subtyping between recursive
 		# (looping) types terminate with the right answer.
-		return context.assume(raw_key) unless context.acquire(raw_key)
+		return context.assume(raw_key, type) unless context.acquire(raw_key)
 
 		raw_acquired = true
 
@@ -325,12 +325,18 @@ module Literal
 				return result
 			end
 
-			return context.assume(resolved_key) unless context.acquire(resolved_key)
+			return context.assume(resolved_key, subtype) unless context.acquire(resolved_key)
 
 			resolved_acquired = true
 		end
 
 		result = !!resolved_subtype?(subtype, supertype, context)
+
+		# A proof resting on an assumption its type turned out not to support
+		# is tried again, now refusing that assumption.
+		while result && !context.confirmed?(raw_key, resolved_key)
+			result = !!resolved_subtype?(subtype, supertype, context)
+		end
 
 		context.store(resolved_key, result)
 		context.store(raw_key, result)

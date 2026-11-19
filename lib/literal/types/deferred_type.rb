@@ -16,11 +16,15 @@ class Literal::Types::DeferredType
 
 	attr_reader :block
 
+	def materialized?
+		!UNMATERIALIZED.equal?(@materialized)
+	end
+
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
 
 		type = materialize
-		yield type unless type.equal?(self)
+		yield type unless Literal::EQUAL.bind_call(type, self)
 	end
 
 	def inspect
