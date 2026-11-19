@@ -63,6 +63,10 @@ class Literal::Set
 			end
 		end
 
+		def literal_upper_bound
+			Literal::Set
+		end
+
 		def literal_child_types
 			return enum_for(__method__) unless block_given?
 

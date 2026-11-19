@@ -102,6 +102,18 @@ test "Generic subtyping is covariant" do
 	refute Literal.subtype?(Literal::Array(Numeric), Literal::Array(Integer))
 end
 
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Array(Integer), Literal::Array)
+	assert Literal.subtype?(Literal::Array(Integer), Object)
+	assert Literal.subtype?(Literal::Array(Integer), _Nilable(Literal::Array))
+	refute Literal.subtype?(Literal::Array(Integer), Array)
+
+	parent = Class.new(Literal::Data) { prop :items, Literal::Array }
+	child = Class.new(parent) { prop :items, Literal::Array(Integer) }
+
+	assert_equal child.new(items: Literal::Array(Integer).new(1)).items, Literal::Array(Integer).new(1)
+end
+
 test "Generic#inspect" do
 	assert_equal Literal::Array(Integer).inspect, "Literal::Array(Integer)"
 end

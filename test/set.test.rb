@@ -73,6 +73,13 @@ test "Generic subtyping is covariant" do
 	refute Literal.subtype?(Literal::Set(Numeric), Literal::Set(Integer))
 end
 
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Set(Integer), Literal::Set)
+	assert Literal.subtype?(Literal::Set(Integer), Object)
+	assert Literal.subtype?(Literal::Set(Integer), _Nilable(Literal::Set))
+	refute Literal.subtype?(Literal::Set(Integer), Set)
+end
+
 test "literal set types and plain set types are never subtypes of each other" do
 	refute Literal.subtype?(Literal::Set(Integer), _Set(Integer))
 	refute Literal.subtype?(_Set(Integer), Literal::Set(Integer))

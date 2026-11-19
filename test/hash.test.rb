@@ -89,6 +89,13 @@ test "Generic subtyping is covariant" do
 	refute Literal.subtype?(Literal::Hash(Symbol, Numeric), Literal::Hash(Symbol, Integer))
 end
 
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Hash(Symbol, Integer), Literal::Hash)
+	assert Literal.subtype?(Literal::Hash(Symbol, Integer), Object)
+	assert Literal.subtype?(Literal::Hash(Symbol, Integer), _Nilable(Literal::Hash))
+	refute Literal.subtype?(Literal::Hash(Symbol, Integer), Hash)
+end
+
 test "literal hash types and plain hash types are never subtypes of each other" do
 	refute Literal.subtype?(Literal::Hash(Symbol, Integer), _Hash(Symbol, Integer))
 	refute Literal.subtype?(_Hash(Symbol, Integer), Literal::Hash(Symbol, Integer))

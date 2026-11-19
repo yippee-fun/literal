@@ -67,6 +67,10 @@ class Literal::Array
 			end
 		end
 
+		def literal_upper_bound
+			Literal::Array
+		end
+
 		def literal_child_types
 			return enum_for(__method__) unless block_given?
 

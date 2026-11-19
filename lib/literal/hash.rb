@@ -72,6 +72,10 @@ class Literal::Hash
 			end
 		end
 
+		def literal_upper_bound
+			Literal::Hash
+		end
+
 		def literal_child_types
 			return enum_for(__method__) unless block_given?
 

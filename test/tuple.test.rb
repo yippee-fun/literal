@@ -91,6 +91,13 @@ test "Generic subtyping is covariant per position" do
 	refute Literal.subtype?(Literal::Tuple(Integer), Literal::Tuple(Integer, Integer))
 end
 
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Tuple(Integer, String), Literal::Tuple)
+	assert Literal.subtype?(Literal::Tuple(Integer, String), Object)
+	assert Literal.subtype?(Literal::Tuple(Integer, String), _Nilable(Literal::Tuple))
+	refute Literal.subtype?(Literal::Tuple(Integer, String), Array)
+end
+
 test "literal tuple types and plain tuple types are never subtypes of each other" do
 	refute Literal.subtype?(Literal::Tuple(Integer), _Tuple(Integer))
 	refute Literal.subtype?(_Tuple(Integer), Literal::Tuple(Integer))
