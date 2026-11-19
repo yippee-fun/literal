@@ -174,6 +174,17 @@ test "properties can be added while no descendant has inherited the schema" do
 	assert_equal instance.to_h, { a: "1", b: "2" }
 end
 
+test "prop refuses a frozen class without changing it" do
+	klass = Class.new(Literal::Data) { prop :a, Integer }
+	klass.freeze
+
+	error = assert_raises(Literal::ArgumentError) { klass.prop(:b, Integer) }
+
+	assert error.message.include?("frozen")
+	assert_equal klass.literal_properties.map(&:name), [:a]
+	assert_equal klass.new(a: 1).to_h, { a: 1 }
+end
+
 test "frozen defaults are type checked when the property is defined" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new(Example) do

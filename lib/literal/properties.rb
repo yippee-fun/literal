@@ -240,6 +240,10 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("The description must be a String or nil.")
 		end
 
+		if frozen?
+			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it is frozen.")
+		end
+
 		queue = subclasses
 		until queue.empty?
 			subclass = queue.shift
