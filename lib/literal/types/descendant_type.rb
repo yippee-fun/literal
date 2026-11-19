@@ -38,7 +38,7 @@ class Literal::Types::DescendantType
 		Module === value && !!(value < @type)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::DescendantType
 			Literal.subtype?(other.type, @type, context:)

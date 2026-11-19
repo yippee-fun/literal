@@ -176,7 +176,7 @@ class Literal::Draft < Literal::Struct
 				Literal.subtype?(drafted, @type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Literal::Draft::Type
 				Literal.subtype?(other.type, @type, context:)

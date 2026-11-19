@@ -18,7 +18,7 @@ class Literal::Types::BooleanType
 		true == value || false == value
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when true, false, Literal::Types::BooleanType
 			true

@@ -1,17 +1,40 @@
 # frozen_string_literal: true
 
 module Literal::Type
+	# A type that overrides >= or <= reaches these only through super, which
+	# answers with the rule from before they went through subtype?.
 	def >=(other, context: nil)
-		self == other
+		if literal_overrides?(:>=)
+			self == other
+		else
+			Literal.subtype?(other, self, context:)
+		end
 	end
 
 	def <=(other, context: nil)
-		case other
-		when Literal::Type
-			Literal.subtype?(self, other, context:)
+		if literal_overrides?(:<=) && !(Literal::Type === other)
+			literal_bounded_by?(other, context:)
 		else
-			bound = literal_upper_bound
-			!bound.nil? && Literal.subtype?(bound, other, context:)
+			Literal.subtype?(self, other, context:)
+		end
+	end
+
+	# This type's own rule for Literal.subtype?, which has already taken apart
+	# unions, nilables, tagged unions, results and deferred types on the left
+	# and checked equality. Answers with a type's own >= while it still
+	# overrides that rather than this.
+	def literal_supertype_of?(other, context:)
+		literal_overrides?(:>=) && self.>=(other, context:)
+	end
+
+	# This type's own rule for being a subtype of a module or range, which
+	# defaults to its upper bound being one. Answers with a type's own <=
+	# while it still overrides that rather than this.
+	def literal_subtype_of?(other, context:)
+		if literal_overrides?(:<=)
+			self.<=(other, context:)
+		else
+			literal_bounded_by?(other, context:)
 		end
 	end
 
@@ -27,6 +50,15 @@ module Literal::Type
 
 	def name
 		Literal.const_name(self)
+	end
+
+	private def literal_overrides?(operator)
+		!Literal::Type.equal?(Literal::METHOD.bind_call(self, operator).owner)
+	end
+
+	private def literal_bounded_by?(other, context:)
+		bound = literal_upper_bound
+		!bound.nil? && Literal.subtype?(bound, other, context:)
 	end
 
 	private def literal_hash(*components)

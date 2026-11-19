@@ -25,7 +25,7 @@ module Literal::Rails
 			end
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when RelationType
 				other_model = other.model_class
@@ -35,15 +35,13 @@ module Literal::Rails
 			end
 		end
 
-		def <=(other, context: nil)
+		def literal_subtype_of?(other, context:)
 			case other
 			when Module
 				# Every value we match is an ActiveRecord::Relation (collection
 				# proxies and association relations are subclasses), so we are a
 				# subtype of anything that class is — including Enumerable.
 				other >= ActiveRecord::Relation
-			when Literal::Type
-				other.>=(self, context:)
 			else
 				false
 			end

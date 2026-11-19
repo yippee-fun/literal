@@ -70,7 +70,7 @@ class Literal::Hash
 				Literal.subtype?(value.__value_type__, @value_type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				Literal.structural_subtype?(other.key_type, @key_type, context:) &&

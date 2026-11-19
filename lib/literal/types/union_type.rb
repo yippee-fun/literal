@@ -4,7 +4,6 @@ class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
 	include Literal::Types::DraftTransparent
-	include Literal::Types::Distributed
 
 	# Literal values, which a value resolves to first when it is one and last
 	# when it is merely == to one.
@@ -239,9 +238,9 @@ class Literal::Types::UnionType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
-		when Literal::Types::Distributed, Literal::Types::DeferredType
+		when Literal::Types::DeferredType
 			Literal.subtype?(other, self, context:)
 		when Literal::Types::FalsyType
 			covers?(nil, context:) && covers?(false, context:)

@@ -411,20 +411,20 @@ module Literal
 		else
 			case supertype
 			when Literal::Type
-				supertype.>=(subtype, context:) || bounded_subtype?(subtype, supertype, context)
+				supertype.literal_supertype_of?(subtype, context:) || bounded_subtype?(subtype, supertype, context)
 			when Module
 				case subtype
 				when Module
 					supertype >= subtype
 				when Literal::Type
-					subtype.<=(supertype, context:)
+					subtype.literal_subtype_of?(supertype, context:)
 				else
 					bounded_subtype?(subtype, supertype, context)
 				end
 			when Range
 				case subtype
 				when Literal::Type
-					subtype.<=(supertype, context:)
+					subtype.literal_subtype_of?(supertype, context:)
 				when Range
 					range_contains?(supertype, subtype)
 				else

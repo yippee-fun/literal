@@ -33,7 +33,7 @@ class Literal::Types::InterfaceType
 		true
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::InterfaceType
 			@methods.subset?(other.methods)

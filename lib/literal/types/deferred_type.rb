@@ -64,7 +64,7 @@ class Literal::Types::DeferredType
 		Literal.with_match_guard(self, other) { !!(materialize === other) }
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		Literal.subtype?(other, materialize, context:)
 	end
 

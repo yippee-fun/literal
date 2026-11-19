@@ -250,3 +250,78 @@ test "a union's own comparison operators distribute it" do
 	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
 	refute _TaggedUnion(string: String, any: matcher) <= Object
 end
+
+test "a custom type's own rule answers both subtype? and its comparisons" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_supertype_of?(other, context:) = Literal.subtype?(other, Integer, context:)
+		def literal_upper_bound = Integer
+	end.new
+
+	halves = _Union(_Integer(1..), _Integer(..0))
+
+	assert_subtype halves, integers
+	assert integers >= halves
+	assert halves <= integers
+	assert integers >= _Deferred { halves }
+	assert integers <= Numeric
+	refute integers >= _Union(Integer, String)
+	refute integers <= String
+end
+
+test "a custom type overriding >= and <= still answers subtype?" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def >=(other, context: nil) = Literal.subtype?(other, Integer, context:)
+		def <=(other, context: nil) = Literal.subtype?(Integer, other, context:)
+	end.new
+
+	assert_subtype _Integer(1..), integers
+	assert_subtype _Union(_Integer(1..), _Integer(..0)), integers
+	assert_subtype integers, Numeric
+	refute_subtype String, integers
+	refute_subtype integers, String
+end
+
+test "a custom BasicObject type overriding >= still answers subtype?" do
+	integers = Class.new(BasicObject) do
+		include Literal::Type
+
+		def ===(value) = ::Integer === value
+		def >=(other, context: nil) = ::Literal.subtype?(other, ::Integer, context:)
+	end.new
+
+	assert_subtype _Integer(1..), integers
+	refute_subtype String, integers
+end
+
+test "a custom type's >= and <= overrides can fall back to super" do
+	natural = _Integer(0..)
+
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_upper_bound = Integer
+
+		define_method(:>=) do |other, context: nil|
+			(natural == other) || super(other, context:)
+		end
+
+		def <=(other, context: nil)
+			(String == other) || super
+		end
+	end.new
+
+	assert_subtype _Integer(0..), integers
+	assert_subtype integers, integers
+	refute_subtype _Integer(..0), integers
+	assert_subtype integers, Numeric
+	assert integers <= Numeric
+	assert integers >= integers
+	refute integers >= _Integer(..0)
+end

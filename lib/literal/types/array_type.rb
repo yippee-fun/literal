@@ -43,12 +43,12 @@ class Literal::Types::ArrayType
 		Array === value && value.all?(@type)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::ArrayType
 			Literal.structural_subtype?(other.type, @type, context:)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
+			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		else
 			false
 		end

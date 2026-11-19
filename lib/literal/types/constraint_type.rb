@@ -62,7 +62,7 @@ class Literal::Types::ConstraintType
 		result
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::ConstraintType
 			other_object_constraints = other.object_constraints
@@ -93,7 +93,7 @@ class Literal::Types::ConstraintType
 		end
 	end
 
-	def <=(other, context: nil)
+	def literal_subtype_of?(other, context:)
 		@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) } ||
 			@property_constraints.any? { |property, type| property_entails_type?(property, type, other, context:) }
 	end
