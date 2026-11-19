@@ -34,10 +34,12 @@ class Literal::DateSerializer < Literal::Serializer
 		serialize_date(value)
 	end
 
+	# RFC 3339 dates are proleptic Gregorian. Loaded dates switch back to
+	# Ruby's default calendar, as Time#to_date does, keeping the same day.
 	def deserialize(raw, type:)
 		if String === raw && (match = Format.match(raw))
 			year, month, day = match.captures.map(&:to_i)
-			return Date.new(year, month, day) if Date.valid_date?(year, month, day)
+			return Date.new(year, month, day, Date::GREGORIAN).italy if Date.valid_date?(year, month, day, Date::GREGORIAN)
 		end
 
 		raise Literal::ArgumentError, "Value #{raw.inspect} is not an RFC 3339 date and cannot be deserialized as #{type.inspect}"
@@ -56,7 +58,7 @@ class Literal::DateSerializer < Literal::Serializer
 
 	# RFC 3339 dates have four-digit years.
 	private def serialize_date(value)
-		serialized = value.strftime("%Y-%m-%d")
+		serialized = value.gregorian.strftime("%Y-%m-%d")
 
 		unless Format.match?(serialized)
 			raise Literal::ArgumentError, "Value #{value.inspect} has a year outside 0000-9999, which an RFC 3339 date cannot hold"

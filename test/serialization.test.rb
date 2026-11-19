@@ -1469,6 +1469,26 @@ test "datetime serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "dates and date-times are written and read in the proleptic Gregorian calendar" do
+	[
+		[Date.new(1582, 10, 10, Date::GREGORIAN), Date, "1582-10-10"],
+		[Date.new(1500, 1, 1), Date, "1500-01-10"],
+		[DateTime.new(1582, 10, 10, 12, 0, 0, "+00:00", Date::GREGORIAN), DateTime, "1582-10-10T12:00:00+00:00"],
+		[DateTime.new(1500, 1, 1, 12, 0, 0, "+00:00"), DateTime, "1500-01-10T12:00:00+00:00"],
+		[Time.utc(1500, 1, 10, 12), Time, "1500-01-10T12:00:00Z"],
+	].each do |original, type, serialized|
+		assert_equal(Example.serialize(original, type:), serialized)
+
+		loaded = Example.deserialize(serialized, type:)
+		assert_equal(loaded, original)
+		assert_equal(loaded.start, Date::ITALY) unless Time === loaded
+	end
+
+	assert_equal(Example.deserialize("1500-01-10", type: Date), Time.utc(1500, 1, 10).to_date)
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29", type: Date) }
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29T00:00:00Z", type: DateTime) }
+end
+
 test "date deserialization accepts only RFC 3339 dates" do
 	["tomorrow 2024-01-05", "Jan 5 2024", "2024-01-05T23:59:59-10:00", "20240105", "2024-02-30", "5", 5].each do |raw|
 		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: Date) }
