@@ -324,6 +324,22 @@ test "types operator and predicate methods" do
 	assert_equal SignedShapes.new.empty?, true
 end
 
+test "types a method whose name def cannot spell, without evaluating it" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		define_method(:"kebab-case") { |text| text }
+
+		sig(String) >> String
+		define_method(:"run(text); end; raise 'injected'; def other") { |text| text }
+	end
+
+	assert_equal klass.new.public_send(:"kebab-case", "a"), "a"
+	assert_raises(Literal::TypeError) { klass.new.public_send(:"kebab-case", 1) }
+	assert_equal klass.new.public_send(:"run(text); end; raise 'injected'; def other", "a"), "a"
+end
+
 test "refuses to load a sig on a method with a required argument after an optional one" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new do

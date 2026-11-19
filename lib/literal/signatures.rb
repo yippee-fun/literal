@@ -51,6 +51,11 @@ module Literal::Signatures
 	POSITIONAL = [:req, :opt].freeze
 	KEYWORD = [:keyreq, :key].freeze
 
+	# The method names `def` can spell, so the checker can be compiled under its
+	# own name; it is compiled under a stand-in for any other.
+	IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*[?!=]?\z/
+	OPERATORS = [:[], :[]=, :+, :-, :*, :/, :%, :**, :==, :!=, :===, :=~, :!~, :<, :>, :<=, :>=, :<=>, :<<, :>>, :&, :|, :^, :~, :!, :+@, :-@, :`].freeze
+
 	def sig(*positional, **keywords)
 		if (pending = @__literal_signature__)
 			@__literal_signature__ = nil
@@ -102,11 +107,12 @@ module Literal::Signatures
 		checker = Module.new
 		keywords = signature.keywords.values_at(*__literal_keywords__(parameters))
 		checker.const_set(:TYPES, [*signature.positional, *keywords, signature.returns].freeze)
-		code = __literal_checker_code__(name, unsigned, parameters, singleton ? "#{self}.#{name}" : "##{name}", singleton)
+		compiled = (IDENTIFIER.match?(name) || OPERATORS.include?(name)) ? name : :__literal_checker__
+		code = __literal_checker_code__(compiled, unsigned, parameters, singleton ? "#{self}.#{name}" : "##{name}", singleton)
 		# An explicit path, so every engine attributes these frames to Literal.
 		checker.module_eval(code, __FILE__, __LINE__)
 
-		owner.define_method(name, checker.instance_method(name))
+		owner.define_method(name, checker.instance_method(compiled))
 		owner.__send__(visibility, name)
 	end
 
