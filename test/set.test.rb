@@ -364,6 +364,16 @@ test "#freeze freezes the underlying storage" do
 	assert_raises(FrozenError) { set.clear }
 end
 
+test "mutations of a frozen set raise before running blocks or finding nothing to do" do
+	set = Literal::Set(Integer).new(1).freeze
+
+	assert_raises(FrozenError) { set.merge }
+
+	ran = false
+	assert_raises(FrozenError) { set.map! { ran = true } }
+	refute ran
+end
+
 test "#clone of a frozen set is frozen" do
 	set = Literal::Set(Integer).new(1).freeze
 	copy = set.clone

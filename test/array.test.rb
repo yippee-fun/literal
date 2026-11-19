@@ -1108,6 +1108,17 @@ test "#freeze freezes the underlying storage" do
 	assert_raises(FrozenError) { array.clear }
 end
 
+test "mutations of a frozen array raise before running blocks or finding nothing to do" do
+	empty = Literal::Array(Integer).new.freeze
+
+	assert_raises(FrozenError) { empty.pop }
+	assert_raises(FrozenError) { empty.shift }
+
+	ran = false
+	assert_raises(FrozenError) { Literal::Array(Integer).new(1).freeze.map! { ran = true } }
+	refute ran
+end
+
 # Narrowing
 
 test "#narrow returns a detached array with the narrower type" do

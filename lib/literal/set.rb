@@ -218,6 +218,7 @@ class Literal::Set
 
 	def map!(&block)
 		raise ArgumentError.new("#map! requires a block.") unless block
+		__check_frozen__
 
 		transform_type = Literal::Transforms.dig(@__type__, block)
 		mapped = ::Set.new
@@ -237,12 +238,9 @@ class Literal::Set
 	end
 
 	def merge(*others)
+		__check_frozen__
 		values = others.map { |other| __compatible_value__(other, "#merge") }
-
-		values.each do |value|
-			@__value__.merge(value)
-		end
-
+		@__value__.merge(*values)
 		self
 	end
 
@@ -365,6 +363,10 @@ class Literal::Set
 			type: @__type__,
 			collection_type: @__collection_type__,
 		)
+	end
+
+	private def __check_frozen__
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
 	end
 
 	# Unwraps the other operand for operations where the result can only

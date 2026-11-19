@@ -438,6 +438,15 @@ test "#freeze freezes the underlying storage" do
 	assert_raises(FrozenError) { hash.clear }
 end
 
+test "mutations of a frozen hash raise before running blocks" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1 }).freeze
+
+	ran = false
+	assert_raises(FrozenError) { hash.merge!({ a: 2 }) { ran = true } }
+	refute ran
+	assert_raises(FrozenError) { hash.merge! }
+end
+
 test "#clone of a frozen hash is frozen" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1 }).freeze
 	copy = hash.clone

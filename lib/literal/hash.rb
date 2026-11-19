@@ -274,6 +274,7 @@ class Literal::Hash
 	end
 
 	def merge!(*others, &block)
+		__check_frozen__
 		values = others.map { |other| __compatible_value__(other, "#merge!") }
 
 		if block
@@ -426,6 +427,10 @@ class Literal::Hash
 			value_type: @__value_type__,
 			collection_type: @__collection_type__,
 		)
+	end
+
+	private def __check_frozen__
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
 	end
 
 	# Unwraps the other operand for operations where its entries end up in our

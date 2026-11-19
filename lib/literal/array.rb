@@ -386,6 +386,7 @@ class Literal::Array
 
 	def map!(&block)
 		raise ArgumentError.new("#map! requires a block.") unless block
+		__check_frozen__
 
 		transform_type = Literal::Transforms.dig(@__type__, block)
 		mapped = @__value__.map(&block)
@@ -491,6 +492,8 @@ class Literal::Array
 
 	def pop(n = nil)
 		return __with__(@__value__.pop(n)) if n
+
+		__check_frozen__
 		return Literal::Undefined if @__value__.empty?
 
 		@__value__.pop
@@ -592,6 +595,8 @@ class Literal::Array
 
 	def shift(n = nil)
 		return __with__(@__value__.shift(n)) if n
+
+		__check_frozen__
 		return Literal::Undefined if @__value__.empty?
 
 		@__value__.shift
@@ -830,6 +835,10 @@ class Literal::Array
 		else
 			raise ArgumentError.new("Cannot perform `#{method}` between a Literal::Array and #{other.class.inspect}.")
 		end
+	end
+
+	private def __check_frozen__
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
 	end
 
 	private def __splice_elements__(value)
