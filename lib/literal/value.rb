@@ -47,11 +47,16 @@ class Literal::Value
 	alias_method :==, :===
 
 	def eql?(other)
-		self.class == other.class && value.eql?(other.value)
+		return false unless self.class == Literal::CLASS.bind_call(other)
+
+		mine, theirs = value, other.value
+		Literal::EQUAL.bind_call(mine, theirs) || (Literal.implements?(mine, :eql?) && mine.__send__(:eql?, theirs))
 	end
 
 	def hash
-		[self.class, value].hash
+		mine = value
+		value_hash = Literal.implements?(mine, :hash) ? mine.__send__(:hash) : Literal::HASH.bind_call(mine)
+		[self.class, value_hash].hash
 	end
 
 	def as_pack

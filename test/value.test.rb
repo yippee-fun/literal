@@ -58,6 +58,17 @@ test "equal values are eql? and hash alike" do
 	refute number.new(1).eql?(number.new(1.0))
 end
 
+test "values holding a BasicObject compare and hash by identity" do
+	object = BasicObject.new
+	value_class = Literal::Value(BasicObject)
+
+	assert value_class.new(object).eql?(value_class.new(object))
+	refute value_class.new(object).eql?(value_class.new(BasicObject.new))
+	refute value_class.new(object).eql?(object)
+	assert_equal value_class.new(object).hash, value_class.new(object).hash
+	assert_equal({ value_class.new(object) => true }[value_class.new(object)], true)
+end
+
 test "eql? and hash agree when a subclass overrides the reader" do
 	shouting = Class.new(Literal::Value(String)) do
 		def value = super.upcase
