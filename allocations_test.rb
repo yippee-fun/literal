@@ -89,6 +89,8 @@ assert_allocations(_Tuple(String, Integer), ["a", 1]) => 0
 
 assert_allocations(_TaggedUnion(string: String, integer: Integer), 1) => 0
 assert_allocations(_TaggedUnion(string: String, integer: Integer), :symbol) => 0
+assert_allocations(_TaggedUnion(one: 1, string: String), 1.0) => 0
+assert_allocations(_TaggedUnion(one: 1, string: String), :symbol) => 0
 
 assert_allocations(_Union(String, "Hello", "World"), "World") => 0
 assert_allocations(_Union(String, Integer, nil), 1) => 0

@@ -25,6 +25,7 @@ class Literal::Types::TaggedUnionType
 			Literal::Types::UnionType::PRIMITIVES.any? { |primitive| primitive === type }
 		end
 		@primitive_pairs = primitive_pairs.uniq { |(_tag, type)| type }.to_h { |pair| [pair[1], pair] }.freeze
+		@primitive_pair_list = @primitive_pairs.values.freeze
 		@type_pairs = type_pairs.freeze
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(flattened.each_value)
 		@hash = literal_hash(Literal::Types::TaggedUnionType, @pairs)
@@ -67,7 +68,7 @@ class Literal::Types::TaggedUnionType
 	private def member_match?(value)
 		!primitive_pair(value).nil? ||
 			@type_pairs.any? { |(_tag, type)| type === value } ||
-			@primitive_pairs.each_value.any? { |(_tag, primitive)| primitive == value }
+			!equal_primitive_pair(value).nil?
 	end
 
 	def [](tag)
@@ -114,12 +115,25 @@ class Literal::Types::TaggedUnionType
 			i += 1
 		end
 
-		@primitive_pairs.each_value.find { |(_tag, primitive)| primitive == value }
+		equal_primitive_pair(value)
 	end
 
 	private def primitive_pair(value)
 		@primitive_pairs[value]
 	rescue
+		nil
+	end
+
+	private def equal_primitive_pair(value)
+		pairs = @primitive_pair_list
+
+		i, len = 0, pairs.size
+		while i < len
+			pair = pairs[i]
+			return pair if pair[1] == value
+			i += 1
+		end
+
 		nil
 	end
 
