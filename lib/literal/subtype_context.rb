@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Literal::SubtypeContext
-	Frame = Data.define(:structural_depth, :index, :outer_assumption_floor)
+	Frame = Struct.new(:structural_depth, :index, :outer_assumption_floor)
 
 	def initialize
 		@memo = {}
