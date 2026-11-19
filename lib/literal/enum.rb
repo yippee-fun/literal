@@ -261,9 +261,14 @@ class Literal::Enum
 	end
 
 	def clone(freeze: nil)
-		raise ArgumentError.new("can't unfreeze #{self.class.inspect}") if freeze == false
-
-		self
+		case freeze
+		in true | nil
+			self
+		in false
+			raise ArgumentError.new("can't unfreeze #{self.class.inspect}")
+		else
+			raise ArgumentError.new("unexpected value for freeze: #{Literal::CLASS.bind_call(freeze)}")
+		end
 	end
 
 	def _dump(level)
