@@ -3123,6 +3123,23 @@ test "integer const discriminants" do
 	assert_equal(Example.deserialize(v2_serialized, type:), { version: 2, payload: "b" })
 end
 
+test "numeric const discriminants compare as JSON numbers" do
+	# JSON Schema treats 1 and 1.0 as the same value.
+	refute Example.serializable_type?(_Union(_Map(version: 1, payload: String), _Map(version: 1.0, payload: Integer)))
+
+	type = _Union(_Map(version: 1, payload: String), _Map(version: 2, payload: String))
+
+	assert_equal(Example.deserialize({ "version" => 2.0, "payload" => "b" }, type:), { version: 2, payload: "b" })
+end
+
+test "const discriminants compare numbers as JSON numbers inside arrays and objects" do
+	integers = Class.new(Literal::Enum(_JSONData)) { const_set(:One, new([1, { "a" => 1 }])) }
+	floats = Class.new(Literal::Enum(_JSONData)) { const_set(:One, new([1.0, { "a" => 1.0 }])) }
+
+	assert_equal Example.const_domain(integers::One), Example.const_domain(floats::One)
+	refute Example.serializable_type?(_Union(_Map(kind: integers::One, payload: String), _Map(kind: floats::One, payload: Integer)))
+end
+
 test "consts with disjoint values can share a JSON type in a union" do
 	[
 		[_Nilable(_Union(:draft, :published)), [:draft, :published, nil]],

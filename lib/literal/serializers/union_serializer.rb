@@ -250,7 +250,7 @@ class Literal::UnionSerializer < Literal::Serializer
 		if (shape = @context.object_shape(member))
 			shape.accepts?(raw_value)
 		else
-			@context.const_domain(member).include?(raw_value)
+			@context.const_domain(member).include?(Literal::Serializer.json_equality_key(raw_value))
 		end
 	end
 

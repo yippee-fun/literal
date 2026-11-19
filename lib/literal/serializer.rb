@@ -133,6 +133,22 @@ class Literal::Serializer
 		raw
 	end
 
+	# A key under which raw JSON values compare the way JSON Schema compares
+	# them: numbers by value at any depth, so 1 and 1.0 are the same value, and
+	# so are [1] and [1.0].
+	def self.json_equality_key(value)
+		case value
+		in Float if value.finite? && value == value.floor
+			value.to_i
+		in Array
+			value.map { |item| json_equality_key(item) }
+		in Hash
+			value.to_h { |key, item| [key, json_equality_key(item)] }
+		else
+			value
+		end
+	end
+
 	# Sorts the keys of every object within serialized JSON data, at every
 	# depth. Arrays keep their order.
 	def self.sort_keys(value)

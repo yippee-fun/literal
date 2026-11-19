@@ -225,14 +225,15 @@ class Literal::SerializationContext
 	# when the domain is unbounded or unknown. Constants have singleton domains;
 	# a union of constants has the union of theirs. Domains are compared as
 	# serialized values, so a Symbol and a String constant that write the same
-	# JSON share a domain.
+	# JSON share a domain, keyed by Literal::Serializer.json_equality_key, so 1
+	# and 1.0 do too.
 	def const_domain(type)
 		case type
 		when Literal::Types::UnionType
 			domains = type.each.map { |member| const_domain(member) }
 			domains.reduce(Set[], :|) if domains.all?
 		when String, Symbol, Integer, Float, true, false, Literal::Enum
-			Set[serialize(type, type:)]
+			Set[Literal::Serializer.json_equality_key(serialize(type, type:))]
 		end
 	end
 
