@@ -25,8 +25,23 @@ class Literal::Types::EnumerableType
 		Enumerable
 	end
 
+	# An enumerable that reports no finite size may never finish iterating, or
+	# may be consumed by it, so it can't be checked.
 	def ===(value)
-		Enumerable === value && value.all?(@type)
+		return false unless Enumerable === value
+
+		if unknown_size?(value)
+			raise Literal::ArgumentError.new("Can't check the elements of an enumerable of unknown or infinite size: #{value.inspect}")
+		end
+
+		value.all?(@type)
+	end
+
+	# A size that requires arguments isn't a count, so it says nothing.
+	private def unknown_size?(value)
+		value.respond_to?(:size) && !(Integer === value.size)
+	rescue ArgumentError
+		false
 	end
 
 	def >=(other, context: nil)
