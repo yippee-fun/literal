@@ -268,11 +268,6 @@ module Literal::Properties
 			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it is frozen.")
 		end
 
-		# An instance made before would be missing it.
-		if @__literal_used__
-			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it already has instances.")
-		end
-
 		queue = subclasses
 		until queue.empty?
 			subclass = queue.shift
@@ -465,8 +460,7 @@ module Literal::Properties
 		private_new = singleton_class.private_method_defined?(:new)
 
 		watch.define_method(:new) do |*args, **kwargs, &block|
-			instance = super(*args, **kwargs, &block)
-			__literal_used__
+			instance = __literal_constructing__ { super(*args, **kwargs, &block) }
 
 			SCHEMA_METHODS_LOCK.synchronize do
 				if watch.method_defined?(:new, false) || watch.private_method_defined?(:new, false)
@@ -481,31 +475,90 @@ module Literal::Properties
 		singleton_class.include(watch)
 	end
 
-	# The shape has an instance, so its properties are fixed: one declared now
-	# would be missing from it. So are its ancestors', which it holds too.
+	# A shape's properties are fixed while an instance is under construction,
+	# so none of its slots can be missing, and for good once it has one. So are
+	# its ancestors', which it holds too. A failed construction reopens them
+	# unless another is under way or has finished.
+	private def __literal_constructing__
+		return yield if true == @__literal_used__
+
+		__literal_count_constructions__(1)
+		finished = false
+
+		begin
+			instance = yield
+			finished = true
+		ensure
+			__literal_count_constructions__(-1) unless finished
+		end
+
+		__literal_used__
+		instance
+	end
+
 	private def __literal_used__
+		return if true == @__literal_used__
+
+		__literal_each_open_shape__ { |shape| shape.instance_variable_set(:@__literal_used__, true) }
+	end
+
+	private def __literal_count_constructions__(change)
+		__literal_each_open_shape__ do |shape|
+			count = (shape.instance_variable_get(:@__literal_used__) || 0) + change
+			shape.instance_variable_set(:@__literal_used__, count.zero? ? false : count)
+		end
+	end
+
+	# Each shape up from this one until one with an instance, under its own lock.
+	private def __literal_each_open_shape__
 		shape = self
 
-		while Literal::Properties === shape && !shape.instance_variable_get(:@__literal_used__)
-			shape.instance_variable_set(:@__literal_used__, true) unless shape.frozen?
+		while Literal::Properties === shape
+			closed = shape.__send__(:__literal_lock__).synchronize do
+				next true if true == shape.instance_variable_get(:@__literal_used__)
+
+				yield shape unless shape.frozen?
+				false
+			end
+
+			break if closed
+
 			shape = shape.superclass
 		end
 	end
 
+	# Guards whether the shape has instances. Its own, not one for every shape,
+	# so code a declaration runs, like a type's ===, can wait on another shape's
+	# construction. A frozen shape can't change.
+	private def __literal_lock__
+		@__literal_lock__ || SCHEMA_METHODS_LOCK.synchronize do
+			frozen? ? SCHEMA_METHODS_LOCK : (@__literal_lock__ ||= Monitor.new)
+		end
+	end
+
+	# Under the shape's lock, which a construction takes to close it, so the
+	# property either comes before every instance or is refused.
 	private def __literal_add_property__(property)
-		schema = literal_properties
+		__literal_lock__.synchronize do
+			# An instance made or under way would be missing it.
+			if @__literal_used__
+				raise Literal::ArgumentError.new("Cannot define #{property.name.inspect} on #{self}, because it already has instances.")
+			end
 
-		# A batch is judged whole when it commits: a declaration part way through
-		# it may pass through an order Ruby can't compile, or name a deferred type
-		# whose constant is still to come.
-		schema.check_signature(schema.sorted_with(property)) unless __literal_open_batches__ > 0
+			schema = literal_properties
 
-		schema << property
-		# After the change, so an entry labelled with the new generation was
-		# computed from it.
-		Literal::Properties.changed(self)
-		__define_literal_methods__(property)
-		include(__literal_extension__)
+			# A batch is judged whole when it commits: a declaration part way through
+			# it may pass through an order Ruby can't compile, or name a deferred type
+			# whose constant is still to come.
+			schema.check_signature(schema.sorted_with(property)) unless __literal_open_batches__ > 0
+
+			schema << property
+			# After the change, so an entry labelled with the new generation was
+			# computed from it.
+			Literal::Properties.changed(self)
+			__define_literal_methods__(property)
+			include(__literal_extension__)
+		end
 	end
 
 	private def __define_literal_methods__(new_property)

@@ -41,10 +41,11 @@ class Literal::DataStructure
 	end
 
 	def self.from_props(props)
-		instance = __literal_from_props__(props)
-		Literal::SEND.bind_call(instance, :__literal_run_checks__)
-		__literal_used__
-		instance
+		__literal_constructing__ do
+			instance = __literal_from_props__(props)
+			Literal::SEND.bind_call(instance, :__literal_run_checks__)
+			instance
+		end
 	end
 
 	# from_props without the shape's checks, for a caller that has already run
@@ -122,26 +123,27 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_load(payload)
-		_version, attributes, was_frozen, frozen_values = payload
+		Literal::CLASS.bind_call(self).__send__(:__literal_constructing__) do
+			_version, attributes, was_frozen, frozen_values = payload
 
-		# Marshal.load rebuilds contained objects unfrozen, so restore the
-		# frozen state each value had when it was dumped — before the type
-		# check, which may require it. Version 1 payloads carry no list.
-		frozen_values&.each do |name|
-			Literal::Freezing.shallow_frozen(attributes[name]) if attributes.key?(name)
+			# Marshal.load rebuilds contained objects unfrozen, so restore the
+			# frozen state each value had when it was dumped — before the type
+			# check, which may require it. Version 1 payloads carry no list.
+			frozen_values&.each do |name|
+				Literal::Freezing.shallow_frozen(attributes[name]) if attributes.key?(name)
+			end
+
+			# Seals don't apply here: they belong to construction, and a loaded
+			# object was constructed — and sealed — before it was dumped. The
+			# frozen state recorded at dump is what gets restored.
+			__literal_assign_props__(attributes, "#marshal_load", seal: false)
+
+			Literal::FREEZE.bind_call(self) if was_frozen
+
+			# Restoring a dumped object is still construction: an object that breaks
+			# the shape's checks must not come back to life either.
+			__literal_run_checks__
 		end
-
-		# Seals don't apply here: they belong to construction, and a loaded
-		# object was constructed — and sealed — before it was dumped. The
-		# frozen state recorded at dump is what gets restored.
-		__literal_assign_props__(attributes, "#marshal_load", seal: false)
-
-		Literal::FREEZE.bind_call(self) if was_frozen
-
-		# Restoring a dumped object is still construction: an object that breaks
-		# the shape's checks must not come back to life either.
-		__literal_run_checks__
-		Literal::CLASS.bind_call(self).__send__(:__literal_used__)
 	end
 
 	# Assign final property values from a Hash keyed by Symbol property name,

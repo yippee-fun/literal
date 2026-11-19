@@ -1152,6 +1152,15 @@ test "a failed construction leaves the shape open" do
 
 	klass.prop :age, Integer, default: 0
 	assert_equal klass.new(name: "Joel").to_h, { name: "Joel", age: 0 }
+
+	abandoned = Class.new(Literal::Struct) do
+		prop :name, String
+		define_method(:after_initialize) { throw :abandon if name.empty? }
+	end
+
+	catch(:abandon) { abandoned.new(name: "") }
+	abandoned.prop :age, Integer, default: 0
+	assert_equal abandoned.new(name: "Joel").to_h, { name: "Joel", age: 0 }
 end
 
 test "from_props and from_pack failing after assignment leave the shape open" do
@@ -1167,6 +1176,47 @@ test "from_props and from_pack failing after assignment leave the shape open" do
 	klass.prop :age, Integer, default: 0
 	assert_equal klass.from_props(name: "Joel").to_h, { name: "Joel", age: 0 }
 	assert_raises(Literal::ArgumentError) { klass.prop :email, String }
+end
+
+test "props are refused while the first instance is under construction" do
+	late_prop = -> (shape) do
+		shape.prop :age, Integer
+		:added
+	rescue Literal::ArgumentError
+		:refused
+	end
+
+	initialized = Class.new(Literal::Struct) do
+		prop :name, String
+		define_method(:after_initialize) { @age_prop = late_prop.(self.class) }
+	end
+
+	assert_equal initialized.new(name: "Joel").instance_variable_get(:@age_prop), :refused
+
+	results = []
+	checked = Class.new(Literal::Data) do
+		prop :name, String
+		check(:name, "must be filled") { |name:| results << late_prop.(self) }
+	end
+
+	checked.from_props(name: "Joel")
+	checked.from_pack(checked.new(name: "Joel").as_pack)
+	assert_equal results, [:refused, :refused, :refused]
+
+	started, finish = Queue.new, Queue.new
+	waiting = Class.new(Literal::Struct) do
+		prop :name, String
+		define_method(:after_initialize) do
+			started << true
+			finish.pop
+		end
+	end
+
+	constructing = Thread.new { waiting.new(name: "Joel") }
+	started.pop
+	assert_equal late_prop.(waiting), :refused
+	finish << true
+	constructing.join
 end
 
 test "watching for the first instance keeps new private where the shape made it so" do

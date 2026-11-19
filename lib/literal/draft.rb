@@ -222,9 +222,8 @@ class Literal::Draft < Literal::Struct
 		# shape's checks.
 		private def __finalize_unchecked__
 			type = Literal::CLASS.bind_call(self).__type__
-			instance = type.__send__(:__literal_from_props__, __finalize_attributes__({}), seal: false)
-			type.__send__(:__literal_used__)
-			instance
+			attributes = __finalize_attributes__({})
+			type.__send__(:__literal_constructing__) { type.__send__(:__literal_from_props__, attributes, seal: false) }
 		end
 
 		private def __finalize_attributes__(props, &block)
