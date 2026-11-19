@@ -170,21 +170,11 @@ class Literal::Flags
 	end
 
 	def |(other)
-		case other
-		when Literal::Flags
-			self.class.new(@value | other.value)
-		when Integer
-			self.class.new(@value | other)
-		end
+		self.class.new(@value | bits_of(other))
 	end
 
 	def &(other)
-		case other
-		when Literal::Flags
-			self.class.new(@value & other.value)
-		when Integer
-			self.class.new(@value & other)
-		end
+		self.class.new(@value & bits_of(other))
 	end
 
 	def ==(other)
@@ -222,6 +212,17 @@ class Literal::Flags
 			end
 		else
 			to_h
+		end
+	end
+
+	private def bits_of(other)
+		case other
+		in Integer
+			other
+		in Literal::Flags if other.class == self.class
+			other.value
+		else
+			raise Literal::ArgumentError.new("Can't combine #{self.class.inspect} with #{other.inspect}.")
 		end
 	end
 

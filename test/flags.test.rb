@@ -137,3 +137,26 @@ test "flags with the same value are equal" do
 	refute_equal Example.new(bold: true), 1
 	refute Example.new(bold: true) == BasicObject.new
 end
+
+test "| and & combine with flags of the same class or an integer" do
+	bold = Example.new(bold: true)
+	italic = Example.new(italic: true)
+
+	assert_equal bold | italic, Example.new(bold: true, italic: true)
+	assert_equal bold | 2, Example.new(bold: true, italic: true)
+	assert_equal (bold | italic) & bold, bold
+	assert_equal (bold | italic) & 2, italic
+end
+
+test "| and & refuse anything else" do
+	bold = Example.new(bold: true)
+
+	assert_raises(Literal::ArgumentError) { bold | nil }
+	assert_raises(Literal::ArgumentError) { bold & nil }
+	assert_raises(Literal::ArgumentError) { bold | "1" }
+	assert_raises(Literal::ArgumentError) { bold | OtherExample.new(bold: true) }
+
+	child = Class.new(Example) { define(admin: 3) }
+	assert_raises(Literal::ArgumentError) { bold | child.new(admin: true) }
+	assert_raises(Literal::ArgumentError) { bold & child.new(admin: true) }
+end
