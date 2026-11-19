@@ -251,11 +251,9 @@ class Literal::Serializer
 		property_constraints.each do |property, constraint|
 			case [property, constraint]
 			in [:length | :size, Range]
-				schema[max_key] = range_end(constraint) if constraint.end
-				schema[min_key] = constraint.begin if constraint.begin
+				apply_length_range(schema, constraint, min_key:, max_key:)
 			in [:length | :size, Integer]
-				schema[max_key] = constraint
-				schema[min_key] = constraint
+				apply_length_range(schema, constraint..constraint, min_key:, max_key:)
 			else
 				# Constraints JSON Schema cannot express are ignored. The schema is
 				# looser than the type, but still accepts everything serialization
@@ -264,8 +262,28 @@ class Literal::Serializer
 		end
 	end
 
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
+	# Lengths are whole and never negative, so bounds round inward, a minimum
+	# below zero says nothing, and a maximum below zero admits nothing.
+	private def apply_length_range(schema, range, min_key:, max_key:)
+		minimum = finite_bound(range.begin)
+		maximum = finite_bound(range.end)
+
+		schema[min_key] = [minimum.ceil, 0].max if minimum
+
+		if maximum
+			maximum = range.exclude_end? ? maximum.ceil - 1 : maximum.floor
+
+			if maximum < 0
+				schema["not"] = {}
+			else
+				schema[max_key] = maximum
+			end
+		end
+	end
+
+	# JSON has no infinite numbers, and an infinite bound is no bound at all.
+	private def finite_bound(bound)
+		bound if Numeric === bound && bound.finite?
 	end
 
 	private def apply_range_constraints(schema, ranges)
@@ -288,14 +306,17 @@ class Literal::Serializer
 		exclusive_maximum = false
 
 		ranges.each do |range|
-			minimum = range.begin if !range.begin.nil? && (minimum.nil? || range.begin > minimum)
+			range_begin = finite_bound(range.begin)
+			range_end = finite_bound(range.end)
 
-			next if range.end.nil?
+			minimum = range_begin if !range_begin.nil? && (minimum.nil? || range_begin > minimum)
 
-			if maximum.nil? || range.end < maximum
-				maximum = range.end
+			next if range_end.nil?
+
+			if maximum.nil? || range_end < maximum
+				maximum = range_end
 				exclusive_maximum = range.exclude_end?
-			elsif range.end == maximum && range.exclude_end?
+			elsif range_end == maximum && range.exclude_end?
 				exclusive_maximum = true
 			end
 		end

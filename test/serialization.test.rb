@@ -534,6 +534,35 @@ test "string length range serialization" do
 	)
 end
 
+test "length ranges always produce valid length keywords" do
+	assert_equal(
+		Example.json_schema(_String(length: 0...0)),
+		{ "type" => "string", "minLength" => 0, "not" => {} },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(length: -3..2.5)),
+		{ "type" => "string", "minLength" => 0, "maxLength" => 2 },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(length: 1..Float::INFINITY)),
+		{ "type" => "string", "minLength" => 1 },
+	)
+end
+
+test "infinite range bounds are omitted from schemas" do
+	assert_equal(
+		JSON.parse(JSON.generate(Example.json_schema(_Integer(0..Float::INFINITY)))),
+		{ "type" => "integer", "minimum" => 0 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Float(-Float::INFINITY...3.5, finite?: _Truthy)),
+		{ "type" => "number", "exclusiveMaximum" => 3.5 },
+	)
+end
+
 if defined?(JsRegex)
 	test "string regex pattern serialization" do
 		assert_equal(
