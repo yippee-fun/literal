@@ -406,7 +406,14 @@ module Literal::Properties
 	end
 
 	private def __literal_add_property__(property)
-		literal_properties << property
+		schema = literal_properties
+
+		# A batch is judged whole when it commits: a declaration part way through
+		# it may pass through an order Ruby can't compile, or name a deferred type
+		# whose constant is still to come.
+		schema.check_signature(schema.sorted_with(property)) unless __literal_open_batches__ > 0
+
+		schema << property
 		# After the change, so an entry labelled with the new generation was
 		# computed from it.
 		Literal::Properties.changed(self)

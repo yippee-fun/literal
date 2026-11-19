@@ -27,14 +27,23 @@ class Literal::Properties::Schema
 	def <<(value)
 		@mutex.synchronize do
 			@properties_index[value.name] = value
-			# ruby's sort is unstable, this trick makes it stable
-			n = 0
 			# Replacing (not mutating) the array is a contract: `snapshot`
 			# relies on its identity changing with every schema change.
-			@sorted_properties = @properties_index.values.sort_by! { |it| n += 1; [it, n] }
+			@sorted_properties = sort(@properties_index)
 		end
 
 		self
+	end
+
+	# The sorted properties this schema would have with the property added.
+	def sorted_with(property)
+		sort(@properties_index.merge(property.name => property))
+	end
+
+	private def sort(properties_index)
+		# ruby's sort is unstable, this trick makes it stable
+		n = 0
+		properties_index.values.sort_by! { |it| n += 1; [it, n] }
 	end
 
 	def dup
@@ -57,6 +66,8 @@ class Literal::Properties::Schema
 	end
 
 	def generate_initializer(buffer = +"", checked: false)
+		check_signature
+
 		buffer << "alias initialize initialize\n" \
 			"def initialize("
 		generate_initializer_params(buffer)
@@ -129,6 +140,46 @@ class Literal::Properties::Schema
 		buffer << "  true" if n.zero?
 		buffer << "\nend\n"
 		buffer << "alias eql? ==\n"
+	end
+
+	# Refuse what Ruby can't compile as the initializer's parameters: a second
+	# splat, double splat or block, and optional positional parameters that
+	# aren't one contiguous run — or aren't last before a splat.
+	def check_signature(sorted_properties = @sorted_properties)
+		variadic = {}
+		first_optional = nil
+		required_after_optional = nil
+
+		sorted_properties.each do |property|
+			case property.kind
+			in :* | :** | :&
+				if (other = variadic[property.kind])
+					raise Literal::ArgumentError.new(
+						"#{property.name.inspect} can't be a #{property.kind.inspect} property, because #{other.name.inspect} already is.",
+					)
+				end
+
+				variadic[property.kind] = property
+			in :positional if property.optional?
+				if required_after_optional
+					raise Literal::ArgumentError.new(
+						"The optional positional property #{property.name.inspect} can't follow the required #{required_after_optional.name.inspect}, because optional positional properties must be contiguous.",
+					)
+				end
+
+				first_optional ||= property
+			in :positional
+				required_after_optional ||= property if first_optional
+			in :keyword
+				nil
+			end
+		end
+
+		if required_after_optional && variadic[:*]
+			raise Literal::ArgumentError.new(
+				"The required positional property #{required_after_optional.name.inspect} can't follow the optional #{first_optional.name.inspect}, because #{variadic[:*].name.inspect} is a splat.",
+			)
+		end
 	end
 
 	private def generate_initializer_params(buffer = +"")

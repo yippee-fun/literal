@@ -845,3 +845,73 @@ test "slice works on a class that extends Literal::Properties directly" do
 	assert_equal sliced.new(a: "x").greeting, "hello"
 	assert_equal shape.slice(:a, :b).superclass, shape
 end
+
+test "prop refuses a second splat, double splat or block" do
+	[:*, :**, :&].each do |kind|
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(Literal::Data) do
+				prop :a, _Any, kind
+				prop :b, _Any, kind
+			end
+		end
+
+		assert error.message.include?(":b can't be a #{kind.inspect} property")
+	end
+end
+
+test "prop refuses optional positional properties Ruby can't place" do
+	klass = Class.new(Literal::Data) do
+		prop :a, String, :positional, default: "a"
+		prop :b, String, :positional
+	end
+
+	assert_raises(Literal::ArgumentError) { klass.prop :c, String, :positional, default: "c" }
+	assert_raises(Literal::ArgumentError) { klass.prop :c, Array, :* }
+	assert_equal klass.literal_properties.map(&:name), [:a, :b]
+	assert_equal klass.new("b").to_h, { a: "a", b: "b" }
+end
+
+test "declaring an optional positional prop doesn't materialize its deferred type" do
+	klass = Class.new(Literal::Data) do
+		prop? :a, _Deferred { PositionalForwardReference }, :positional
+		prop :b, _Optional(_Deferred { PositionalForwardReference }), :positional
+	end
+
+	assert_equal klass.literal_properties.map(&:optional?), [true, true]
+end
+
+test "a batch's signature is judged when it commits" do
+	parent = Class.new(Literal::Data) do
+		prop :a, _Nilable(String), :positional
+		prop :b, _Nilable(String), :positional
+		prop :c, _Array(String), :*
+	end
+
+	child = Class.new(parent) do
+		props do
+			prop :b, String, :positional
+			prop :a, String, :positional
+		end
+	end
+
+	assert_equal child.new("a", "b", "c").to_h, { a: "a", b: "b", c: ["c"] }
+
+	forward = Class.new(Literal::Data) do
+		props do
+			prop :a, _Deferred { const_get(:Later) }, :positional
+			const_set(:Later, String)
+		end
+	end
+
+	assert_equal forward.new("a").a, "a"
+
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Data) do
+			props do
+				prop :a, String, :positional, default: "a"
+				prop :b, String, :positional
+				prop :c, Array, :*
+			end
+		end
+	end
+end

@@ -26,7 +26,7 @@ class Literal::Property
 	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion, :seal
 
 	def optional?
-		default? || @type === nil || undefinable?
+		default? || undefinable? || @type === nil
 	end
 
 	# Whether the type is a union containing the exact `Literal::Undefined`
