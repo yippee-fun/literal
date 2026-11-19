@@ -11,11 +11,12 @@ class Literal::CheckError < StandardError
 
 	# Trimmed by path rather than by count, because the paths that raise are
 	# different depths. Testing the path alone also catches the codegen's eval
-	# frames, which are evaluated with properties.rb as their path.
+	# frames, which are evaluated with properties.rb as their path. The engine's
+	# own frames between them, such as TruffleRuby's bind_call, go too.
 	def self.raise_trimmed(shape:, errors:)
 		error = new(shape:, errors:)
 		frames = caller_locations(1)
-		trimmed = frames.drop_while { |location| location.path.include?(INTERNALS) }
+		trimmed = frames.drop_while { |location| location.path.include?(INTERNALS) || location.path.start_with?("<internal:") }
 		error.set_backtrace((trimmed.empty? ? frames : trimmed).map(&:to_s))
 		raise error
 	end
