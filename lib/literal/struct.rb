@@ -18,6 +18,6 @@ class Literal::Struct < Literal::DataStructure
 
 		shape = Literal::CLASS.bind_call(self)
 		prop = shape.literal_properties[key] || ::Kernel.raise(NameError.new("unknown attribute: #{key.inspect} for #{shape}"))
-		Literal::SEND.bind_call(self, :"#{prop.name.name}=", value)
+		Literal::PUBLIC_SEND.bind_call(self, :"#{prop.name.name}=", value)
 	end
 end

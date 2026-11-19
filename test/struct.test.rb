@@ -233,3 +233,50 @@ test "indexed assignment names the invalid key's class" do
 
 	assert_equal error.message, "expected a string or symbol, got Integer"
 end
+
+test "indexed assignment respects the writer's visibility" do
+	klass = Class.new(Literal::Struct) do
+		prop :open, String
+		prop :hidden, String, writer: :private
+		prop :guarded, String, writer: :protected
+		prop :fixed, String, writer: false
+	end
+
+	struct = klass.new(open: "a", hidden: "b", guarded: "c", fixed: "d")
+
+	struct[:open] = "x"
+	assert_equal struct.open, "x"
+
+	[:hidden, :guarded, :fixed].each do |name|
+		error = assert_raises(NoMethodError) { struct[name] = "x" }
+		expected = assert_raises(NoMethodError) { struct.public_send(:"#{name}=", "x") }
+
+		assert_equal error.message, expected.message
+		refute_equal struct[name], "x"
+	end
+end
+
+test "indexed assignment behaves exactly like the writer" do
+	klass = Class.new(Literal::Struct) do
+		prop :count, Integer, &:to_i
+		prop :name, String
+		prop :label, String
+
+		def name=(value)
+			super(value.upcase)
+		end
+	end
+
+	struct = klass.new(count: 1, name: "a", label: "b")
+
+	struct["count"] = "5"
+	assert_equal struct.count, 5
+
+	struct[:name] = "joel"
+	assert_equal struct.name, "JOEL"
+
+	assert_raises(Literal::TypeError) { struct[:label] = 1 }
+
+	struct.freeze
+	assert_raises(FrozenError) { struct[:count] = 2 }
+end

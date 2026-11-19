@@ -10,6 +10,7 @@ module Literal
 	FREEZE = Kernel.instance_method(:freeze)
 	CLASS = Kernel.instance_method(:class)
 	SEND = BasicObject.instance_method(:__send__)
+	PUBLIC_SEND = Kernel.instance_method(:public_send)
 	INSTANCE_EXEC = BasicObject.instance_method(:instance_exec)
 	RESPOND_TO = Kernel.instance_method(:respond_to?)
 	DUP = Kernel.instance_method(:dup)
