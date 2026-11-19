@@ -26,6 +26,10 @@ class Literal::Types::NilableType
 		"_Nilable(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Literal::Types._Union(NilClass, @type)
+	end
+
 	def ===(value)
 		nil === value || @type === value
 	end

@@ -33,6 +33,10 @@ class Literal::Types::FrozenType
 		"_Frozen(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		@type
+	end
+
 	def ===(value)
 		value.frozen? && @type === value
 	end
@@ -58,6 +62,8 @@ class Literal::Types::FrozenType
 			false
 		end
 	end
+
+	Anything = new(BasicObject)
 
 	freeze
 end

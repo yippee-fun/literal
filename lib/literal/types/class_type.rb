@@ -21,6 +21,10 @@ class Literal::Types::ClassType
 		"_Class(#{@type.name})"
 	end
 
+	def literal_upper_bound
+		Class
+	end
+
 	def ===(value)
 		Class === value && (value == @type || !!(value < @type))
 	end

@@ -16,7 +16,22 @@ class Literal::Serializer
 	# structural match; the default covers scalar serializers whose type is a
 	# plain Literal type.
 	def handles_type?(type)
-		Literal.subtype?(type, self.type) || const_type?(type)
+		within_domain?(type, self.type) || const_type?(type)
+	end
+
+	# Whether deserializing a value of the domain gives a value of the type.
+	# Being frozen is representation, not data, so a type that requires it
+	# needs a domain whose values are always frozen.
+	private def within_domain?(type, domain)
+		case type
+		in Literal::Types::UnionType
+			type.all? { |member| within_domain?(member, domain) }
+		else
+			frozen = Literal::Types::FrozenType::Anything
+
+			Literal.subtype?(type, domain) &&
+				(!Literal.subtype?(type, frozen) || Literal.subtype?(domain, frozen))
+		end
 	end
 
 	# A const type — a literal value of this serializer's domain, or a union of

@@ -3868,3 +3868,16 @@ test "identity hashes with repeated keys serialize the same in any order" do
 	assert_equal(Example.serialize(first, type: _JSONData).to_a, [["a", 1], ["a", 2]])
 	assert_equal(Example.serialize(second, type: _JSONData).to_a, [["a", 1], ["a", 2]])
 end
+
+test "types requiring frozen values serialize only when their domain is always frozen" do
+	refute Example.serializable_type?(_Frozen(String))
+	refute Example.serializable_type?(_Frozen(SerializationPriority))
+	refute Example.serializable_type?(_Frozen(Date))
+	refute Example.serializable_type?(_Frozen(_JSONData))
+	refute Example.serializable_type?(_Constraint(String, frozen?: true))
+	refute Example.serializable_type?(_Union(_String(/\Ax/), _Frozen(_String(/\Ay/))))
+	assert_raises(Literal::ArgumentError) { Example.deserialize("a", type: _Frozen(String)) }
+
+	assert Example.serializable_type?(_Frozen(_Integer(1..)))
+	assert_equal Example.deserialize(Example.serialize(1, type: _Frozen(_Integer(1..))), type: _Frozen(_Integer(1..))), 1
+end

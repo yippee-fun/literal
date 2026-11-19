@@ -93,3 +93,32 @@ test "range literals compare as continuous intervals" do
 	refute_subtype ("a".."z"), (1..4)
 	refute_subtype _Float(1...5), _Constraint(Numeric, 1..4)
 end
+
+test "literal types are subtypes of the modules bounding their members" do
+	assert_subtype _Array(String), Array
+	assert_subtype _Array(String), Enumerable
+	assert_subtype _Tuple(String), Array
+	assert_subtype _Hash(String, Integer), Hash
+	assert_subtype _Map(a: String), Hash
+	assert_subtype _Set(String), Set
+	assert_subtype _Range(Integer), Range
+	assert_subtype _Enumerable(String), Enumerable
+	assert_subtype _Class(String), Class
+	assert_subtype _Descendant(String), Class
+	assert_subtype _Descendant(Enumerable), Module
+	assert_subtype _Frozen(String), String
+	assert_subtype _Boolean, Object
+	assert_subtype _Nilable(String), Object
+	assert_subtype _JSONData, Object
+	assert_subtype _TaggedUnion(a: String, b: Integer), Comparable
+
+	refute_subtype _Array(String), Hash
+	refute_subtype _Tuple(String), String
+	refute_subtype _Class(String), String
+	refute_subtype _Descendant(Enumerable), Class
+	refute_subtype _Frozen(String), Symbol
+	refute_subtype _Boolean, TrueClass
+	refute_subtype _Nilable(String), String
+	refute_subtype _JSONData, Comparable
+	refute_subtype _TaggedUnion(a: String, b: Array), Comparable
+end

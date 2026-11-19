@@ -23,6 +23,10 @@ class Literal::Types::TupleType
 		"_Tuple(#{@types.map(&:inspect).join(', ')})"
 	end
 
+	def literal_upper_bound
+		Array
+	end
+
 	def ===(value)
 		return false unless Array === value
 		types = @types

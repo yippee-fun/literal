@@ -20,6 +20,11 @@ class Literal::Types::DescendantType
 		"_Descendant(#{@type})"
 	end
 
+	# Only classes can descend from a class.
+	def literal_upper_bound
+		(Class === @type) ? Class : Module
+	end
+
 	def ===(value)
 		Module === value && !!(value < @type)
 	end

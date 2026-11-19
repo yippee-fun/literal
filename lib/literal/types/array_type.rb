@@ -21,6 +21,10 @@ class Literal::Types::ArrayType
 		"_Array(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Array
+	end
+
 	def map(&)
 		new_type = yield(@type)
 		Literal::Types::ArrayType.new(new_type)

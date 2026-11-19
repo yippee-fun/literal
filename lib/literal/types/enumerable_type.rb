@@ -21,6 +21,10 @@ class Literal::Types::EnumerableType
 		"_Enumerable(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Enumerable
+	end
+
 	def ===(value)
 		Enumerable === value && value.all?(@type)
 	end

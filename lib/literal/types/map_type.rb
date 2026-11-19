@@ -21,6 +21,10 @@ class Literal::Types::MapType
 		"_Map(#{@shape.map { |key, type| "#{key.name}: #{type.inspect}" }.join(', ')})"
 	end
 
+	def literal_upper_bound
+		Hash
+	end
+
 	def ===(other)
 		return false unless Hash === other
 

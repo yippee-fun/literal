@@ -21,6 +21,10 @@ class Literal::Types::SetType
 		"_Set(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Set
+	end
+
 	def ===(value)
 		return false unless Set === value
 

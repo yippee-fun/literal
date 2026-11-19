@@ -800,3 +800,16 @@ test "generated methods redefine without warnings" do
 
 	assert_equal [], warnings.grep(/method redefined/)
 end
+
+test "properties can be redefined with a literal type narrowing an inherited module" do
+	parent = Class.new(Example) do
+		prop :tags, Array
+	end
+
+	example = Class.new(parent) do
+		prop :tags, _Array(String)
+	end
+
+	refute_raises { example.new(tags: ["a"]) }
+	assert_raises(Literal::TypeError) { example.new(tags: [1]) }
+end

@@ -36,6 +36,10 @@ class Literal::Types::TaggedUnionType
 		"_TaggedUnion(#{pairs.join(', ')})"
 	end
 
+	def literal_upper_bound
+		Literal::Types._Union(*@members.values)
+	end
+
 	def ===(value)
 		Literal.with_match_guard(self, value) do
 			@members.each_value.any? { |type| type === value }

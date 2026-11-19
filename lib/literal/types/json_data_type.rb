@@ -18,6 +18,10 @@ class Literal::Types::JSONDataType
 
 	def inspect = "_JSONData"
 
+	def literal_upper_bound
+		Literal::Types._Union(String, Integer, Float, TrueClass, FalseClass, NilClass, Array, Hash)
+	end
+
 	def ===(value)
 		case value
 		when String, Integer, true, false, nil

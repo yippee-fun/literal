@@ -21,6 +21,10 @@ class Literal::Types::RangeType
 		"_Range(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Range
+	end
+
 	def ===(value)
 		Range === value && (
 			(
