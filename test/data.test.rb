@@ -255,6 +255,73 @@ test "define block" do
 	assert rect.filled?
 end
 
+test "define block runs with the new class as self" do
+	receiver = nil
+	klass = Literal::Data.define(name: String) { receiver = self }
+
+	assert_same(receiver, klass)
+	assert_equal(klass.superclass, Literal::Data)
+end
+
+test "define block can define instance and class methods" do
+	klass = Literal::Data.define(first: String, last: String) do
+		def self.anonymous = new(first: "Jane", last: "Doe")
+
+		def full_name = "#{first} #{last}"
+	end
+
+	assert_equal(klass.new(first: "John", last: "Smith").full_name, "John Smith")
+	assert_equal(klass.anonymous.full_name, "Jane Doe")
+end
+
+test "define block props are type checked and part of the value" do
+	klass = Literal::Data.define(name: String) do
+		prop :age, Integer
+	end
+
+	a = klass.new(name: "John", age: 30)
+
+	assert_equal(a.to_h, { name: "John", age: 30 })
+	assert_equal(a, klass.new(name: "John", age: 30))
+	refute_equal(a, klass.new(name: "John", age: 31))
+	assert_equal(a.frozen?, true)
+	assert_raises(Literal::TypeError) { klass.new(name: "John", age: "30") }
+	assert_raises(ArgumentError) { klass.new(name: "John") }
+end
+
+test "define block can add positional props alongside keyword props" do
+	klass = Literal::Data.define(name: String) do
+		prop :id, Integer, :positional
+		prop :tags, _Array(String), :*
+	end
+
+	instance = klass.new(1, "a", "b", name: "John")
+
+	assert_equal(instance.to_h, { id: 1, tags: ["a", "b"], name: "John" })
+	assert_equal(klass.from_props(instance.to_h), instance)
+end
+
+test "define block can build instances after declaring props" do
+	klass = Literal::Data.define(x: Integer) do
+		prop :y, Integer, default: 0
+
+		const_set(:ORIGIN, new(x: 0))
+	end
+
+	assert_equal(klass::ORIGIN.to_h, { x: 0, y: 0 })
+end
+
+test "define block cannot add props after building an instance" do
+	error = assert_raises(Literal::ArgumentError) do
+		Literal::Data.define(x: Integer) do
+			new(x: 0)
+			prop :y, Integer
+		end
+	end
+
+	assert error.message.include?("already has instances")
+end
+
 class SliceExample < Literal::Data
 	prop :name, String
 	prop :id, Integer
