@@ -15,30 +15,40 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 
 	def cast(value)
 		case value
-		in nil
-			nil
 		in ^@enum | Symbol
 			@enum.coerce(value)
 		else
-			@enum.coerce(@subtype.cast(value))
+			member_for(@subtype.cast(value))
 		end
 	end
 
 	def serialize(value)
-		case value
-		in ^@enum | Symbol
-			@subtype.serialize(@enum.coerce(value).value)
-		else
-			@subtype.serialize(value)
-		end
+		@subtype.serialize(database_value(value))
+	end
+
+	def serializable?(value, &)
+		@subtype.serializable?(database_value(value), &)
 	end
 
 	def deserialize(value)
-		case @subtype.deserialize(value)
+		member_for(@subtype.deserialize(value))
+	end
+
+	private def member_for(raw)
+		case raw
 		in nil
 			nil
-		in raw
+		else
 			@enum.coerce(raw)
+		end
+	end
+
+	private def database_value(value)
+		case value
+		in ^@enum | Symbol
+			@enum.coerce(value).value
+		else
+			value
 		end
 	end
 end

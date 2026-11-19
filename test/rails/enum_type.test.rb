@@ -28,6 +28,21 @@ test "casts through the declared attribute type" do
 
 	model.color = nil
 	assert_equal nil, model.color
+
+	model.color = ""
+	assert_equal nil, model.color
+end
+
+test "delegates serializable? to the declared attribute type" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		const_set(:Small, new(1))
+		const_set(:Huge, new(2 ** 40))
+	end
+
+	type = Literal::Rails::EnumType.new(enum, ActiveModel::Type::Integer.new(limit: 4))
+
+	assert type.serializable?(enum::Small)
+	refute type.serializable?(enum::Huge)
 end
 
 test "serializes through the declared attribute type" do
