@@ -104,3 +104,23 @@ test "a prop whose type can't be unset still coerces the sentinel" do
 
 	assert_equal klass.new.name, "fallback"
 end
+
+class CoercionPrivatelyFreezing
+	private def freeze
+		super
+		nil
+	end
+end
+
+test "Immutable freezes through an object's own freeze, which may be private or a reader" do
+	value = Literal::Coercions::Immutable.to_proc.call(CoercionPrivatelyFreezing.new)
+
+	assert CoercionPrivatelyFreezing === value
+	assert value.frozen?
+
+	shape = Class.new(Literal::Struct) { prop :freeze, Integer }
+	sealed = Literal::Coercions::Immutable.to_proc.call(shape.new(freeze: 1))
+
+	assert shape === sealed
+	assert Literal::FROZEN.bind_call(sealed)
+end

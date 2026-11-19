@@ -4504,6 +4504,31 @@ test "deep freezing copies keep a hash's default and key comparison" do
 	assert_equal(Literal::Freezing.deep_frozen(Hash.new(5))["missing"], 5)
 end
 
+class SerializationPrivatelyFreezingMoney < SerializationMoney
+	private def freeze
+		super
+		nil
+	end
+end
+
+class SerializationPrivatelyFreezingMoneyCodec < SerializationMoneyCodec
+	def type
+		SerializationPrivatelyFreezingMoney
+	end
+
+	def decode(value)
+		SerializationPrivatelyFreezingMoney.new(value[:cents], value[:currency])
+	end
+end
+
+test "types requiring frozen values freeze custom objects through their own freeze, which may be private" do
+	context = Literal::SerializationContext.new(SerializationPrivatelyFreezingMoneyCodec)
+	loaded = context.deserialize({ "cents" => 1, "currency" => "GBP" }, type: _Frozen(SerializationPrivatelyFreezingMoney))
+
+	assert SerializationPrivatelyFreezingMoney === loaded
+	assert loaded.frozen?
+end
+
 test "types requiring frozen values whose thawed type has no serializer explain why" do
 	refute Example.serializable_type?(_Frozen(Object))
 

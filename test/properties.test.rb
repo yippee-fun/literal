@@ -1185,3 +1185,11 @@ test "watching for the first instance keeps new private where the shape made it 
 		assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
 	end
 end
+
+test "a default without frozen? of its own is checked as frozen" do
+	default = Literal::FREEZE.bind_call(BasicObject.new)
+	klass = Class.new(Literal::Struct) { prop :value, BasicObject, default: }
+
+	assert Literal::EQUAL.bind_call(klass.new.value, default)
+	assert_raises(Literal::ArgumentError) { Class.new(Literal::Struct) { prop :value, BasicObject, default: BasicObject.new } }
+end

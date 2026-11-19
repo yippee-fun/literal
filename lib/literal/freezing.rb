@@ -7,17 +7,27 @@ module Literal::Freezing
 	# A frozen version of a loaded value, for types that require frozen values.
 	# Plain data (strings, arrays, hashes and sets) is frozen all the way down,
 	# copying anything not already frozen, so the raw input it may share is
-	# never mutated. Any other object is frozen by its own #freeze, and left as
-	# it is when nested in plain data. A shape's own #freeze may be a reader.
+	# never mutated. Any other object is shallow_frozen, and left as it is when
+	# nested in plain data.
 	def deep_frozen(value)
 		case value
 		in String | Array | Hash | Set
 			frozen_data(value, {}.compare_by_identity)
-		in _ if Literal::Properties === Literal::CLASS.bind_call(value)
+		else
+			shallow_frozen(value)
+		end
+	end
+
+	# The object, frozen by its own #freeze, which may be private or return
+	# something else. A shape's own #freeze may be a reader.
+	def shallow_frozen(value)
+		if Literal::Properties === Literal::CLASS.bind_call(value) || !Literal.implements?(value, :freeze)
 			Literal::FREEZE.bind_call(value)
 		else
-			value.freeze
+			Literal::SEND.bind_call(value, :freeze)
 		end
+
+		value
 	end
 
 	# Restores the frozen state a type requires throughout a value rebuilt

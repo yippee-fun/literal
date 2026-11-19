@@ -228,11 +228,11 @@ module Literal::Properties
 			seal = pipeline.seal_proc
 		end
 
-		if default && !(Proc === default || default.frozen?)
+		if default && !(Proc === default || Literal::FROZEN.bind_call(default))
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 
-		if !default.nil? && !(Proc === default) && !coercion && !seal && !(Literal::Types::DeferredType === type) && !(type === default)
+		if nil != default && !(Proc === default) && !coercion && !seal && !(Literal::Types::DeferredType === type) && !(type === default)
 			raise Literal::ArgumentError.new("The default for #{name.inspect} must match its type.")
 		end
 
