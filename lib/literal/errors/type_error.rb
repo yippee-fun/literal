@@ -82,14 +82,14 @@ class Literal::TypeError < TypeError
 				message << idt
 				message << c.receiver.class.inspect if c.receiver
 				message << c.method if c.method
-				message << " (from #{backtrace[1]})" if level.zero?
+				message << " (from #{backtrace[1]})" if level.zero? && backtrace
 				message << "\n"
 			end
 			if c.label
 				idt << INDENT
 				message << idt << c.label << "\n"
 			end
-			if c.expected && c.children.empty?
+			if c.children.empty?
 				message << idt << "  Expected: #{c.expected.inspect}\n"
 				message << idt << "  Actual (#{c.actual.class}): #{c.actual.inspect}\n"
 			end
@@ -97,8 +97,12 @@ class Literal::TypeError < TypeError
 		message
 	end
 
+	def to_s
+		message
+	end
+
 	def deconstruct_keys(keys)
-		to_h.slice(*keys)
+		keys ? to_h.slice(*keys) : to_h
 	end
 
 	def to_h

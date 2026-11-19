@@ -21,3 +21,36 @@ rescue => error
 		}
 	assert_equal error.deconstruct_keys(key_names), exp_keys
 end
+
+test "a nil expected type is still reported" do
+	error = assert_raises(Literal::TypeError) { Literal.check(1, nil) }
+
+	assert error.message.include?("Expected: nil\n")
+	assert error.message.include?("Actual (Integer): 1\n")
+end
+
+test "interpolates as its message" do
+	error = assert_raises(Literal::TypeError) { Literal.check(1, String) }
+
+	assert_equal error.to_s, error.message
+	assert error.full_message.include?("Expected: String")
+end
+
+test "deconstructs every key when asked for all of them" do
+	error = assert_raises(Literal::TypeError) { Literal.check(1, String) }
+
+	matched = case error
+	in { expected:, actual: 1, **rest }
+		[expected, rest.key?(:children)]
+	end
+
+	assert_equal matched, [String, true]
+end
+
+test "has a message before it's raised" do
+	error = Literal::TypeError.new(
+		context: Literal::TypeError::Context.new(receiver: Object.new, method: "#foo", expected: Integer, actual: "x")
+	)
+
+	assert_equal error.message, "Type mismatch\n\nObject#foo\n  Expected: Integer\n  Actual (String): \"x\"\n"
+end
