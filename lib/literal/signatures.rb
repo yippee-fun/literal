@@ -52,6 +52,9 @@ module Literal::Signatures
 		def returns? = !NO_RETURN_TYPE.equal?(@returns)
 	end
 
+	SignedMethod = Data.define(:signature, :original, :checker)
+	private_constant :SignedMethod
+
 	POSITIONAL = [:req, :opt].freeze
 	KEYWORD = [:keyreq, :key].freeze
 
@@ -84,14 +87,24 @@ module Literal::Signatures
 		private def method_added(name)
 			return if @__literal_signing__
 
-			__literal_bind_signature__(self, name)
+			if @__literal_signature__
+				__literal_bind_signature__(self, name)
+			elsif @__literal_signed__&.key?(name)
+				@__literal_signed__ = @__literal_signed__.except(name)
+			end
+
 			super
 		end
 
 		private def singleton_method_added(name)
 			return if @__literal_signing__
 
-			__literal_bind_signature__(singleton_class, name)
+			if @__literal_signature__
+				__literal_bind_signature__(singleton_class, name)
+			else
+				__literal_sign_module_function__(name)
+			end
+
 			super
 		end
 	end
@@ -101,12 +114,44 @@ module Literal::Signatures
 		signature = @__literal_signature__ or return
 		@__literal_signature__ = nil
 		__literal_stop_watching__
-		@__literal_signing__ = true
+		__literal_sign__(owner, name, signature)
+	end
 
+	# module_function copies a signed method to the singleton class: the method
+	# itself when it is on as the method is defined, else its checker.
+	private def __literal_sign_module_function__(name)
+		signed = @__literal_signed__&.[](name) or return
+		copy = __literal_own_method__(singleton_class, name) or return
+
+		if __literal_same_body__(copy, signed.original)
+			__literal_sign__(singleton_class, name, signed.signature)
+		elsif __literal_same_body__(copy, signed.checker)
+			__literal_sign__(singleton_class, name, signed.signature, exported: signed.original)
+		end
+	end
+
+	# The owner's own method under the name, past any prepended module.
+	private def __literal_own_method__(owner, name)
+		method = owner.instance_method(name)
+		method = method.super_method until method.nil? || Literal::EQUAL.bind_call(method.owner, owner)
+		method
+	end
+
+	# MRI's UnboundMethod#== also compares owners, though its #hash is of the
+	# body alone; JRuby's #hash collides.
+	if RUBY_ENGINE == "ruby"
+		private def __literal_same_body__(method, other) = method.hash == other.hash
+	else
+		private def __literal_same_body__(method, other) = method == other
+	end
+
+	# Signs the owner's own method under the name, or, where that is a copy of
+	# a checker, the method the checker was exported from.
+	private def __literal_sign__(owner, name, signature, exported: nil)
+		@__literal_signing__ = true
 		singleton = !owner.equal?(self)
-		original = owner.instance_method(name)
-		prepended = !Literal::EQUAL.bind_call(original.owner, owner)
-		original = original.super_method until Literal::EQUAL.bind_call(original.owner, owner)
+		prepended = !Literal::EQUAL.bind_call(owner.instance_method(name).owner, owner)
+		original = exported || __literal_own_method__(owner, name)
 		parameters = original.parameters
 		__literal_refuse_mismatch__(signature, parameters, "#{self}#{singleton ? '.' : '#'}#{name}")
 
@@ -121,7 +166,7 @@ module Literal::Signatures
 			callee = "ORIGINAL.bind_call(self, "
 		else
 			unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
-			owner.alias_method(unsigned, name)
+			exported ? owner.define_method(unsigned, exported) : owner.alias_method(unsigned, name)
 			owner.__send__(:private, unsigned)
 			callee = "#{unsigned}("
 		end
@@ -136,6 +181,11 @@ module Literal::Signatures
 
 		owner.define_method(name, checker.instance_method(compiled))
 		owner.__send__(visibility, name)
+
+		unless singleton || Class === self
+			# A clone shares the table, so it is replaced rather than changed.
+			@__literal_signed__ = (@__literal_signed__ || {}).merge(name => SignedMethod.new(signature, original, __literal_own_method__(owner, name)))
+		end
 	ensure
 		@__literal_signing__ = false
 	end

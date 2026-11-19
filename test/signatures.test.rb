@@ -28,6 +28,124 @@ module SignedHelpers
 	def add(a, b) = a + b
 end
 
+module SignedFunctions
+	extend Literal::Signatures
+
+	sig(String, times: Integer) >> String
+	def shout(text, times: 1) = text.upcase * times
+	module_function :shout
+
+	module_function # rubocop:disable Style/AccessModifierDeclarations, Style/ModuleFunction
+
+	sig(String) >> String
+	def whisper(text) = text.downcase
+end
+
+test "checks both copies of a module function named after it is defined" do
+	assert_equal SignedFunctions.shout("a", times: 2), "AA"
+	assert_equal Object.new.extend(SignedFunctions).__send__(:shout, "a"), "A"
+
+	error = assert_raises(Literal::TypeError) { SignedFunctions.shout(1) }
+	assert error.message.include?("SignedFunctions.shout")
+	assert_raises(Literal::TypeError) { SignedFunctions.shout("a", times: "2") }
+	assert_raises(Literal::TypeError) { Object.new.extend(SignedFunctions).__send__(:shout, 1) }
+end
+
+test "checks both copies of a method defined under module_function" do
+	assert_equal SignedFunctions.whisper("A"), "a"
+	assert_equal Object.new.extend(SignedFunctions).__send__(:whisper, "A"), "a"
+
+	error = assert_raises(Literal::TypeError) { SignedFunctions.whisper(1) }
+	assert error.message.include?("SignedFunctions.whisper")
+	assert_raises(Literal::TypeError) { Object.new.extend(SignedFunctions).__send__(:whisper, 1) }
+end
+
+test "exports a method redefined without a sig unchecked" do
+	mod = Module.new do
+		extend Literal::Signatures
+		body = -> (text) { text }
+
+		sig(String) >> String
+		define_method(:echo, body)
+		define_method(:echo, body)
+		module_function :echo
+	end
+
+	assert_equal mod.echo(1), 1
+end
+
+test "keeps a module's signed methods apart from its clone's" do
+	mod = Module.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def echo(text) = text
+	end
+
+	mod.clone.module_eval do
+		sig(Integer) >> Integer
+		def echo(number) = number
+	end
+
+	mod.__send__(:module_function, :echo)
+	assert_equal mod.echo("a"), "a"
+	assert_raises(Literal::TypeError) { mod.echo(1) }
+end
+
+test "leaves a singleton method of the same name with no sig alone" do
+	mod = Module.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def name_of(text) = text
+
+		def self.name_of(anything) = anything
+	end
+
+	assert_equal mod.name_of(1), 1
+end
+
+test "checks a module function under a prepended singleton override" do
+	mod = Module.new do
+		extend Literal::Signatures
+		singleton_class.prepend(Module.new { def twice(text) = super * 2 })
+
+		sig(String) >> String
+		def twice(text) = text
+		module_function :twice
+	end
+
+	assert_equal mod.twice("a"), "aa"
+	assert_raises(Literal::TypeError) { mod.twice(1) }
+end
+
+test "exports a prepended override as module_function does" do
+	mod = Module.new do
+		extend Literal::Signatures
+		prepend(Module.new { def name_of(text) = "override" })
+
+		sig(String) >> String
+		def name_of(text) = text
+		module_function :name_of
+	end
+
+	assert_equal mod.name_of("a"), "override"
+end
+
+test "checks a signed singleton method made private" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def self.build(text) = text
+		private_class_method :build
+	end
+
+	assert_raises(NoMethodError) { klass.build("a") }
+	assert_equal klass.__send__(:build, "a"), "a"
+	assert_raises(Literal::TypeError) { klass.__send__(:build, 1) }
+end
+
 test "checks each argument before the method runs" do
 	error = assert_raises(Literal::TypeError) { SignedGreeter.new.greet(1) }
 
