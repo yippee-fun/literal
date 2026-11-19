@@ -6,7 +6,7 @@ require "time"
 class Literal::TimeSerializer < Literal::Serializer
 	Type = _Union(Time, DateTime)
 	Precision = _Nilable(_Integer(0..9))
-	Format = /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))\z/i
+	Format = /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))\z/i
 
 	def self.with(precision: nil, utc: false)
 		check_precision(precision)
@@ -72,15 +72,20 @@ class Literal::TimeSerializer < Literal::Serializer
 
 		# DateTime switches to the Gregorian calendar in 1582, while Time is
 		# Gregorian throughout, so each validates dates in its own calendar.
-		unless rfc3339_date_time?(raw, calendar: date_time ? Date::ITALY : Date::GREGORIAN)
+		fields = rfc3339_fields(raw, calendar: date_time ? Date::ITALY : Date::GREGORIAN)
+
+		unless fields
 			raise Literal::ArgumentError, "Value #{raw.inspect} is not an RFC 3339 date-time and cannot be deserialized as #{type.inspect}"
 		end
 
+		year, month, day, hour, minute, second, offset = fields
+
+		# Built from the fields rather than parsed again, since engines' ISO 8601
+		# parsers differ in how much of a long fraction they keep.
 		if date_time
-			# Like Time's, the fraction can be any length: the format is checked.
-			DateTime.iso8601(raw, limit: nil)
+			DateTime.new(year, month, day, hour, minute, second, Rational(offset || 0, 86_400))
 		else
-			Time.iso8601(raw)
+			Time.new(year, month, day, hour, minute, second, offset || "UTC")
 		end
 	end
 
@@ -98,12 +103,28 @@ class Literal::TimeSerializer < Literal::Serializer
 	# Ruby's ISO 8601 parsers accept dates without times, times without
 	# offsets (read in the machine's timezone) and out-of-range fields they
 	# silently roll over, so the format and ranges are checked first.
-	private def rfc3339_date_time?(raw, calendar:)
-		return false unless String === raw && (match = Format.match(raw))
+	# Returns the fields, with the second exact and the offset in seconds, or
+	# nil for UTC: Z, or -00:00, which RFC 3339 gives no local offset.
+	private def rfc3339_fields(raw, calendar:)
+		return unless String === raw && (match = Format.match(raw))
 
-		year, month, day, hour, minute, second, offset_hour, offset_minute = match.captures.map(&:to_i)
+		*date_and_time, fraction, sign, offset_hour, offset_minute = match.captures
+		year, month, day, hour, minute, second = date_and_time.map(&:to_i)
+		offset_hour, offset_minute = offset_hour.to_i, offset_minute.to_i
 
-		Date.valid_date?(year, month, day, calendar) && hour < 24 && minute < 60 && second < 60 && offset_hour < 24 && offset_minute < 60
+		return unless Date.valid_date?(year, month, day, calendar) && hour < 24 && minute < 60 && second < 60 && offset_hour < 24 && offset_minute < 60
+
+		second += Rational(fraction.to_i, 10 ** fraction.length) if fraction
+		offset = (offset_hour * 3600) + (offset_minute * 60)
+
+		case sign
+		in "+"
+			[year, month, day, hour, minute, second, offset]
+		in "-" if offset > 0
+			[year, month, day, hour, minute, second, -offset]
+		in "-" | nil
+			[year, month, day, hour, minute, second, nil]
+		end
 	end
 
 	private def constraint_json_schema(type)
@@ -138,7 +159,7 @@ class Literal::TimeSerializer < Literal::Serializer
 		end
 
 		# RFC 3339 date-times have four-digit years and offsets under a day.
-		unless rfc3339_date_time?(serialized, calendar: (DateTime === value) ? Date::ITALY : Date::GREGORIAN)
+		unless rfc3339_fields(serialized, calendar: (DateTime === value) ? Date::ITALY : Date::GREGORIAN)
 			raise Literal::ArgumentError, "Value #{value.inspect} cannot be written as an RFC 3339 date-time, which needs a year in 0000-9999 and an offset under a day"
 		end
 

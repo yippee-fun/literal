@@ -1557,7 +1557,29 @@ test "date-times with long fractions load exactly" do
 	fraction = Rational(("1" * 200).to_i, 10 ** 200)
 
 	assert_equal(Example.deserialize(raw, type: Time), Time.utc(2024, 1, 5, 10, 0, fraction))
+
+	# JRuby's DateTime can't hold a fraction whose denominator overflows a long.
+	raw = "2024-01-05T10:00:00.#{'1' * 12}Z"
+	fraction = Rational(("1" * 12).to_i, 10 ** 12)
+
 	assert_equal(Example.deserialize(raw, type: DateTime), DateTime.new(2024, 1, 5, 10, 0, fraction))
+end
+
+test "date-times load with their offsets" do
+	{
+		"2024-01-05T10:00:00Z" => "2024-01-05T10:00:00Z",
+		"2024-01-05T10:00:00-00:00" => "2024-01-05T10:00:00Z",
+		"2024-01-05T10:00:00+00:00" => "2024-01-05T10:00:00+00:00",
+		"2024-01-05T10:00:00+05:30" => "2024-01-05T10:00:00+05:30",
+		"2024-01-05T10:00:00-00:30" => "2024-01-05T10:00:00-00:30",
+	}.each do |raw, written|
+		time = Example.deserialize(raw, type: Time)
+		date_time = Example.deserialize(raw, type: DateTime)
+
+		assert_equal Example.serialize(time, type: Time), written
+		assert_equal date_time, DateTime.iso8601(raw)
+		assert_equal date_time.offset, DateTime.iso8601(raw).offset
+	end
 end
 
 test "float serialization roundtrip" do
