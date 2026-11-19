@@ -398,3 +398,17 @@ test "a custom type's >= and <= overrides can fall back to super" do
 	assert integers >= integers
 	refute integers >= _Integer(..0)
 end
+
+test "a plain pair that comes back to itself through a shared context terminates" do
+	range = Class.new(Range) do
+		attr_accessor :context
+
+		def cover?(other)
+			Literal.subtype?(other + 0, self, context:)
+		end
+	end.new(1, 20_000)
+
+	range.context = Literal::SubtypeContext.new
+
+	refute Literal.subtype?(12_501, range, context: range.context)
+end

@@ -299,50 +299,53 @@ module Literal
 	def self.subtype?(type, supertype, context: nil)
 		return !!(supertype >= type) if Module === type && Module === supertype && !(Literal::Type === supertype)
 
-		context ||= SubtypeContext.new
-		raw_key = [OBJECT_ID.bind_call(type), OBJECT_ID.bind_call(supertype)]
-		raw_acquired = false
-		resolved_key = nil
-		resolved_acquired = false
+		# With no Literal type on either side, only a context could bring the
+		# check back to this pair, so a check that starts here needs none.
+		if context.nil? && !(Literal::Type === type || Literal::Type === supertype)
+			return !!resolved_subtype?(type, supertype, nil)
+		end
 
-		return context.fetch(raw_key) if context.memoized?(raw_key)
+		context ||= SubtypeContext.new
+		type_id = OBJECT_ID.bind_call(type)
+		supertype_id = OBJECT_ID.bind_call(supertype)
 
 		# Coinductive cycle handling: if we are already in the middle of proving this
 		# exact pair, assume it holds — provided the recursion has passed through a
 		# structural constructor (see SubtypeContext#assume). This is what makes
 		# subtyping between recursive (looping) types terminate with the right answer.
-		return context.assume(raw_key) unless context.acquire(raw_key)
+		known = context.recall(type_id, supertype_id)
+		return known unless known.nil?
 
-		raw_acquired = true
-
+		raw_frame = context.acquire(type_id, supertype_id)
 		subtype = type
+		resolved_supertype = supertype
 
-		subtype = subtype.materialize if Types::DeferredType === subtype
-		supertype = supertype.materialize if Types::DeferredType === supertype
-		resolved_key = [OBJECT_ID.bind_call(subtype), OBJECT_ID.bind_call(supertype)]
+		if Types::DeferredType === type || Types::DeferredType === supertype
+			subtype = type.materialize if Types::DeferredType === type
+			resolved_supertype = supertype.materialize if Types::DeferredType === supertype
+			subtype_id = OBJECT_ID.bind_call(subtype)
+			resolved_supertype_id = OBJECT_ID.bind_call(resolved_supertype)
 
-		if resolved_key != raw_key
-			if context.memoized?(resolved_key)
-				result = context.fetch(resolved_key)
-				context.store(raw_key, result)
-				return result
+			unless subtype_id == type_id && resolved_supertype_id == supertype_id
+				known = context.recall(subtype_id, resolved_supertype_id)
+
+				unless known.nil?
+					context.store(type_id, supertype_id, raw_frame, known)
+					return known
+				end
+
+				resolved_frame = context.acquire(subtype_id, resolved_supertype_id)
 			end
-
-			return context.assume(resolved_key) unless context.acquire(resolved_key)
-
-			resolved_acquired = true
 		end
 
-		result = !!resolved_subtype?(subtype, supertype, context)
+		result = !!resolved_subtype?(subtype, resolved_supertype, context)
 
-		context.store(resolved_key, result)
-		context.store(raw_key, result)
+		context.store(subtype_id, resolved_supertype_id, resolved_frame, result) if resolved_frame
+		context.store(type_id, supertype_id, raw_frame, result)
 		result
 	ensure
-		if context
-			context.release(resolved_key) if resolved_acquired
-			context.release(raw_key) if raw_acquired
-		end
+		context.release(subtype_id, resolved_supertype_id, resolved_frame) if resolved_frame
+		context.release(type_id, supertype_id, raw_frame) if raw_frame
 	end
 
 	# A union is a subtype of anything all its members are subtypes of.
