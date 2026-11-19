@@ -60,12 +60,14 @@ class Literal::Value
 
 	def marshal_load(payload)
 		# Marshal.load rebuilds the value unfrozen, so restore its frozen state
-		# before the type check, which may require it.
+		# before the type check, which may require it. Payloads record only
+		# whether the value itself was frozen — version 1 not even that — so
+		# nested values are frozen where the type requires it.
 		case payload
 		in [1, value, was_frozen]
-			# Version 1 didn't record it, so freeze only if the type requires it.
-			value.freeze if Literal.subtype?(__type__, Literal::Types::FrozenType::Anything)
+			value = Literal::Freezing.restore_frozen(value, __type__)
 		in [2, value, was_frozen, value_was_frozen]
+			value = Literal::Freezing.restore_frozen(value, __type__)
 			value.freeze if value_was_frozen
 		end
 

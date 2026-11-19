@@ -83,6 +83,91 @@ test "from_pack restores the value's frozen state before checking it" do
 	assert_equal Age.from_pack([1, 20, true]), Age.new(20)
 end
 
+test "from_pack restores nested values the type requires to be frozen" do
+	names = Literal::Value(Literal::Types._Array(Literal::Types._Frozen(String)))
+	frozen_names = Literal::Value(Literal::Types._Frozen(Literal::Types._Array(Literal::Types._Frozen(String))))
+
+	loaded = names.from_pack(Marshal.load(Marshal.dump(names.new(["a"]).as_pack)))
+	assert_equal loaded, names.new(["a"])
+	assert loaded.value.first.frozen?
+	refute loaded.value.frozen?
+
+	loaded = frozen_names.from_pack(Marshal.load(Marshal.dump(frozen_names.new(["a"].freeze).as_pack)))
+	assert_equal loaded, frozen_names.new(["a"].freeze)
+	assert loaded.value.frozen?
+
+	assert_equal names.from_pack([1, [+"a"], true]), names.new(["a"])
+	assert_equal frozen_names.from_pack([1, [+"a"], true]), frozen_names.new(["a"].freeze)
+end
+
+test "from_pack restores frozen values through maps, tuples, sets, hashes, unions and constraints" do
+	type = Literal::Types._Map(
+		a: Literal::Types._Union(Literal::Types._Frozen(String), Integer),
+		b: Literal::Types._Tuple(Literal::Types._Frozen(Literal::Types._Array(String)), Literal::Types._Set(Literal::Types._Frozen(String))),
+		c: Literal::Types._Hash(String, Literal::Types._Constraint(String, frozen?: true)),
+	)
+	value_class = Literal::Value(type)
+	value = value_class.new({ a: "x", b: [["y"].freeze, Set["z"]], c: { "k" => "v" } })
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value.as_pack))).value
+
+	assert loaded[:a].frozen?
+	assert loaded[:b][0].frozen?
+	assert loaded[:b][0][0].frozen?
+	assert loaded[:b][1].first.frozen?
+	assert loaded[:c]["k"].frozen?
+	refute loaded[:b][1].frozen?
+	refute loaded.frozen?
+end
+
+test "from_pack restores values that contain themselves" do
+	type = Literal::Types._Deferred { Literal::Types._Union(Literal::Types._Array(type), Array) }
+	value_class = Literal::Value(type)
+	looped = []
+	looped << looped
+
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new(looped).as_pack))).value
+
+	assert loaded.equal?(loaded.first)
+end
+
+test "from_pack restores frozen values through tagged unions and ranges" do
+	tagged = Literal::Value(Literal::Types._TaggedUnion(names: Literal::Types._Array(Literal::Types._Frozen(String)), count: Integer))
+	range = Literal::Value(Literal::Types._Range(Literal::Types._Frozen(String)))
+
+	assert tagged.from_pack(Marshal.load(Marshal.dump(tagged.new(["a"]).as_pack))).value.first.frozen?
+	assert range.from_pack(Marshal.load(Marshal.dump(range.new("a".."b").as_pack))).value.begin.frozen?
+end
+
+test "from_pack keeps a union member's values as they are when the value already matches it" do
+	type = Literal::Types._Union(
+		Literal::Types._Tuple(Literal::Types._Frozen(String), Integer),
+		Literal::Types._Tuple(Literal::Types._String(frozen?: false), String),
+	)
+	value_class = Literal::Value(type)
+
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new([+"x", +"y"]).as_pack))).value
+
+	refute loaded.first.frozen?
+end
+
+test "from_pack loads values without a frozen? method" do
+	value_class = Literal::Value(BasicObject)
+
+	assert value_class.from_pack(value_class.new(BasicObject.new).as_pack)
+end
+
+test "from_pack restores frozen values that contain themselves" do
+	value_class = Literal::Value(Literal::Types._Frozen(Array))
+	looped = []
+	looped << looped
+	looped.freeze
+
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new(looped).as_pack))).value
+
+	assert loaded.frozen?
+	assert loaded.equal?(loaded.first)
+end
+
 test "from_pack loads version 1 payloads, which don't record the value's frozen state" do
 	frozen_name = Literal::Value(Literal::Types._Frozen(String))
 	name = Literal::Value(String)
