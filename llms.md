@@ -41,7 +41,7 @@ end
 
 Options `reader:/writer:/predicate:`: `false | :public | :protected | :private`; `predicate` generates `a?` (false for unset/Undefined); `description:` string → JSON Schema. Generates `initialize` (kind-aware signature), `to_h`, per-prop methods; `after_initialize` hook if defined. Store order: **coerce → seal → check → assign**.
 
-Prop names: any valid Ruby local-variable name, keywords included (`class`, `end`, `__FILE__`); non-Symbols and invalid identifiers raise `Literal::ArgumentError`. A reader/predicate is refused only where it would replace a method Literal generates or defines for the shape (`to_h`, `hash`, `==`, `eql?`, `initialize`, `deconstruct`, …): declare those with `reader: false`/`predicate: false` and read via `[:name]`/`to_h`. Ruby's own methods (`class`, `method`) may be replaced, at your own risk. Positional orderings Ruby can't compile (an optional positional after a required one that follows an optional) and a second `:*`/`:**`/`:&` prop raise `Literal::ArgumentError` at declaration.
+Prop names: any valid Ruby local-variable name, keywords included (`class`, `end`, `__FILE__`); non-Symbols and invalid identifiers raise `Literal::ArgumentError`. A reader/predicate is refused only where it would replace a method Literal generates or defines for the shape (`to_h`, `hash`, `==`, `eql?`, `initialize`, `deconstruct`, `Data#with`, …): declare those with `reader: false`/`predicate: false` and read via `[:name]`/`to_h`. Ruby's own methods (`class`, `method`) may be replaced, at your own risk. Positional orderings Ruby can't compile (an optional positional after a required one that follows an optional) and a second `:*`/`:**`/`:&` prop raise `Literal::ArgumentError` at declaration.
 
 `_Deferred { Fwd }` at the top of a prop's type is required and not materialized at declaration (forward references work); make it optional with `_Nilable(_Deferred { Fwd })` or `prop?`. `_Deferred { _Nilable(X) }` is not omittable.
 
@@ -78,6 +78,8 @@ K.from(other)         # from_props(other.to_h.slice(*own props)) — e.g. rehydr
 ```
 
 `Struct#[]=` behaves exactly like calling the writer publicly: a private or missing writer raises `NoMethodError`.
+
+`Data#with(**changes)` → frozen copy with the named props replaced (`self` when given none; an unknown name → `NameError`). Changed values take the initializer's path against the copy, in property order: `Literal::Undefined` resolves the default (or unsets a `prop?`), then coerce → seal → check. As with `new`, a `:&` prop resolves its default on `nil` instead, and `:*`/`:**` props have no sentinel: the value is taken as given (`[]`/`{}` is what `new` gets without arguments). Carried-over values are type checked, never coerced or resealed. Then `after_initialize`, freeze and the shape's checks, as `new`; `initialize` itself isn't called. A `with` reader is refused — declare it with `reader: false` and replace it via `with(with: …)`.
 
 ### Draft — `Literal::Draft(P)`
 
