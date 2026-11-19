@@ -199,3 +199,11 @@ test "a pattern with a key that isn't a flag doesn't match" do
 
 	assert_equal matched, :bold
 end
+
+test ".from_bit_string refuses a string that isn't bits" do
+	assert_raises(Literal::ArgumentError) { Example.from_bit_string("junk") }
+	assert_raises(Literal::ArgumentError) { Example.from_bit_string("") }
+	assert_raises(Literal::ArgumentError) { Example.from_bit_string("0000001\n") }
+	assert_raises(Literal::ArgumentError) { Example.from_bit_string(1) }
+	assert_raises(Literal::ArgumentError) { Example.from_bit_string(:"101") }
+end

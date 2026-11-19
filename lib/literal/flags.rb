@@ -111,6 +111,10 @@ class Literal::Flags
 
 	# (String) -> Literal::Flags
 	def self.from_bit_string(bit_string)
+		unless String === bit_string && /\A[01]+\z/.match?(bit_string)
+			raise Literal::ArgumentError.new("#{bit_string.inspect} isn't a bit string.")
+		end
+
 		from_int(bit_string.to_i(2))
 	end
 
