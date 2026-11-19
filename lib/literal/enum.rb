@@ -93,7 +93,7 @@ class Literal::Enum
 		end
 
 		def _load(data)
-			self[Marshal.load(data)]
+			fetch(Marshal.load(data))
 		end
 
 		def const_added(name)

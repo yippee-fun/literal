@@ -332,3 +332,11 @@ test "members are singletons, so dup and clone return the member" do
 	assert Color::Red.clone(freeze: true).equal?(Color::Red)
 	assert_raises(ArgumentError) { Color::Red.clone(freeze: false) }
 end
+
+test "members load from their dump" do
+	assert Color._load(Color::Blue._dump(-1)).equal?(Color::Blue)
+end
+
+test "loading a value that isn't a member raises" do
+	assert_raises(KeyError) { Color._load(Marshal.dump(99)) }
+end
