@@ -551,6 +551,22 @@ test "length ranges always produce valid length keywords" do
 	)
 end
 
+test "range bounds are written as JSON numbers, or omitted when inexact" do
+	assert_equal(
+		JSON.parse(JSON.generate(Example.json_schema(_Float(1/2r..BigDecimal("2.5"))))),
+		{ "type" => "number", "minimum" => 0.5, "maximum" => 2.5 },
+	)
+
+	assert_equal(
+		JSON.parse(JSON.generate(Example.json_schema(_Integer(4/2r...BigDecimal("10"))))),
+		{ "type" => "integer", "minimum" => 2, "exclusiveMaximum" => 10 },
+	)
+
+	assert_equal(Example.json_schema(_Integer(1/3r..BigDecimal("0.1"))), { "type" => "integer" })
+	assert_equal(Example.json_schema(_Integer(0.., 1/3r..)), { "type" => "integer", "minimum" => 0 })
+	assert_equal(Example.json_schema(_Integer(Rational((10 ** 400) + 1, 3)..)), { "type" => "integer" })
+end
+
 test "infinite range bounds are omitted from schemas" do
 	assert_equal(
 		JSON.parse(JSON.generate(Example.json_schema(_Integer(0..Float::INFINITY)))),

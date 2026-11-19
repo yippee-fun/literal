@@ -282,6 +282,24 @@ class Literal::Serializer
 		bound if Numeric === bound && bound.finite?
 	end
 
+	# JSON generators write only Integers and Floats as numbers, so a bound
+	# of another class is written as one when that's exact, and left out
+	# otherwise: the schema is looser, but still accepts every value.
+	private def json_bound(bound)
+		case finite_bound(bound)
+		in nil | Integer | Float => number
+			number
+		in number unless number.real?
+			nil
+		in number if number == number.truncate
+			number.truncate
+		in number if number.to_f.finite? && number.to_r == number.to_f.to_r
+			number.to_f
+		else
+			nil
+		end
+	end
+
 	private def apply_range_constraints(schema, ranges)
 		minimum, maximum, exclusive_maximum = narrowed_range_bounds(ranges)
 
@@ -302,8 +320,8 @@ class Literal::Serializer
 		exclusive_maximum = false
 
 		ranges.each do |range|
-			range_begin = finite_bound(range.begin)
-			range_end = finite_bound(range.end)
+			range_begin = json_bound(range.begin)
+			range_end = json_bound(range.end)
 
 			minimum = range_begin if !range_begin.nil? && (minimum.nil? || range_begin > minimum)
 
