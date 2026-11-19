@@ -96,11 +96,11 @@ class Literal::DataStructure
 		when String
 			key = key.intern
 		else
-			raise TypeError.new("expected a string or symbol, got #{key.inspect.class}")
+			raise TypeError.new("expected a string or symbol, got #{key.class}")
 		end
 
 		prop = self.class.literal_properties[key] || raise(NameError.new("unknown attribute: #{key.inspect} for #{self.class}"))
-		__send__(prop.name)
+		Literal::INSTANCE_VARIABLE_GET.bind_call(self, prop.__ivar__)
 	end
 
 	alias to_hash to_h

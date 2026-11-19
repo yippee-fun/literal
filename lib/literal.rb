@@ -7,6 +7,7 @@ module Literal
 	OBJECT_ID = BasicObject.instance_method(:__id__)
 	EQUAL = BasicObject.instance_method(:equal?)
 	FROZEN = Kernel.instance_method(:frozen?)
+	INSTANCE_VARIABLE_GET = Kernel.instance_method(:instance_variable_get)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")

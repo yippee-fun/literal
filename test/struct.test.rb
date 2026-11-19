@@ -227,3 +227,9 @@ test "seals run at construction but not when marshal loading" do
 	assert b.tags.frozen?
 	assert_equal b, a
 end
+
+test "indexed assignment names the invalid key's class" do
+	error = assert_raises(TypeError) { Person.new(name: "Joel")[0] = "x" }
+
+	assert_equal error.message, "expected a string or symbol, got Integer"
+end

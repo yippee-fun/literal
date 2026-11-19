@@ -26,7 +26,7 @@ class Literal::Struct < Literal::DataStructure
 		when String
 			key = key.intern
 		else
-			raise TypeError.new("expected a string or symbol, got #{key.inspect.class}")
+			raise TypeError.new("expected a string or symbol, got #{key.class}")
 		end
 
 		prop = self.class.literal_properties[key] || raise(NameError.new("unknown attribute: #{key.inspect} for #{self.class}"))

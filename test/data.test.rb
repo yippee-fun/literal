@@ -452,3 +452,29 @@ test "indexed access raises for invalid key types" do
 	person = Person.new(name: "John")
 	assert_raises(TypeError) { person[0] }
 end
+
+test "indexed access names the invalid key's class" do
+	error = assert_raises(TypeError) { Person.new(name: "John")[0] }
+
+	assert_equal error.message, "expected a string or symbol, got Integer"
+end
+
+test "indexed access reads the stored value whatever methods the object has" do
+	klass = Class.new(Literal::Data) do
+		prop :hash, Integer, reader: false
+		prop :class, String, reader: false
+		prop :y, Integer, reader: false
+	end
+
+	instance = klass.new(hash: 1, class: "c", y: 2)
+
+	assert_equal [instance[:hash], instance[:class], instance[:y]], [1, "c", 2]
+end
+
+test "indexed access reads the stored value when a reader shadows instance_variable_get" do
+	klass = Class.new(Literal::Data) do
+		prop :instance_variable_get, String
+	end
+
+	assert_equal klass.new(instance_variable_get: "a")[:instance_variable_get], "a"
+end
