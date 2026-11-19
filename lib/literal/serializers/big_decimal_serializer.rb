@@ -37,7 +37,14 @@ class Literal::BigDecimalSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		(String === raw && BigDecimal(raw, exception: false)) || raise(malformed_raw_error(raw, type))
+		(String === raw && parse(raw)) || raise(malformed_raw_error(raw, type))
+	end
+
+	# JRuby's BigDecimal() raises for a malformed string despite exception: false.
+	private def parse(raw)
+		BigDecimal(raw, exception: false)
+	rescue ArgumentError
+		nil
 	end
 
 	def coerce(raw)
