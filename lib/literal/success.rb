@@ -15,6 +15,31 @@ class Literal::Success < Literal::Result
 			Literal::Success === object && @type === object.value!
 		end
 
+		def ==(other)
+			Generic === other && @type == other.type
+		end
+
+		def eql?(other)
+			Generic === other && @type.eql?(other.type)
+		end
+
+		def hash
+			[Generic, @type].hash
+		end
+
+		def >=(other, context: nil)
+			case other
+			when Generic
+				Literal.structural_subtype?(other.type, @type, context:)
+			else
+				false
+			end
+		end
+
+		def literal_upper_bound
+			Literal::Success
+		end
+
 		def inspect
 			"Literal::Success(#{@type.inspect})"
 		end

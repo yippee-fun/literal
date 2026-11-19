@@ -18,7 +18,43 @@ class Literal::Result::Generic
 			@success_type === object.value!
 		when Literal::Failure
 			@failure_type === object.error!
+		else
+			false
 		end
+	end
+
+	def ==(other)
+		Literal::Result::Generic === other && @success_type == other.success_type && @failure_type == other.failure_type
+	end
+
+	def eql?(other)
+		Literal::Result::Generic === other && @success_type.eql?(other.success_type) && @failure_type.eql?(other.failure_type)
+	end
+
+	def hash
+		[Literal::Result::Generic, @success_type, @failure_type].hash
+	end
+
+	def >=(other, context: nil)
+		case other
+		when Literal::Result::Generic
+			Literal.structural_subtype?(other.success_type, @success_type, context:) &&
+				Literal.structural_subtype?(other.failure_type, @failure_type, context:)
+		when Literal::Success::Generic
+			Literal.structural_subtype?(other.type, @success_type, context:)
+		when Literal::Failure::Generic
+			Literal.structural_subtype?(other.type, @failure_type, context:)
+		else
+			false
+		end
+	end
+
+	def literal_upper_bound
+		Literal::Result
+	end
+
+	def inspect
+		"Literal::Result(#{@success_type.inspect}, #{@failure_type.inspect})"
 	end
 
 	def name

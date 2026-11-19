@@ -15,6 +15,31 @@ class Literal::Failure < Literal::Result
 			Literal::Failure === object && @type === object.error!
 		end
 
+		def ==(other)
+			Generic === other && @type == other.type
+		end
+
+		def eql?(other)
+			Generic === other && @type.eql?(other.type)
+		end
+
+		def hash
+			[Generic, @type].hash
+		end
+
+		def >=(other, context: nil)
+			case other
+			when Generic
+				Literal.structural_subtype?(other.type, @type, context:)
+			else
+				false
+			end
+		end
+
+		def literal_upper_bound
+			Literal::Failure
+		end
+
 		def inspect
 			"Literal::Failure(#{@type.inspect})"
 		end

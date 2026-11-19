@@ -186,3 +186,66 @@ test "pattern matches success with delegated keyword pattern" do
 
 	assert matched
 end
+
+test "result types with the same parameters are equal" do
+	assert_equal Literal::Result(Integer, String), Literal::Result(Integer, String)
+	assert Literal::Result(Integer, String).eql?(Literal::Result(Integer, String))
+	assert_equal Literal::Result(Integer, String).hash, Literal::Result(Integer, String).hash
+	refute_equal Literal::Result(Integer, String), Literal::Result(Integer, Symbol)
+
+	assert_equal Literal::Success(Integer), Literal::Success(Integer)
+	assert_equal Literal::Success(Integer).hash, Literal::Success(Integer).hash
+	refute_equal Literal::Success(Integer), Literal::Failure(Integer)
+	assert_equal Literal::Failure(String), Literal::Failure(String)
+	assert_equal Literal::Failure(String).hash, Literal::Failure(String).hash
+end
+
+test "result types are covariant" do
+	assert_subtype Literal::Result(Integer, String), Literal::Result(Integer, String)
+	assert_subtype Literal::Result(Integer, String), Literal::Result(Numeric, _Union(String, Symbol))
+	refute_subtype Literal::Result(Numeric, String), Literal::Result(Integer, String)
+	refute_subtype Literal::Result(Integer, Symbol), Literal::Result(Integer, String)
+
+	assert_subtype Literal::Success(Integer), Literal::Success(Numeric)
+	refute_subtype Literal::Success(Numeric), Literal::Success(Integer)
+	assert_subtype Literal::Failure(Integer), Literal::Failure(Numeric)
+	refute_subtype Literal::Failure(Integer), Literal::Success(Integer)
+end
+
+test "success and failure types are subtypes of results that admit them" do
+	assert_subtype Literal::Success(Integer), Literal::Result(Numeric, String)
+	assert_subtype Literal::Failure(String), Literal::Result(Integer, String)
+	refute_subtype Literal::Success(String), Literal::Result(Integer, String)
+	refute_subtype Literal::Result(Integer, String), Literal::Success(Integer)
+end
+
+test "result types are subtypes of their classes" do
+	assert_subtype Literal::Result(Integer, String), Literal::Result
+	assert_subtype Literal::Success(Integer), Literal::Success
+	assert_subtype Literal::Success(Integer), Literal::Result
+	assert_subtype Literal::Failure(Integer), Literal::Failure
+	refute_subtype Literal::Result(Integer, String), Literal::Success
+end
+
+test "a property can be redefined with an equal result type" do
+	parent = Class.new do
+		extend Literal::Properties
+
+		prop :result, Literal::Result(Integer, String)
+	end
+
+	refute_raises do
+		Class.new(parent) do
+			prop :result, Literal::Result(Integer, String)
+		end
+	end
+end
+
+test "result types inspect as their constructors" do
+	assert_equal Literal::Result(Integer, String).inspect, "Literal::Result(Integer, String)"
+end
+
+test "result types match only results" do
+	assert_equal (Literal::Result(Integer, String) === 1), false
+	assert_equal (Literal::Result(Integer, String) === nil), false
+end
