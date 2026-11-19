@@ -102,7 +102,7 @@ class Literal::Enum
 			object = const_get(name)
 
 			if self === object
-				@names[object] = name
+				@names[object] ||= name
 				predicate_name = name.to_s.gsub(/(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z\d])(?=[A-Z])/, "_").downcase
 				define_method("#{predicate_name}?") { self == object }
 				object.freeze

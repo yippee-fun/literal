@@ -18,6 +18,8 @@ class Color < Literal::Enum(Integer)
 
 	SPRING_GREEN_HEX = "#00FF7F"
 
+	Scarlet = Red
+
 	__after_defined__ if RUBY_ENGINE == "truffleruby"
 end
 
@@ -268,4 +270,13 @@ end
 
 test "members are tracked by their constant names" do
 	assert_equal Literal.const_name(Color::Red), Color::Red.name
+end
+
+test "an alias keeps the member's name and gets a predicate of its own" do
+	assert Color::Scarlet.equal?(Color::Red)
+	assert Color::Red.name.end_with?("Color::Red")
+	assert_equal Color::Red.to_sym, :Red
+	assert Color::Red.scarlet?
+	refute Color::Green.scarlet?
+	assert_equal Color.coerce(:Scarlet), Color::Red
 end
