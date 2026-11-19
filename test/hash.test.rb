@@ -445,6 +445,25 @@ test "mutations of a frozen hash raise before running blocks" do
 	assert_raises(FrozenError) { hash.merge!({ a: 2 }) { ran = true } }
 	refute ran
 	assert_raises(FrozenError) { hash.merge! }
+	assert_raises(FrozenError) { hash[:b] = "a" }
+end
+
+test "every mutation of a frozen hash raises with the hash as the receiver" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1 }).freeze
+
+	[
+		-> { hash[:a] = 1 },
+		-> { hash.clear },
+		-> { hash.compact! },
+		-> { hash.delete(:b) },
+		-> { hash.delete(:b) { nil } },
+		-> { hash.merge!({ a: 1 }) },
+		-> { hash.reject! { false } },
+		-> { hash.select! { true } },
+	].each do |mutation|
+		error = assert_raises(FrozenError, &mutation)
+		assert error.receiver.equal?(hash)
+	end
 end
 
 test "#clone of a frozen hash is frozen" do

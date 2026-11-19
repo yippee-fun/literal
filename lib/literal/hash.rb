@@ -138,6 +138,8 @@ class Literal::Hash
 	end
 
 	def []=(key, value)
+		__check_frozen__
+
 		Literal.check(key, @__key_type__) do |c|
 			c.fill_receiver(receiver: self, method: "#[]=")
 		end
@@ -150,6 +152,7 @@ class Literal::Hash
 	end
 
 	def clear
+		__check_frozen__
 		@__value__.clear
 		self
 	end
@@ -176,6 +179,7 @@ class Literal::Hash
 	end
 
 	def compact!
+		__check_frozen__
 		@__value__.compact!
 		self
 	end
@@ -185,6 +189,7 @@ class Literal::Hash
 	end
 
 	def delete(key, &block)
+		__check_frozen__
 		return @__value__.delete(key, &block) if block
 
 		@__value__.delete(key) { Literal::Undefined }
@@ -324,6 +329,7 @@ class Literal::Hash
 
 	def reject!(&block)
 		raise ArgumentError.new("#reject! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.reject!(&block)
 		self
@@ -337,6 +343,7 @@ class Literal::Hash
 
 	def select!(&block)
 		raise ArgumentError.new("#select! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.select!(&block)
 		self

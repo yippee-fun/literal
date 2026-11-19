@@ -138,6 +138,8 @@ class Literal::Array
 	end
 
 	def <<(value)
+		__check_frozen__
+
 		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#<<")
 		end
@@ -184,6 +186,8 @@ class Literal::Array
 	# Like Ruby's Array, assigning to a slice (a range, or a start and length)
 	# splices in the elements of anything that converts with `to_ary`.
 	def []=(*arguments)
+		__check_frozen__
+
 		case arguments
 		in [Range => range, value]
 			range = __index_range__(range)
@@ -212,6 +216,7 @@ class Literal::Array
 	end
 
 	def clear
+		__check_frozen__
 		@__value__.clear
 		self
 	end
@@ -236,11 +241,13 @@ class Literal::Array
 	end
 
 	def compact!
+		__check_frozen__
 		@__value__.compact!
 		self
 	end
 
 	def concat(*others)
+		__check_frozen__
 		values = others.map { |other| __compatible_value__(other, "#concat") }
 		@__value__.concat(*values)
 		self
@@ -255,12 +262,14 @@ class Literal::Array
 	end
 
 	def delete(value, &block)
+		__check_frozen__
 		return @__value__.delete(value, &block) if block
 
 		@__value__.delete(value) { Literal::Undefined }
 	end
 
 	def delete_at(index)
+		__check_frozen__
 		@__value__.fetch(index) { return Literal::Undefined }
 
 		@__value__.delete_at(index)
@@ -338,6 +347,7 @@ class Literal::Array
 	end
 
 	def insert(index, *values)
+		__check_frozen__
 		index = __to_index__(index)
 
 		values.each do |value|
@@ -491,9 +501,8 @@ class Literal::Array
 	end
 
 	def pop(n = nil)
-		return __with__(@__value__.pop(n)) if n
-
 		__check_frozen__
+		return __with__(@__value__.pop(n)) if n
 		return Literal::Undefined if @__value__.empty?
 
 		@__value__.pop
@@ -527,6 +536,8 @@ class Literal::Array
 	end
 
 	def push(*values)
+		__check_frozen__
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#push")
@@ -545,12 +556,14 @@ class Literal::Array
 
 	def reject!(&block)
 		raise ArgumentError.new("#reject! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.reject!(&block)
 		self
 	end
 
 	def replace(other)
+		__check_frozen__
 		@__value__.replace(__compatible_value__(other, "#replace"))
 		self
 	end
@@ -560,6 +573,7 @@ class Literal::Array
 	end
 
 	def reverse!
+		__check_frozen__
 		@__value__.reverse!
 		self
 	end
@@ -569,6 +583,7 @@ class Literal::Array
 	end
 
 	def rotate!(count = 1)
+		__check_frozen__
 		@__value__.rotate!(count)
 		self
 	end
@@ -588,15 +603,15 @@ class Literal::Array
 
 	def select!(&block)
 		raise ArgumentError.new("#select! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.select!(&block)
 		self
 	end
 
 	def shift(n = nil)
-		return __with__(@__value__.shift(n)) if n
-
 		__check_frozen__
+		return __with__(@__value__.shift(n)) if n
 		return Literal::Undefined if @__value__.empty?
 
 		@__value__.shift
@@ -607,6 +622,7 @@ class Literal::Array
 	end
 
 	def shuffle!(random: Random)
+		__check_frozen__
 		@__value__.shuffle!(random:)
 		self
 	end
@@ -620,6 +636,7 @@ class Literal::Array
 	end
 
 	def sort!(&)
+		__check_frozen__
 		@__value__.sort!(&)
 		self
 	end
@@ -632,6 +649,7 @@ class Literal::Array
 
 	def sort_by!(&block)
 		raise ArgumentError.new("#sort_by! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.sort_by!(&block)
 		self
@@ -701,11 +719,14 @@ class Literal::Array
 	end
 
 	def uniq!(&)
+		__check_frozen__
 		@__value__.uniq!(&)
 		self
 	end
 
 	def unshift(*values)
+		__check_frozen__
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#unshift")

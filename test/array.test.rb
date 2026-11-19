@@ -1116,7 +1116,48 @@ test "mutations of a frozen array raise before running blocks or finding nothing
 
 	ran = false
 	assert_raises(FrozenError) { Literal::Array(Integer).new(1).freeze.map! { ran = true } }
+	assert_raises(FrozenError) { empty.delete(1) { ran = true } }
 	refute ran
+
+	assert_raises(FrozenError) { empty.delete(1) }
+	assert_raises(FrozenError) { empty.delete_at(0) }
+	assert_raises(FrozenError) { empty << "a" }
+end
+
+test "every mutation of a frozen array raises with the array as the receiver" do
+	array = Literal::Array(Integer).new(1, 2).freeze
+
+	[
+		-> { array << 1 },
+		-> { array[0] = 1 },
+		-> { array[0..0] = [1] },
+		-> { array[0, 1] = [1] },
+		-> { array.clear },
+		-> { array.compact! },
+		-> { array.concat },
+		-> { array.delete(3) },
+		-> { array.delete_at(5) },
+		-> { array.insert(0) },
+		-> { array.map!(&:itself) },
+		-> { array.pop },
+		-> { array.pop(0) },
+		-> { array.push },
+		-> { array.reject! { false } },
+		-> { array.replace([1, 2]) },
+		-> { array.reverse! },
+		-> { array.rotate!(0) },
+		-> { array.select! { true } },
+		-> { array.shift },
+		-> { array.shift(0) },
+		-> { array.shuffle! },
+		-> { array.sort! },
+		-> { array.sort_by!(&:itself) },
+		-> { array.uniq! },
+		-> { array.unshift },
+	].each do |mutation|
+		error = assert_raises(FrozenError, &mutation)
+		assert error.receiver.equal?(array)
+	end
 end
 
 # Narrowing

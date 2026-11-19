@@ -130,6 +130,8 @@ class Literal::Set
 	end
 
 	def add(value)
+		__check_frozen__
+
 		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#add")
 		end
@@ -141,11 +143,13 @@ class Literal::Set
 	alias_method :<<, :add
 
 	def clear
+		__check_frozen__
 		@__value__.clear
 		self
 	end
 
 	def delete(value)
+		__check_frozen__
 		@__value__.delete(value)
 		self
 	end
@@ -271,6 +275,7 @@ class Literal::Set
 
 	def reject!(&block)
 		raise ArgumentError.new("#reject! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.reject!(&block)
 		self
@@ -279,6 +284,7 @@ class Literal::Set
 	# Set#replace would adopt a plain set's compare_by_identity, so we replace
 	# with a fresh copy of its members instead.
 	def replace(other)
+		__check_frozen__
 		@__value__.replace(::Set.new(__compatible_value__(other, "#replace")))
 		self
 	end
@@ -291,6 +297,7 @@ class Literal::Set
 
 	def select!(&block)
 		raise ArgumentError.new("#select! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.select!(&block)
 		self
@@ -323,6 +330,7 @@ class Literal::Set
 	end
 
 	def subtract(other)
+		__check_frozen__
 		@__value__.subtract(__other_value__(other, "#subtract"))
 		self
 	end

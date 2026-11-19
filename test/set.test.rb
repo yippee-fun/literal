@@ -371,7 +371,33 @@ test "mutations of a frozen set raise before running blocks or finding nothing t
 
 	ran = false
 	assert_raises(FrozenError) { set.map! { ran = true } }
+	assert_raises(FrozenError) { set.select! { ran = true } }
+	assert_raises(FrozenError) { set.reject! { ran = true } }
 	refute ran
+
+	assert_raises(FrozenError) { set.subtract([]) }
+	assert_raises(FrozenError) { set.delete(2) }
+	assert_raises(FrozenError) { set.add("a") }
+end
+
+test "every mutation of a frozen set raises with the set as the receiver" do
+	set = Literal::Set(Integer).new(1).freeze
+
+	[
+		-> { set.add(1) },
+		-> { set << 1 },
+		-> { set.clear },
+		-> { set.delete(1) },
+		-> { set.map!(&:itself) },
+		-> { set.merge([1]) },
+		-> { set.reject! { false } },
+		-> { set.replace([1]) },
+		-> { set.select! { true } },
+		-> { set.subtract([1]) },
+	].each do |mutation|
+		error = assert_raises(FrozenError, &mutation)
+		assert error.receiver.equal?(set)
+	end
 end
 
 test "#clone of a frozen set is frozen" do
