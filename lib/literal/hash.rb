@@ -111,7 +111,7 @@ class Literal::Hash
 
 		@__key_type__ = key_type
 		@__value_type__ = value_type
-		@__value__ = value.dup
+		@__value__ = {}.update(value)
 		@__collection_type__ = collection_type
 	end
 

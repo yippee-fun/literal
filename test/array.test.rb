@@ -199,6 +199,13 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	assert_equal array.to_a, [1, 2]
 end
 
+test "#initialize copies the elements into a plain array, not an Array subclass" do
+	subclass = Class.new(Array)
+	array = Literal::Array(Integer).coerce(subclass[1, 2])
+
+	assert_equal array.__value__.class, Array
+end
+
 test "#initialize checks the whole array" do
 	assert_raises(Literal::TypeError) do
 		Literal::Array.new([1, "2"], type: Integer)

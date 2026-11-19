@@ -104,7 +104,7 @@ class Literal::Array
 		end
 
 		@__type__ = type
-		@__value__ = value.dup
+		@__value__ = ::Array.new(value)
 		@__collection_type__ = collection_type
 	end
 

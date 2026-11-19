@@ -126,6 +126,13 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	assert_equal tuple.to_a, ["a", 1]
 end
 
+test "#initialize copies the values into a plain array, not an Array subclass" do
+	subclass = Class.new(Array)
+	tuple = Literal::Tuple(String, Integer).coerce(subclass["a", 1])
+
+	assert_equal tuple.__value__.class, Array
+end
+
 # Equality
 
 test "#== is structural" do

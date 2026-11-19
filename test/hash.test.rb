@@ -124,6 +124,22 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	assert_equal hash.to_h, { a: 1 }
 end
 
+test "#initialize copies only the entries, not defaults or identity comparison" do
+	with_default = Literal::Hash(String, Integer).new(Hash.new("bad")).to_h
+	assert_equal with_default["missing"], nil
+
+	with_default_proc = Literal::Hash(String, Integer).coerce(Hash.new { "bad" }).to_h
+	assert_equal with_default_proc["missing"], nil
+
+	identity = {}.compare_by_identity
+	identity["a"] = 1
+
+	refute Literal::Hash(String, Integer).new(identity).to_h.compare_by_identity?
+
+	subclass = Class.new(Hash)
+	assert_equal Literal::Hash(String, Integer).new(subclass[{ "a" => 1 }]).to_h.class, Hash
+end
+
 # Equality
 
 test "#== is structural" do

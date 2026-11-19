@@ -108,6 +108,16 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	assert_literal_set set, type: Integer, members: [1, 2]
 end
 
+test "#initialize and #replace copy only the members, not identity comparison" do
+	identity = ::Set["a"].compare_by_identity
+
+	refute Literal::Set(String).coerce(identity).to_set.compare_by_identity?
+	refute Literal::Set(String).new.replace(identity).to_set.compare_by_identity?
+
+	subclass = Class.new(::Set)
+	assert_equal Literal::Set(String).coerce(subclass["a"]).to_set.class, ::Set
+end
+
 # Equality
 
 test "#== is structural" do

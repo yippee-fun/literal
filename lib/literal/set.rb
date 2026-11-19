@@ -100,7 +100,7 @@ class Literal::Set
 		end
 
 		@__type__ = type
-		@__value__ = value.dup
+		@__value__ = ::Set.new(value)
 		@__collection_type__ = collection_type
 	end
 
@@ -278,8 +278,10 @@ class Literal::Set
 		self
 	end
 
+	# Set#replace would adopt a plain set's compare_by_identity, so we replace
+	# with a fresh copy of its members instead.
 	def replace(other)
-		@__value__.replace(__compatible_value__(other, "#replace"))
+		@__value__.replace(::Set.new(__compatible_value__(other, "#replace")))
 		self
 	end
 

@@ -122,7 +122,7 @@ class Literal::Tuple
 		end
 
 		@__types__ = types
-		@__value__ = value.dup
+		@__value__ = ::Array.new(value)
 		@__collection_type__ = collection_type
 	end
 
