@@ -265,3 +265,7 @@ test "pattern matching" do
 	match { Color::Red => Color[1] }
 	match { Color::Red => Color[hex: "#FF0000"] }
 end
+
+test "members are tracked by their constant names" do
+	assert_equal Literal.const_name(Color::Red), Color::Red.name
+end

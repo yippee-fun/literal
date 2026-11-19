@@ -98,6 +98,7 @@ class Literal::Enum
 
 		def const_added(name)
 			raise ArgumentError if frozen?
+			super
 			object = const_get(name)
 
 			if self === object
