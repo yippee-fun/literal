@@ -249,3 +249,19 @@ test "result types match only results" do
 	assert_equal (Literal::Result(Integer, String) === 1), false
 	assert_equal (Literal::Result(Integer, String) === nil), false
 end
+
+test "results with equal contents are equal" do
+	type = Literal::Result(Integer, String)
+
+	assert_equal type.success(1), type.success(1)
+	assert type.success(1).eql?(type.success(1))
+	assert_equal type.success(1).hash, type.success(1).hash
+	assert_equal type.failure("no"), type.failure("no")
+	assert_equal type.failure("no").hash, type.failure("no").hash
+
+	refute_equal type.success(1), type.success(2)
+	refute_equal type.failure("no"), type.failure("nope")
+	refute_equal Literal::Result(String, String).success("no"), type.failure("no")
+	refute type.success(1).eql?(Literal::Result(Float, String).success(1.0))
+	assert_equal type.success(1), Literal::Result(Numeric, String).success(1)
+end

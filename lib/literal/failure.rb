@@ -92,6 +92,18 @@ class Literal::Failure < Literal::Result
 		@error
 	end
 
+	def ==(other)
+		Literal::Failure === other && @error == other.error!
+	end
+
+	def eql?(other)
+		Literal::Failure === other && @error.eql?(other.error!)
+	end
+
+	def hash
+		[Literal::Failure, @error].hash
+	end
+
 	def map(type)
 		raise Literal::ArgumentError unless block_given?
 

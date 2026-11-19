@@ -76,6 +76,18 @@ class Literal::Success < Literal::Result
 		@value
 	end
 
+	def ==(other)
+		Literal::Success === other && @value == other.value!
+	end
+
+	def eql?(other)
+		Literal::Success === other && @value.eql?(other.value!)
+	end
+
+	def hash
+		[Literal::Success, @value].hash
+	end
+
 	def deconstruct
 		[@value]
 	end
