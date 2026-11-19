@@ -112,6 +112,7 @@ class Literal::Draft < Literal::Struct
 				# relaxed member from materializing before a real value arrives.
 				Literal::Types._Union(Literal::Undefined, Literal::Types._DraftState(property.type)),
 				property.kind,
+				reader: property.reader,
 				predicate: property.predicate,
 				default: Literal::Undefined,
 				description: property.description,

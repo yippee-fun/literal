@@ -381,3 +381,28 @@ test "Literal::Struct.build builds through a draft" do
 	assert_equal value.name, "John"
 	assert_equal value.id, 1
 end
+
+test "drafts accept any shape their drafted type accepts" do
+	klass = Class.new(Literal::Data) do
+		prop :class, String, reader: false
+		prop :name, String
+	end
+
+	value = klass.build(class: "admin") { |draft| draft.name = "John" }
+
+	assert_equal value.to_h, { class: "admin", name: "John" }
+	assert_equal Literal::Draft(klass).new.class.__type__, klass
+end
+
+test "drafts mirror the drafted type's reader visibility" do
+	klass = Class.new(Literal::Struct) do
+		prop :name, String, reader: :private
+		prop :age, Integer, reader: false
+	end
+
+	draft = Literal::Draft(klass).new(name: "John", age: 1)
+
+	assert draft.class.private_method_defined?(:name)
+	refute draft.respond_to?(:age)
+	assert_equal draft.finalize.to_h, { name: "John", age: 1 }
+end
