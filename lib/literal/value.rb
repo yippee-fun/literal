@@ -59,14 +59,23 @@ class Literal::Value
 	end
 
 	def marshal_load(payload)
-		_version, value, was_frozen = payload
+		# Marshal.load rebuilds the value unfrozen, so restore its frozen state
+		# before the type check, which may require it.
+		case payload
+		in [1, value, was_frozen]
+			# Version 1 didn't record it, so freeze only if the type requires it.
+			value.freeze if Literal.subtype?(__type__, Literal::Types::FrozenType::Anything)
+		in [2, value, was_frozen, value_was_frozen]
+			value.freeze if value_was_frozen
+		end
 
+		Literal.check(value, __type__)
 		@value = value
 		freeze if was_frozen
 	end
 
 	def marshal_dump
-		[1, @value, frozen?].freeze
+		[2, @value, frozen?, Literal::FROZEN.bind_call(@value)].freeze
 	end
 
 	freeze

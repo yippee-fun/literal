@@ -67,3 +67,40 @@ test "eql? and hash agree when a subclass overrides the reader" do
 	assert shouting.new("a").eql?(shouting.new("A"))
 	assert_equal shouting.new("a").hash, shouting.new("A").hash
 end
+
+test "from_pack type checks the value" do
+	assert_equal Age.from_pack(Age.new(20).as_pack), Age.new(20)
+
+	assert_raises(Literal::TypeError) { Age.from_pack([1, "not an int", true]) }
+	assert_raises(Literal::TypeError) { Age.from_pack([1, 17, true]) }
+end
+
+test "from_pack restores the value's frozen state before checking it" do
+	frozen_name = Literal::Value(Literal::Types._Frozen(String))
+	pack = Marshal.load(Marshal.dump(frozen_name.new("Joel").as_pack))
+
+	assert_equal frozen_name.from_pack(pack), frozen_name.new("Joel")
+	assert_equal Age.from_pack([1, 20, true]), Age.new(20)
+end
+
+test "from_pack loads version 1 payloads, which don't record the value's frozen state" do
+	frozen_name = Literal::Value(Literal::Types._Frozen(String))
+	name = Literal::Value(String)
+
+	frozen_loaded = frozen_name.from_pack(Marshal.load(Marshal.dump([1, "Joel", true])))
+	loaded = name.from_pack(Marshal.load(Marshal.dump([1, "Joel", true])))
+
+	assert_equal frozen_loaded, frozen_name.new("Joel")
+	assert frozen_loaded.value.frozen?
+	refute loaded.value.frozen?
+	assert_raises(Literal::TypeError) { frozen_name.from_pack([1, 1, true]) }
+
+	mutable = []
+	assert_raises(Literal::TypeError) { name.from_pack([1, mutable, true]) }
+	refute mutable.frozen?
+
+	checks = 0
+	counted = Literal::Value(-> (_value) { checks += 1 })
+	counted.from_pack([1, "a", true])
+	assert_equal checks, 1
+end
