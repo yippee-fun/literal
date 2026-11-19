@@ -208,6 +208,7 @@ module Literal::Signatures
 			next unless Literal::EQUAL.bind_call(tp.self, owner)
 
 			tp.disable
+			Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
 			raise Literal::ArgumentError, "#{owner}: the sig at #{signature.site} has no method after it"
 		end
 		@__literal_signature_watch__.enable

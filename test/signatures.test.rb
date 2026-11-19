@@ -198,6 +198,28 @@ end
 
 # TruffleRuby has no TracePoint, so there the next sig catches a dangling one.
 unless RUBY_ENGINE == "truffleruby"
+	test "forgets a dangling sig once it is refused" do
+		namespace = Module.new
+
+		assert_raises(Literal::ArgumentError) do
+			namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				class Reopened
+					extend Literal::Signatures
+
+					sig(String) >> String
+				end
+			RUBY
+		end
+
+		namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+			class Reopened
+				def pair(a, b) = [a, b]
+			end
+		RUBY
+
+		assert_equal namespace::Reopened.new.pair(1, 2), [1, 2]
+	end
+
 	test "refuses to load a class body that ends on a sig" do
 		error = assert_raises(Literal::ArgumentError) do
 			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
