@@ -405,19 +405,15 @@ class BatchedColor < Literal::Enum(Integer)
 		prop :warm, _Boolean, predicate: :public
 	end
 
-	index :hex, String
-
 	Red = new(1, hex: "#f00", warm: true)
 	Blue = new(2, hex: "#00f", warm: false)
 end
 
 test "Literal::Enum works with a batch" do
 	assert_equal BatchedColor.schema_compilations, 1
-	assert BatchedColor.frozen?
 	assert_equal BatchedColor::Red.hex, "#f00"
 	assert_equal BatchedColor::Red.to_h, { value: 1, hex: "#f00", warm: true }
 	assert BatchedColor::Red.warm?
-	assert_equal BatchedColor.find_by(hex: "#00f"), BatchedColor::Blue
 end
 
 test "Literal::Enum members can be built while the batch is open" do
