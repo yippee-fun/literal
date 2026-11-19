@@ -139,6 +139,20 @@ test "marshalling restores the frozen state of property values" do
 	refute b.list.frozen?
 end
 
+class ::RootStructPrivateFreeze
+	private def freeze = raise("private freeze called")
+end
+
+class ::RootStructWithPrivateFreezeProp < Literal::Struct
+	prop :payload, RootStructPrivateFreeze
+end
+
+test "marshalling refreezes a property value whose own freeze is private" do
+	a = RootStructWithPrivateFreezeProp.new(payload: Literal::FREEZE.bind_call(RootStructPrivateFreeze.new))
+
+	assert Literal::FROZEN.bind_call(Marshal.load(Marshal.dump(a)).payload)
+end
+
 test "marshalling loads version 1 payloads" do
 	a = RootStruct.from_pack([1, { name: "Joel" }, false])
 

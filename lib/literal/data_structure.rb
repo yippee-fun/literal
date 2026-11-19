@@ -128,7 +128,7 @@ class Literal::DataStructure
 		# frozen state each value had when it was dumped — before the type
 		# check, which may require it. Version 1 payloads carry no list.
 		frozen_values&.each do |name|
-			attributes[name].freeze if attributes.key?(name)
+			Literal::FREEZE.bind_call(attributes[name]) if attributes.key?(name)
 		end
 
 		# Seals don't apply here: they belong to construction, and a loaded
