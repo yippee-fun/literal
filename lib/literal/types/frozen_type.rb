@@ -50,7 +50,7 @@ class Literal::Types::FrozenType
 		!!(value.frozen? && @type === value)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::FrozenType
 			Literal.subtype?(other.type, @type, context:)

@@ -13,7 +13,7 @@ class Literal::Types::TruthyType
 		!!value
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::TruthyType, true
 			true
