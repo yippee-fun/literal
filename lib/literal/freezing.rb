@@ -18,6 +18,22 @@ module Literal::Freezing
 		end
 	end
 
+	# A type's member as the type holds it: plain data frozen all the way down,
+	# copying anything not already frozen, so mutating what the type was built
+	# from can't change what it matches or its hash. Any other object is left
+	# as it is.
+	#
+	# `when`, not `in`: JRuby's pattern matching calls the value's to_s, which a
+	# BasicObject lacks and a large array answers by inspecting every element.
+	def frozen_member(value)
+		case value
+		when String, Array, Hash, Set
+			frozen_data(value, {}.compare_by_identity)
+		else
+			value
+		end
+	end
+
 	# The object, frozen by its own #freeze, which may be private or return
 	# something else. A shape's own #freeze may be a reader. One already frozen
 	# is left alone, since its #freeze may not expect to run again.
@@ -146,20 +162,24 @@ module Literal::Freezing
 	end
 
 	# Each value is copied once, so a value appearing twice is copied once and a
-	# value containing itself is copied containing its copy.
+	# value containing itself is copied containing its copy. Copies are clones,
+	# keeping any singleton methods, like a literal's own ===.
 	private def frozen_data(value, copies)
 		return copies[value] if copies.key?(value)
 
 		case value
 		when String
-			value.frozen? ? value : (copies[value] = value.dup.freeze)
+			value.frozen? ? value : (copies[value] = value.clone(freeze: true))
 		when Array, Set
-			copy = copies[value] = value.dup
+			copy = copies[value] = value.clone(freeze: false)
 			copy.map! { |item| frozen_data(item, copies) }.freeze
 		when Hash
-			# A copy keeps the hash's default and key comparison.
-			copy = copies[value] = value.dup.clear
-			value.each { |key, item| copy[frozen_data(key, copies)] = frozen_data(item, copies) }
+			# A copy keeps the hash's default and key comparison, and so, compared
+			# by identity, its keys.
+			copy = copies[value] = value.clone(freeze: false).clear
+			value.each do |key, item|
+				copy[value.compare_by_identity? ? key : frozen_data(key, copies)] = frozen_data(item, copies)
+			end
 			copy.freeze
 		else
 			value

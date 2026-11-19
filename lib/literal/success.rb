@@ -5,7 +5,7 @@ class Literal::Success < Literal::Result
 		include Literal::Type
 
 		def initialize(type)
-			@type = type
+			@type = Literal::Freezing.frozen_member(type)
 			freeze
 		end
 

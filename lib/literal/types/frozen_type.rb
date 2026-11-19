@@ -17,8 +17,8 @@ class Literal::Types::FrozenType
 			warn "_Frozen type is redundant for #{type.inspect} since it is always frozen."
 		end
 
-		@type = type
-		@hash = literal_hash(Literal::Types::FrozenType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::FrozenType, @type)
 		freeze
 	end
 

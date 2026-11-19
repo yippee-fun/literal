@@ -5,8 +5,8 @@ class Literal::Types::ConstraintType
 	include Literal::Type
 
 	def initialize(object_constraints, property_constraints)
-		@object_constraints = object_constraints.dup.freeze
-		@property_constraints = property_constraints.dup.freeze
+		@object_constraints = Literal::Freezing.frozen_member(object_constraints)
+		@property_constraints = Literal::Freezing.frozen_member(property_constraints)
 		@hash = literal_hash(Literal::Types::ConstraintType, @object_constraints, @property_constraints)
 		freeze
 	end

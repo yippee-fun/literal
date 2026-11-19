@@ -5,8 +5,8 @@ class Literal::Result::Generic
 	include Literal::Types::Distributed
 
 	def initialize(success_type, failure_type)
-		@success_type = success_type
-		@failure_type = failure_type
+		@success_type = Literal::Freezing.frozen_member(success_type)
+		@failure_type = Literal::Freezing.frozen_member(failure_type)
 
 		freeze
 	end

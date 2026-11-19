@@ -25,8 +25,8 @@ class Literal::Hash
 		include Literal::Coercions::Composable
 
 		def initialize(key_type, value_type)
-			@key_type = key_type
-			@value_type = value_type
+			@key_type = Literal::Freezing.frozen_member(key_type)
+			@value_type = Literal::Freezing.frozen_member(value_type)
 			freeze
 		end
 

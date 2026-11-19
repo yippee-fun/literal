@@ -143,6 +143,16 @@ test "types can hold matchers without a hash method" do
 	end
 end
 
+test "types' copies of literal members match as the literals did" do
+	matcher = +"anything"
+	matcher.define_singleton_method(:===) { |_value| true }
+	key = +"key"
+	by_identity = { key => 1 }.compare_by_identity
+
+	assert _Array(matcher) === ["something"]
+	assert _Array(by_identity) === [by_identity]
+end
+
 test "types can hold literals that contain themselves and matchers without a hash method" do
 	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
 	looped = [matcher]
@@ -182,4 +192,46 @@ test "types hold frozen copies of their members, so eql? and hash stay in agreem
 	assert_value_equal tuple, _Tuple(String)
 	assert_value_equal map, _Map(a: String)
 	assert_equal predicate.message, "anything"
+end
+
+test "types hold frozen copies of literal members, so mutating them leaves the type as it was" do
+	types = -> (literal) do
+		[
+			_Array(literal),
+			_Set(literal),
+			_Hash(literal, literal),
+			_Nilable(literal),
+			_Not(literal),
+			_Frozen(literal),
+			_Range(literal),
+			_Enumerable(literal),
+			_Kind(literal),
+			_Union([literal], Integer),
+			_TaggedUnion(a: literal),
+			_TaggedUnion([literal] => String),
+			_Tuple(literal),
+			_Map(a: literal),
+			_Constraint(String, size: literal),
+			_Array([literal]),
+			Literal::Array(literal),
+			Literal::Hash(literal, literal),
+			Literal::Set(literal),
+			Literal::Tuple(literal),
+			Literal::Result(literal, literal),
+			Literal::Success(literal),
+			Literal::Failure(literal),
+			Literal::Types::DraftStateType.new(literal),
+		]
+	end
+
+	literal = +"a"
+	built = types.(literal)
+	hashes = built.map(&:hash)
+	literal.replace("b")
+
+	built.zip(hashes, types.(+"a"), types.(+"b")).each do |type, hash, same, other|
+		assert_equal type.hash, hash
+		assert type.eql?(same)
+		refute type.eql?(other)
+	end
 end

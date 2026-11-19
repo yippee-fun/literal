@@ -5,8 +5,8 @@ class Literal::Types::EnumerableType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
-		@hash = literal_hash(Literal::Types::EnumerableType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::EnumerableType, @type)
 		freeze
 	end
 

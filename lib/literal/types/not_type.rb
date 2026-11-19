@@ -5,8 +5,8 @@ class Literal::Types::NotType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
-		@hash = literal_hash(Literal::Types::NotType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::NotType, @type)
 		freeze
 	end
 

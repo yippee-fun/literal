@@ -5,8 +5,8 @@ class Literal::Types::SetType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
-		@hash = literal_hash(Literal::Types::SetType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::SetType, @type)
 		freeze
 	end
 

@@ -5,8 +5,8 @@ class Literal::Types::ArrayType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
-		@hash = literal_hash(Literal::Types::ArrayType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::ArrayType, @type)
 		freeze
 	end
 

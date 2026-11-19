@@ -18,7 +18,7 @@ class Literal::Set
 		include Literal::Coercions::Composable
 
 		def initialize(type)
-			@type = type
+			@type = Literal::Freezing.frozen_member(type)
 			freeze
 		end
 

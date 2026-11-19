@@ -5,7 +5,7 @@ class Literal::Types::MapType
 	include Literal::Type
 
 	def initialize(shape)
-		@shape = shape.dup.freeze
+		@shape = Literal::Freezing.frozen_member(shape)
 		@hash = literal_hash(Literal::Types::MapType, @shape)
 		freeze
 	end

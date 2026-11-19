@@ -7,8 +7,8 @@ class Literal::Types::NilableType
 	include Literal::Types::Distributed
 
 	def initialize(type)
-		@type = type
-		@hash = literal_hash(Literal::Types::NilableType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::NilableType, @type)
 		freeze
 	end
 

@@ -16,7 +16,7 @@ class Literal::Types::TaggedUnionType
 				end
 			else
 				raise Literal::ArgumentError.new("_TaggedUnion has duplicate tag: #{tag.inspect}") if flattened.key?(tag)
-				flattened[tag] = type
+				flattened[Literal::Freezing.frozen_member(tag)] = Literal::Freezing.frozen_member(type)
 			end
 		end
 

@@ -5,8 +5,8 @@ class Literal::Types::RangeType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
-		@hash = literal_hash(Literal::Types::RangeType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::RangeType, @type)
 		freeze
 	end
 

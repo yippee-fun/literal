@@ -15,9 +15,9 @@ class Literal::Types::DraftStateType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
-		@relaxed = __relax__(type)
-		@hash = literal_hash(Literal::Types::DraftStateType, type)
+		@type = Literal::Freezing.frozen_member(type)
+		@relaxed = __relax__(@type)
+		@hash = literal_hash(Literal::Types::DraftStateType, @type)
 		freeze
 	end
 

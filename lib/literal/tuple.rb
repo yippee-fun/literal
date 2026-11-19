@@ -18,7 +18,7 @@ class Literal::Tuple
 		def initialize(*types)
 			raise Literal::ArgumentError.new("Literal::Tuple type must have at least one type.") if types.empty?
 
-			@types = types.freeze
+			@types = Literal::Freezing.frozen_member(types)
 			freeze
 		end
 

@@ -16,7 +16,7 @@ class Literal::Types::UnionType
 		primitives = Set[]
 
 		while queue.length > 0
-			type = queue.shift
+			type = Literal::Freezing.frozen_member(queue.shift)
 			# Flattened members are queued at the front so that they take the
 			# position of the member they came from — order decides how JSON
 			# schemas list them and which of two incomparable members `resolve`
