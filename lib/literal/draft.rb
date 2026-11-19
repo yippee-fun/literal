@@ -85,9 +85,15 @@ class Literal::Draft < Literal::Struct
 		end
 
 		# A draft mirrors its type's accessors, which the type has already
-		# vetted, and its own API is prepended over them.
+		# vetted, except those its own API takes.
 		private def __literal_relied_on__(method_name)
 			nil
+		end
+
+		# Not prepending API over the readers: TruffleRuby skips prepending a
+		# module that a superclass already includes.
+		private def __draft_api_method__?(method_name)
+			API.method_defined?(method_name) || API.private_method_defined?(method_name)
 		end
 
 		private def __draft__(type)
@@ -96,7 +102,6 @@ class Literal::Draft < Literal::Struct
 			end
 
 			define_singleton_method(:__type__) { type }
-			prepend API
 
 			if type.name && respond_to?(:set_temporary_name)
 				set_temporary_name "Literal::Draft(#{type.name})"
@@ -119,8 +124,8 @@ class Literal::Draft < Literal::Struct
 				# relaxed member from materializing before a real value arrives.
 				Literal::Types._Union(Literal::Undefined, Literal::Types._DraftState(property.type)),
 				property.kind,
-				reader: property.reader,
-				predicate: property.predicate,
+				reader: __draft_api_method__?(property.name) ? false : property.reader,
+				predicate: __draft_api_method__?(:"#{property.name.name}?") ? false : property.predicate,
 				default: Literal::Undefined,
 				description: property.description,
 				&(original_coercion && proc { |value|
@@ -189,9 +194,9 @@ class Literal::Draft < Literal::Struct
 		freeze
 	end
 
-	# The draft's own methods. Every draft class prepends them, so a drafted
-	# property's reader never shadows one: a property named `finalize` is read
-	# with `draft[:finalize]`.
+	# The draft's own methods. A drafted property gets no reader or predicate
+	# that would shadow one: a property named `finalize` is read with
+	# `draft[:finalize]`.
 	module API
 		# Build the drafted type from the properties that have been set. The
 		# drafted type's defaults apply to anything left unset, and its required
