@@ -330,3 +330,22 @@ test "results delegate equality and hashing through a delegator" do
 	assert type.success(SimpleDelegator.new(1)).eql?(type.success(SimpleDelegator.new(1)))
 	assert_equal type.success(SimpleDelegator.new(1)).hash, type.success(SimpleDelegator.new(1)).hash
 end
+
+test "a result type is the union of its success and failure types" do
+	result = Literal::Result(Integer, String)
+	union = _Union(Literal::Success(Integer), Literal::Failure(String))
+
+	assert_subtype result, union
+	assert_subtype union, result
+	assert_subtype result, _Union(Literal::Success(Numeric), Literal::Failure(_Union(String, Symbol)))
+	assert_subtype result, _Union(Literal::Failure(String), Literal::Success(Integer), nil)
+	assert_subtype result, Literal::Result
+	assert_subtype result, _Nilable(Literal::Result(Numeric, String))
+
+	refute_subtype result, Literal::Success(Integer)
+	refute_subtype result, _Union(Literal::Success(Integer), Literal::Failure(Symbol))
+	refute_subtype result, Literal::Success
+
+	assert Literal::Result(String, Integer) <= Literal::Result(Object, Numeric)
+	refute Literal::Result(String, Integer) <= Literal::Result(Object, String)
+end

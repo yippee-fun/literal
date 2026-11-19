@@ -274,6 +274,10 @@ module Literal
 			subtype?(nil, supertype, context:) && subtype?(subtype.type, supertype, context:)
 		in Types::TaggedUnionType
 			subtype.members.each_value.all? { |member| subtype?(member, supertype, context:) }
+		in Result::Generic
+			# Results are closed: Result(S, F) is _Union(Success(S), Failure(F)).
+			subtype?(Success(subtype.success_type), supertype, context:) &&
+				subtype?(Failure(subtype.failure_type), supertype, context:)
 		else
 			member_subtype?(subtype, supertype, context)
 		end

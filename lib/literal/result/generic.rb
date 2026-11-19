@@ -37,9 +37,6 @@ class Literal::Result::Generic
 
 	def >=(other, context: nil)
 		case other
-		when Literal::Result::Generic
-			Literal.structural_subtype?(other.success_type, @success_type, context:) &&
-				Literal.structural_subtype?(other.failure_type, @failure_type, context:)
 		when Literal::Success::Generic
 			Literal.structural_subtype?(other.type, @success_type, context:)
 		when Literal::Failure::Generic
@@ -47,10 +44,6 @@ class Literal::Result::Generic
 		else
 			false
 		end
-	end
-
-	def literal_upper_bound
-		Literal::Result
 	end
 
 	def inspect
