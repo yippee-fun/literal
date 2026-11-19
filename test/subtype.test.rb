@@ -25,6 +25,20 @@ test "literal values are subtypes of their module supertypes" do
 	assert_subtype date, Object
 end
 
+if defined?(Ractor) && Ractor.shareable?(Literal::OBJECT_ID)
+	test "shareable types can be compared in another Ractor" do
+		types = Ractor.make_shareable([_Boolean, _Array(_Union(String, Symbol)), _Array(String)])
+
+		ractor = Ractor.new(types) do |(boolean, wide, narrow)|
+			[Literal.subtype?(true, boolean), wide >= narrow, narrow <= wide, narrow >= wide]
+		end
+
+		results = ractor.respond_to?(:value) ? ractor.value : ractor.take
+
+		assert_equal results, [true, true, true, false]
+	end
+end
+
 include Literal::Types
 
 test "numeric literals are bounded by Numeric, not their own class" do

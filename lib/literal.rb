@@ -22,6 +22,21 @@ module Literal
 	HASH = Kernel.instance_method(:hash)
 	INSPECT = Kernel.instance_method(:inspect)
 
+	# So shareable types can be checked and compared in any Ractor, on Rubies
+	# that can share method objects (4.0+).
+	if defined?(Ractor)
+		begin
+			constants.each do |name|
+				next if autoload?(name)
+
+				handle = const_get(name)
+				Ractor.make_shareable(handle) if UnboundMethod === handle
+			end
+		rescue Ractor::Error
+			nil
+		end
+	end
+
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")
 		loader.ignore("#{__dir__}/literal/rails")
