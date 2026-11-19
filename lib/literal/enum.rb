@@ -256,6 +256,16 @@ class Literal::Enum
 		keys ? h.slice(*keys) : h
 	end
 
+	def dup
+		self
+	end
+
+	def clone(freeze: nil)
+		raise ArgumentError.new("can't unfreeze #{self.class.inspect}") if freeze == false
+
+		self
+	end
+
 	def _dump(level)
 		Marshal.dump(@value)
 	end

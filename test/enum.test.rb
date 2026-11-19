@@ -325,3 +325,10 @@ test ".each without a block returns an enumerator" do
 	assert_equal enumerator.size, 4
 	assert_equal enumerator.with_index.to_a.first, [Color::Red, 0]
 end
+
+test "members are singletons, so dup and clone return the member" do
+	assert Color::Red.dup.equal?(Color::Red)
+	assert Color::Red.clone.equal?(Color::Red)
+	assert Color::Red.clone(freeze: true).equal?(Color::Red)
+	assert_raises(ArgumentError) { Color::Red.clone(freeze: false) }
+end
