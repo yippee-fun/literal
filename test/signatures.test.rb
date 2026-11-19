@@ -115,6 +115,27 @@ test "wraps the method under a prepended override" do
 	assert_raises(Literal::TypeError) { klass.new.double("2") }
 end
 
+test "lets a method under a prepended override call super" do
+	parent = Class.new do
+		def double(number) = number * 10
+	end
+
+	decorator = Module.new do
+		def double(number) = super + 1
+	end
+
+	klass = Class.new(parent) do
+		extend Literal::Signatures
+		prepend decorator
+
+		sig(Integer) >> Integer
+		def double(number) = super * 2
+	end
+
+	assert_equal klass.new.double(2), 41
+	assert_raises(Literal::TypeError) { klass.new.double("2") }
+end
+
 test "keeps refusing keywords a method refuses" do
 	klass = Class.new do
 		extend Literal::Signatures

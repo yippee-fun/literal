@@ -25,7 +25,8 @@
 # The checking method is compiled to the method's own parameter list, so Ruby
 # refuses a wrong number of arguments or an unknown keyword before anything is
 # checked, and checking allocates nothing, save a Hash to pass on the given
-# keywords when an optional one is omitted.
+# keywords when an optional one is omitted or the method is under a prepended
+# override.
 module Literal::Signatures
 	include Literal::Types
 
@@ -94,25 +95,26 @@ module Literal::Signatures
 		__literal_refuse_mismatch__(signature, parameters, "#{self}#{singleton ? '.' : '#'}#{name}")
 
 		visibility = __literal_visibility__(owner, name)
-		unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
+		checker = Module.new
 
-		# alias_method resolves through prepended modules, so past one, copy the
-		# class's own definition. JRuby names a copy's frames and super calls
-		# after the copy, so alias where we can.
+		# alias_method resolves through prepended modules, so past one, call the
+		# class's own definition through bind_call. A copy would do on MRI, but
+		# JRuby names a copy's super calls after the copy.
 		if prepended
-			owner.define_method(unsigned, original)
+			checker.const_set(:ORIGINAL, original)
+			callee = "ORIGINAL.bind_call(self, "
 		else
+			unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
 			owner.alias_method(unsigned, name)
+			owner.__send__(:private, unsigned)
+			callee = "#{unsigned}("
 		end
 
-		owner.__send__(:private, unsigned)
-
-		checker = Module.new
 		keywords = signature.keywords.values_at(*__literal_keywords__(parameters))
 		checker.const_set(:TYPES, [*signature.positional, *keywords, signature.returns].freeze)
 		checker.const_set(:OMITTED, OMITTED)
 		compiled = (IDENTIFIER.match?(name) || OPERATORS.include?(name)) ? name : :__literal_checker__
-		code = __literal_checker_code__(compiled, unsigned, parameters, singleton ? "#{self}.#{name}" : "##{name}", singleton)
+		code = __literal_checker_code__(compiled, callee, parameters, singleton ? "#{self}.#{name}" : "##{name}", singleton)
 		# An explicit path, so every engine attributes these frames to Literal.
 		checker.module_eval(code, __FILE__, __LINE__)
 
@@ -126,7 +128,7 @@ module Literal::Signatures
 	# of the call and the method's own default applies. A repeated underscore
 	# name gets a name of its own; a keyword named after a reserved word is read
 	# off the binding.
-	private def __literal_checker_code__(name, unsigned, parameters, method, singleton)
+	private def __literal_checker_code__(name, callee, parameters, method, singleton)
 		receiver = singleton ? "nil" : "self"
 		check = lambda do |value, index, label|
 			"::Literal.check(#{value}, TYPES[#{index}]) { |c| c.fill_receiver(receiver: #{receiver}, method: #{method.inspect}, label: #{label.inspect}) }"
@@ -166,7 +168,7 @@ module Literal::Signatures
 		required = locals.first(positional.count { |kind, _| :req == kind })
 		optional = locals.drop(required.size)
 		dispatch = lambda do |keyword_arguments|
-			calls = (0..(optional.size)).map { |count| "#{unsigned}(#{[*required, *optional.first(count), *keyword_arguments, "&#{block}"].join(', ')})" }
+			calls = (0..(optional.size)).map { |count| "#{callee}#{[*required, *optional.first(count), *keyword_arguments, "&#{block}"].join(', ')})" }
 			branches = optional.zip(calls).map { |local, call| "OMITTED.equal?(#{local}) then #{call}" }
 			branches.empty? ? calls.last : "if #{branches.join("\nelsif ")}\nelse #{calls.last}\nend"
 		end
