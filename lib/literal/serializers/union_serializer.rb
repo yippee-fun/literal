@@ -230,6 +230,7 @@ class Literal::UnionSerializer < Literal::Serializer
 		case members.length
 		when 0
 			natural_number_member_type(json_type, type) ||
+				natural_integer_member_type(raw_value, type) ||
 				raise(Literal::ArgumentError, "No union member type for JSON type #{json_type.inspect} in #{type.inspect}")
 		when 1
 			members.first
@@ -269,6 +270,15 @@ class Literal::UnionSerializer < Literal::Serializer
 		return unless json_type == "integer"
 
 		type.each.find { |member| json_type_for(member) == "number" }
+	end
+
+	# JSON parsers can read 2 as 2.0, so a whole number no number member
+	# takes loads as an integer member, as JSON Schema would match it.
+	private def natural_integer_member_type(raw_value, type)
+		return unless Float === raw_value
+
+		number = Literal::Serializer.json_equality_key(raw_value)
+		natural_member_type(number, type) if Integer === number
 	end
 
 	private def raw_json_type(value)

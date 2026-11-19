@@ -3330,6 +3330,31 @@ test "const discriminants compare numbers as JSON numbers inside arrays and obje
 	refute Example.serializable_type?(_Union(_Map(kind: integers::One, payload: String), _Map(kind: floats::One, payload: Integer)))
 end
 
+test "integral JSON numbers load as integer union members" do
+	assert_equal Example.deserialize(2.0, type: _Union(1, 2, String)), 2
+	assert_equal Example.deserialize(2.0, type: _Union(Integer, String)), 2
+	assert_equal Example.deserialize(2.0, type: _Union(_Float(finite?: _Truthy), String)), 2.0
+	assert_raises(Literal::ArgumentError) { Example.deserialize(2.5, type: _Union(1, 2, String)) }
+
+	loaded = Example.deserialize(2.0, type: _Union(Integer, _Float(finite?: _Truthy), String))
+	assert_equal loaded, 2.0
+	assert Float === loaded
+
+	assert_equal Example.deserialize(1e24, type: Integer), 10 ** 24
+	assert_equal Example.deserialize(1e24, type: _Union(10 ** 24, 1e24.to_i, String)), 10 ** 24
+end
+
+test "enum members load from JSON equal values" do
+	enum = Class.new(Literal::Enum(_JSONData)) do
+		const_set(:One, new([1, { "a" => 1 }]))
+		const_set(:Two, new([2]))
+	end
+
+	assert_equal Example.deserialize([1.0, { "a" => 1.0 }], type: enum), enum::One
+	assert_equal Example.deserialize([2.0], type: enum::Two), enum::Two
+	assert_raises(Literal::ArgumentError) { Example.deserialize([2.5], type: enum) }
+end
+
 test "const discriminants compare floats by the decimal JSON writes for them" do
 	assert_equal Literal::Serializer.json_equality_key([1e24]), Literal::Serializer.json_equality_key([10 ** 24])
 	assert_equal Literal::Serializer.json_equality_key({ "a" => 0.1 }), { "a" => 1/10r }

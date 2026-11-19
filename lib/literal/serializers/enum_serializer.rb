@@ -34,7 +34,18 @@ class Literal::EnumSerializer < Literal::Serializer
 	end
 
 	def deserialize(data, type:)
-		enum_class(type)[deserialize_contents(data, type: backing_type(type))] || raise(malformed_raw_error(data, type))
+		enum = enum_class(type)
+
+		enum[deserialize_contents(data, type: backing_type(type))] ||
+			json_equal_member(enum, data) ||
+			raise(malformed_raw_error(data, type))
+	end
+
+	# The wire can't tell [1] from [1.0], so a value no member holds exactly
+	# loads as the member it's equal to in JSON.
+	private def json_equal_member(enum, data)
+		key = Literal::Serializer.json_equality_key(data)
+		enum.each.find { |member| @context.const_domain(member).include?(key) }
 	end
 
 	private def backing_values(type)
