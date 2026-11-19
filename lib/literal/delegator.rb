@@ -22,11 +22,11 @@ class Literal::Delegator < SimpleDelegator
 	alias_method :==, :===
 
 	def eql?(other)
-		self.class == other.class && __getobj__.eql?(other.__getobj__)
+		self.class == Literal::CLASS.bind_call(other) && Literal.payload_eql?(__getobj__, other.__getobj__)
 	end
 
 	def hash
-		[self.class, __getobj__].hash
+		[self.class, Literal.payload_hash(__getobj__)].hash
 	end
 
 	freeze

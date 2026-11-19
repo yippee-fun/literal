@@ -58,6 +58,16 @@ module Literal
 		end
 	end
 
+	# Compares and hashes a wrapped payload, which may undefine eql? or hash,
+	# or replace __send__.
+	def self.payload_eql?(payload, other)
+		EQUAL.bind_call(payload, other) || (implements?(payload, :eql?) && SEND.bind_call(payload, :eql?, other))
+	end
+
+	def self.payload_hash(payload)
+		implements?(payload, :hash) ? SEND.bind_call(payload, :hash) : HASH.bind_call(payload)
+	end
+
 	def self.const_name(object)
 		const_ref(object).first&.name
 	end

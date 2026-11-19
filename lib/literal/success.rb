@@ -84,15 +84,11 @@ class Literal::Success < Literal::Result
 	end
 
 	def eql?(other)
-		return false unless Literal::Success === other
-
-		value = other.value!
-		Literal::EQUAL.bind_call(@value, value) || (Literal.implements?(@value, :eql?) && Literal::SEND.bind_call(@value, :eql?, value))
+		Literal::Success === other && Literal.payload_eql?(@value, other.value!)
 	end
 
 	def hash
-		value_hash = Literal.implements?(@value, :hash) ? Literal::SEND.bind_call(@value, :hash) : Literal::HASH.bind_call(@value)
-		[Literal::Success, value_hash].hash
+		[Literal::Success, Literal.payload_hash(@value)].hash
 	end
 
 	def deconstruct
