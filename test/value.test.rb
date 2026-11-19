@@ -179,6 +179,21 @@ test "from_pack refreezes a value whose own freeze is private or overridden" do
 	end
 end
 
+test "from_pack keeps a value shared where the type requires it frozen" do
+	shared = "x"
+	value_class = Literal::Value(Literal::Types._Array(Literal::Types._Frozen(String)))
+	loaded = value_class.from_pack(value_class.new([shared, shared]).as_pack)
+
+	assert loaded.value.all?(&:frozen?)
+	assert loaded.value[0].equal?(loaded.value[1])
+
+	inner = ["x"].freeze
+	value_class = Literal::Value(Literal::Types._Array(Literal::Types._Frozen(Literal::Types._Array(String))))
+	loaded = value_class.from_pack(value_class.new([inner, [inner[0]].freeze]).as_pack)
+
+	assert loaded.value[0][0].equal?(loaded.value[1][0])
+end
+
 test "from_pack restores frozen values that contain themselves" do
 	value_class = Literal::Value(Literal::Types._Frozen(Array))
 	looped = []

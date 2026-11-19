@@ -9,10 +9,10 @@ module Literal::Freezing
 	# copying anything not already frozen, so the raw input it may share is
 	# never mutated. Any other object is frozen by its own #freeze, and left as
 	# it is when nested in plain data. A shape's own #freeze may be a reader.
-	def deep_frozen(value)
+	def deep_frozen(value, copies = {}.compare_by_identity)
 		case value
 		in String | Array | Hash | Set
-			frozen_data(value)
+			frozen_data(value, copies)
 		in _ if Literal::Properties === Literal::CLASS.bind_call(value)
 			Literal::FREEZE.bind_call(value)
 		else
@@ -26,60 +26,68 @@ module Literal::Freezing
 	# deserialization would load it. The containers holding those values are
 	# updated in place.
 	def restore_frozen(value, type)
-		restore(value, type, {}.compare_by_identity)
+		restore(value, type, Restoration.new(active: {}.compare_by_identity, restored: {}.compare_by_identity, copies: {}.compare_by_identity))
 	end
+
+	# The values being restored, each one's replacement by type, and the frozen
+	# copies made, all by identity, so a value appearing more than once is
+	# replaced by the same object each time, as Marshal shares it.
+	Restoration = Data.define(:active, :restored, :copies)
 
 	# A value can contain itself, so a value already being restored as a type
 	# is left as it is rather than walked again.
-	private def restore(value, type, active)
-		types = (active[value] ||= {}.compare_by_identity)
+	private def restore(value, type, state)
+		replacements = (state.restored[value] ||= {})
+		return replacements[type] if replacements.key?(type)
+
+		types = (state.active[value] ||= {}.compare_by_identity)
 		return value if types.key?(type)
 
 		types[type] = true
 
 		begin
-			restore_as(value, type, active)
+			replacements[type] = restore_as(value, type, state)
 		ensure
 			types.delete(type)
 		end
 	end
 
-	private def restore_as(value, type, active)
+	private def restore_as(value, type, state)
 		case type
 		when Literal::Types::DeferredType
-			restore(value, type.materialize, active)
+			restore(value, type.materialize, state)
 		when Literal::Types::FrozenType
-			value = restore(value, type.type, active)
-			(type.type === value) ? deep_frozen(value) : value
+			value = restore(value, type.type, state)
+			(type.type === value) ? deep_frozen(value, state.copies) : value
 		when Literal::Types::ConstraintType
-			value = type.object_constraints.reduce(value) { |item, constraint| restore(item, constraint, active) }
+			value = type.object_constraints.reduce(value) { |item, constraint| restore(item, constraint, state) }
 
 			if Literal.subtype?(type.property_constraints[:frozen?], true) && type.object_constraints.all? { |constraint| constraint === value }
-				deep_frozen(value)
+				deep_frozen(value, state.copies)
 			else
 				value
 			end
 		when Literal::Types::UnionType
-			restore_member(value, type, type.each, active)
+			restore_member(value, type, type.each, state)
 		when Literal::Types::TaggedUnionType
-			restore_member(value, type, type.members.each_value, active)
+			restore_member(value, type, type.members.each_value, state)
 		when Literal::Types::NilableType
-			restore(value, type.type, active)
+			restore(value, type.type, state)
 		when Literal::Types::RangeType
-			restore_range(value, type, active)
+			restore_range(value, type, state)
 		else
-			restore_contents(value, type, active)
+			restore_contents(value, type, state)
 			value
 		end
 	end
 
 	# A value already matching the union needs nothing restored, and trying
 	# another member first could freeze what that one requires unfrozen.
-	private def restore_member(value, type, members, active)
+	private def restore_member(value, type, members, state)
 		return value if type === value
 
 		members.each do |member|
-			value = restore(value, member, active)
+			value = restore(value, member, state)
 			break if member === value
 		end
 
@@ -87,11 +95,11 @@ module Literal::Freezing
 	end
 
 	# Ranges are frozen, so one with restored endpoints is a new range.
-	private def restore_range(value, type, active)
+	private def restore_range(value, type, state)
 		return value unless Range === value
 
-		first = restore(value.begin, type.type, active)
-		last = restore(value.end, type.type, active)
+		first = restore(value.begin, type.type, state)
+		last = restore(value.end, type.type, state)
 
 		if first.equal?(value.begin) && last.equal?(value.end)
 			value
@@ -100,38 +108,38 @@ module Literal::Freezing
 		end
 	end
 
-	private def restore_contents(value, type, active)
+	private def restore_contents(value, type, state)
 		return if Literal::FROZEN.bind_call(value)
 
 		case [type, value]
 		in [Literal::Types::ArrayType, Array]
-			value.map! { |item| restore(item, type.type, active) }
+			value.map! { |item| restore(item, type.type, state) }
 		in [Literal::Types::SetType, Set]
-			value.map! { |item| restore(item, type.type, active) }
+			value.map! { |item| restore(item, type.type, state) }
 		in [Literal::Types::HashType, Hash]
-			value.transform_keys! { |key| restore(key, type.key_type, active) }
-			value.transform_values! { |item| restore(item, type.value_type, active) }
+			value.transform_keys! { |key| restore(key, type.key_type, state) }
+			value.transform_values! { |item| restore(item, type.value_type, state) }
 		in [Literal::Types::MapType, Hash]
 			type.shape.each do |key, item_type|
-				value[key] = restore(value[key], item_type, active) if value.key?(key)
+				value[key] = restore(value[key], item_type, state) if value.key?(key)
 			end
 		in [Literal::Types::TupleType, Array]
 			type.types.each_with_index do |item_type, index|
-				value[index] = restore(value[index], item_type, active) if index < value.size
+				value[index] = restore(value[index], item_type, state) if index < value.size
 			end
 		else
 			nil
 		end
 	end
 
-	# Each container is copied once, so a value containing itself is copied
-	# containing its copy.
-	private def frozen_data(value, copies = {}.compare_by_identity)
+	# Each value is copied once, so a value appearing twice is copied once and a
+	# value containing itself is copied containing its copy.
+	private def frozen_data(value, copies)
 		return copies[value] if copies.key?(value)
 
 		case value
 		when String
-			value.frozen? ? value : value.dup.freeze
+			value.frozen? ? value : (copies[value] = value.dup.freeze)
 		when Array, Set
 			copy = copies[value] = value.dup
 			copy.map! { |item| frozen_data(item, copies) }.freeze
