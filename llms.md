@@ -79,7 +79,7 @@ K.from(other)         # from_props(other.to_h.slice(*own props)) — e.g. rehydr
 
 `Struct#[]=` behaves exactly like calling the writer publicly: a private or missing writer raises `NoMethodError`.
 
-`Data#with(**changes)` → frozen copy with the named props replaced (`self` when given none; an unknown name → `NameError`). Changed values take the initializer's path against the copy, in property order: `Literal::Undefined` resolves the default (or unsets a `prop?`), then coerce → seal → check. Carried-over values are type checked, never coerced or resealed. Then `after_initialize`, freeze and the shape's checks, as `new`; `initialize` itself isn't called. A `with` reader is refused — declare it with `reader: false` and replace it via `with(with: …)`.
+`Data#with(**changes)` → frozen copy with the named props replaced (`self` when given none; an unknown name → `NameError`). Changed values take the initializer's path against the copy, in property order: `Literal::Undefined` resolves the default (or unsets a `prop?`), then coerce → seal → check. As with `new`, a `:&` prop resolves its default on `nil` instead, and `:*`/`:**` props have no sentinel: the value is taken as given (`[]`/`{}` is what `new` gets without arguments). Carried-over values are type checked, never coerced or resealed. Then `after_initialize`, freeze and the shape's checks, as `new`; `initialize` itself isn't called. A `with` reader is refused — declare it with `reader: false` and replace it via `with(with: …)`.
 
 ### Draft — `Literal::Draft(P)`
 

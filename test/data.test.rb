@@ -840,6 +840,22 @@ test "with resolves Proc defaults against the copy" do
 	assert_equal copy.greeting, "Hello Grace"
 end
 
+test "with resolves a block default on nil and takes splats as given, as new does" do
+	klass = Class.new(Literal::Data) do
+		prop :rest, _Array(Integer), :*
+		prop :options, _Hash(Symbol, Integer), :**
+		prop :block, Proc, :&, default: -> { -> { :default } }
+	end
+
+	original = klass.new(1, a: 1) { :given }
+
+	assert_equal original.with(block: nil).block.call, :default
+	assert_equal original.with(rest: [], options: {}).to_h.slice(:rest, :options), klass.new.to_h.slice(:rest, :options)
+	assert_raises(Literal::TypeError) { original.with(block: Literal::Undefined) }
+	assert_raises(Literal::TypeError) { original.with(rest: Literal::Undefined) }
+	assert_raises(Literal::TypeError) { original.with(options: Literal::Undefined) }
+end
+
 test "with type checks carried-over values" do
 	klass = Class.new(Literal::Data) do
 		prop :ids, _Array(Integer)
