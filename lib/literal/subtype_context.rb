@@ -1,44 +1,54 @@
 # frozen_string_literal: true
 
+# Pairs are keyed by the object ids of each side, so a type's own == and
+# hash are never consulted. A pair's entry is its memoized result, or the
+# index of its frame while it is being proven.
 class Literal::SubtypeContext
-	Frame = Data.define(:structural_depth, :index, :outer_assumption_floor)
-
 	def initialize
-		@memo = {}
-		@in_progress = {}
+		@pairs = {}
+		@frames = []
 		@structural_depth = 0
 		@assumption_floor = Float::INFINITY
 	end
 
-	attr_reader :memo, :in_progress
-
-	def memoized?(key)
-		@memo.key?(key)
+	# The memoized result for a pair, the assumption for a pair still being
+	# proven, or nil for a pair not yet visited.
+	def recall(subtype_id, supertype_id)
+		case @pairs[subtype_id]&.[](supertype_id)
+		in Integer => frame then assume(frame)
+		in entry then entry
+		end
 	end
 
-	def fetch(key)
-		@memo[key]
+	# Returns the new frame's index. Each frame holds the structural depth
+	# it started at and the assumption floor of the frame around it.
+	def acquire(subtype_id, supertype_id)
+		frame = @frames.size / 2
+		(@pairs[subtype_id] ||= {})[supertype_id] = frame
+		@frames.push(@structural_depth, @assumption_floor)
+		@assumption_floor = Float::INFINITY
+		frame
 	end
 
 	# A result that relied on an assumption about a pair still being proven
 	# further up the stack is provisional: that pair may yet fail, so it is
 	# not memoized.
-	def store(key, result)
-		@memo[key] = result unless @assumption_floor < @in_progress.fetch(key).index
+	def store(subtype_id, supertype_id, frame, result)
+		@pairs[subtype_id][supertype_id] = result unless @assumption_floor < frame
 	end
 
-	def acquire(key)
-		return false if @in_progress.key?(key)
+	def release(subtype_id, supertype_id, frame)
+		supertypes = @pairs[subtype_id]
 
-		@in_progress[key] = Frame.new(@structural_depth, @in_progress.size, @assumption_floor)
-		@assumption_floor = Float::INFINITY
-		true
-	end
+		if Integer === supertypes[supertype_id]
+			supertypes.delete(supertype_id)
+			@pairs.delete(subtype_id) if supertypes.empty?
+		end
 
-	def release(key)
-		frame = @in_progress.delete(key)
-		@assumption_floor = Float::INFINITY if @assumption_floor >= frame.index
-		@assumption_floor = frame.outer_assumption_floor if frame.outer_assumption_floor < @assumption_floor
+		outer_assumption_floor = @frames.pop
+		@frames.pop
+		@assumption_floor = Float::INFINITY if @assumption_floor >= frame
+		@assumption_floor = outer_assumption_floor if outer_assumption_floor < @assumption_floor
 	end
 
 	# Coinductive assumption for a pair we are already in the middle of proving.
@@ -46,10 +56,9 @@ class Literal::SubtypeContext
 	# since first visiting the pair (i.e. the recursion is contractive). A cycle
 	# reached purely through transparent types (unions, nilables, deferreds) makes
 	# no progress and must not be assumed.
-	def assume(key)
-		frame = @in_progress[key]
-		@assumption_floor = frame.index if frame.index < @assumption_floor
-		@structural_depth > frame.structural_depth
+	private def assume(frame)
+		@assumption_floor = frame if frame < @assumption_floor
+		@structural_depth > @frames[frame * 2]
 	end
 
 	# Marks descent into a component of a structural constructor (array element,
