@@ -57,3 +57,29 @@ test "subtype handles deferred fresh-wrapper cycles" do
 
 	assert_equal false, Literal.subtype?(Proc, recursive)
 end
+
+test "a cyclic value re-entering the same deferred type does not match" do
+	union = _Union(nil, _Array(_Deferred { union }))
+	array = []
+	array << array
+
+	refute union === array
+	assert union === [[], [nil]]
+end
+
+test "a cyclic value through a recursive tagged union does not match" do
+	tagged = _TaggedUnion(leaf: Integer, branch: _Array(_Deferred { tagged }))
+	array = [1]
+	array << array
+
+	refute tagged === array
+	assert tagged === [1, [2, []]]
+end
+
+test "a cyclic value through a recursive hash does not match" do
+	recursive = _Hash(String, _Deferred { recursive })
+	hash = {}
+	hash["self"] = hash
+
+	refute recursive === hash
+end

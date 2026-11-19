@@ -2107,6 +2107,14 @@ test "context type rejects values whose structure type is not serializable" do
 	assert_raises(Literal::ArgumentError) { Example.serialize([unsupported], type: Example.type) }
 end
 
+test "context type rejects cyclic values" do
+	array = []
+	array << array
+
+	refute Example.type === array
+	refute Example.type === Object.new
+end
+
 test "kind does not match another context's serializable type" do
 	other = Literal::SerializationContext.new(Literal::StringSerializer, defaults: false)
 

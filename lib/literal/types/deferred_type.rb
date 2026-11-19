@@ -41,8 +41,11 @@ class Literal::Types::DeferredType
 		Literal::Types::DeferredType.new { relax.call(materialize) }
 	end
 
+	# Types are immutable and built bottom-up, so a type graph can only cycle
+	# through a deferred type. Guarding here alone stops a cyclic value from
+	# recursing forever: re-entry with the same value answers false.
 	def ===(other)
-		materialize === other
+		Literal.with_match_guard(self, other) { materialize === other }
 	end
 
 	def >=(other, context: nil)

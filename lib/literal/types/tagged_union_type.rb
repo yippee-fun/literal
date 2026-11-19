@@ -20,6 +20,7 @@ class Literal::Types::TaggedUnionType
 		end
 
 		@members = flattened.freeze
+		@guarded = Literal::Types::UnionType.reaches_opaque_match?(flattened.each_value)
 		freeze
 	end
 
@@ -41,9 +42,15 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def ===(value)
-		Literal.with_match_guard(self, value) do
-			@members.each_value.any? { |type| type === value }
+		if @guarded
+			Literal.with_match_guard(self, value) { member_match?(value) }
+		else
+			member_match?(value)
 		end
+	end
+
+	private def member_match?(value)
+		@members.any? { |_tag, type| type === value }
 	end
 
 	def [](tag)

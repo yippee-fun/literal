@@ -33,11 +33,37 @@ class Literal::Types::UnionType
 		types.uniq!
 		@types = types.freeze
 		@primitives = primitives.freeze
+		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
 
 		freeze
 	end
 
 	attr_reader :types, :primitives
+
+	# Whether matching any of these types can run opaque code — a proc, or an
+	# object or module with its own `===` — without first passing a deferred
+	# type's guard. Opaque code can re-enter the match, so a union that reaches
+	# it needs a guard of its own.
+	def self.reaches_opaque_match?(types, seen = {}.compare_by_identity)
+		types.any? do |type|
+			next false if seen.key?(type)
+
+			seen[type] = true
+
+			case type
+			in Literal::Types::DeferredType
+				false
+			in Literal::Type
+				reaches_opaque_match?(type.literal_child_types, seen)
+			in Module
+				Module != Literal::METHOD.bind_call(type, :===).owner
+			in String | Symbol | Numeric | Regexp | Range | ::Array | ::Hash | true | false | nil
+				false
+			else
+				Kernel != Literal::METHOD.bind_call(type, :===).owner
+			end
+		end
+	end
 
 	def __relax__(&relax)
 		Literal::Types._Union(*@types.map(&relax), *@primitives)
@@ -64,17 +90,23 @@ class Literal::Types::UnionType
 	def ===(value)
 		return true if primitive_match?(value)
 
-		Literal.with_match_guard(self, value) do
-			types = @types
-
-			i, len = 0, types.size
-			while i < len
-				return true if types[i] === value
-				i += 1
-			end
-
-			false
+		if @guarded
+			Literal.with_match_guard(self, value) { type_match?(value) }
+		else
+			type_match?(value)
 		end
+	end
+
+	private def type_match?(value)
+		types = @types
+
+		i, len = 0, types.size
+		while i < len
+			return true if types[i] === value
+			i += 1
+		end
+
+		false
 	end
 
 	def resolve(value)

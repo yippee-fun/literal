@@ -185,3 +185,27 @@ test "error message" do
 		  Actual (Symbol): :symbol
 	ERROR
 end
+
+test "a cyclic value re-entering a union through a proc member does not match" do
+	node = _Union(nil, _Array(-> (value) { node === value }))
+	array = []
+	array << array
+
+	refute node === array
+	assert node === [nil, [nil]]
+end
+
+test "a value re-entering a union through a module with its own === does not match" do
+	union = nil
+	reentrant = Class.new { define_singleton_method(:===) { |value| union === value } }
+	union = _Union(nil, reentrant)
+
+	refute union === :x
+end
+
+test "building a union over shared subtrees visits each once" do
+	tuple = Integer
+	30.times { tuple = _Tuple(tuple, tuple) }
+
+	refute _Union(nil, tuple) === 1
+end

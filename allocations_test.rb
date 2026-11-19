@@ -87,6 +87,14 @@ assert_allocations(_Truthy, false) => 0
 
 assert_allocations(_Tuple(String, Integer), ["a", 1]) => 0
 
+assert_allocations(_TaggedUnion(string: String, integer: Integer), 1) => 0
+assert_allocations(_TaggedUnion(string: String, integer: Integer), :symbol) => 0
+
 assert_allocations(_Union(String, "Hello", "World"), "World") => 0
+assert_allocations(_Union(String, Integer, nil), 1) => 0
+assert_allocations(_Union(String, Integer, nil), :symbol) => 0
+
+recursive_union = _Union(nil, _Array(_Deferred { recursive_union }))
+assert_allocations(recursive_union, [[], [nil]]) => 0
 
 assert_allocations(_Void, nil) => 0

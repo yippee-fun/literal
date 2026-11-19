@@ -114,3 +114,12 @@ test "error message" do
 		  Actual (Symbol): :symbol
 	ERROR
 end
+
+test "a cyclic value re-entering a tagged union through a proc member does not match" do
+	tagged = _TaggedUnion(leaf: Integer, branch: _Array(-> (value) { tagged === value }))
+	array = [1]
+	array << array
+
+	refute tagged === array
+	assert tagged === [1, [2, []]]
+end
