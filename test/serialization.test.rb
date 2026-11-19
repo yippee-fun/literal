@@ -1552,6 +1552,14 @@ test "time deserialization accepts only RFC 3339 date-times" do
 	assert_equal(Example.deserialize(Example.serialize(Time.utc(1582, 10, 10), type: Time), type: Time), Time.utc(1582, 10, 10))
 end
 
+test "date-times with long fractions load exactly" do
+	raw = "2024-01-05T10:00:00.#{'1' * 200}Z"
+	fraction = Rational(("1" * 200).to_i, 10 ** 200)
+
+	assert_equal(Example.deserialize(raw, type: Time), Time.utc(2024, 1, 5, 10, 0, fraction))
+	assert_equal(Example.deserialize(raw, type: DateTime), DateTime.new(2024, 1, 5, 10, 0, fraction))
+end
+
 test "float serialization roundtrip" do
 	original = 3.14
 
@@ -1899,6 +1907,12 @@ test "range deserialization requires a boolean inclusive" do
 		assert_raises(Literal::ArgumentError) do
 			Example.deserialize({ "from" => 1, "to" => 3, "inclusive" => inclusive }, type: _Range(Integer))
 		end
+	end
+end
+
+test "range deserialization refuses bounds that make no range" do
+	assert_raises(Literal::ArgumentError) do
+		Example.deserialize({ "from" => 1, "to" => "a", "inclusive" => true }, type: _Range(_Union(Integer, String)))
 	end
 end
 

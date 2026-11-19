@@ -77,7 +77,8 @@ class Literal::TimeSerializer < Literal::Serializer
 		end
 
 		if date_time
-			DateTime.iso8601(raw)
+			# Like Time's, the fraction can be any length: the format is checked.
+			DateTime.iso8601(raw, limit: nil)
 		else
 			Time.iso8601(raw)
 		end
