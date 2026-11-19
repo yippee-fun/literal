@@ -168,13 +168,15 @@ class Literal::TimeSerializer < Literal::Serializer
 
 	private def rounded(value, digits)
 		# The whole second counts, so a tie at zero digits rounds to an even second.
-		seconds = value.sec + fraction_of(value)
+		# A Rational even when whole, since JRuby's Integer#round takes no half:.
+		seconds = Rational(value.sec) + fraction_of(value)
 		scale = 10 ** digits
 		adjustment = Rational((seconds * scale).round(half: :even), scale) - seconds
 
 		case value
 		when Time
-			value + adjustment
+			# JRuby's Time#+ gets negative Rationals wrong.
+			adjustment.negative? ? value - -adjustment : value + adjustment
 		when DateTime
 			value + (adjustment / 86_400)
 		end
