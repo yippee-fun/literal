@@ -1480,11 +1480,20 @@ test "dates and times with years RFC 3339 cannot hold raise" do
 	assert_raises(Literal::ArgumentError) { Example.serialize(Date.new(-1, 1, 1), type: Date) }
 	assert_raises(Literal::ArgumentError) { Example.serialize(Time.utc(12345, 1, 1), type: Time) }
 	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(12345, 1, 1), type: DateTime) }
-	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(2024, 1, 1, 12, 0, 0, 1), type: DateTime) }
 
-	last_instant = 59 + (9_999_999_999r / 10_000_000_000)
-	assert_raises(Literal::ArgumentError) { Example.serialize(Time.utc(9999, 12, 31, 23, 59, last_instant), type: Time) }
-	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(9999, 12, 31, 23, 59, last_instant), type: DateTime) }
+	# JRuby's DateTime can't be a whole day ahead of UTC.
+	day_ahead = begin
+		DateTime.new(2024, 1, 1, 12, 0, 0, 1)
+	rescue ArgumentError
+		nil
+	end
+	assert_raises(Literal::ArgumentError) { Example.serialize(day_ahead, type: DateTime) } if day_ahead
+
+	# Rounding up into the year 10000. Time at milliseconds, since JRuby's Time
+	# holds no finer than a nanosecond.
+	milliseconds = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3))
+	assert_raises(Literal::ArgumentError) { milliseconds.serialize(Time.utc(9999, 12, 31, 23, 59, 59 + (9_999r / 10_000)), type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(9999, 12, 31, 23, 59, 59 + (9_999_999_999r / 10_000_000_000)), type: DateTime) }
 end
 
 test "time fractions round half to even at nanosecond precision" do
@@ -1496,8 +1505,9 @@ test "time fractions round half to even at nanosecond precision" do
 	assert_equal loaded, Time.new(2024, 1, 1, 12, 0, 30.7r, "+00:00")
 	assert_equal Example.serialize(loaded, type: Time), serialized
 
-	assert_equal Example.serialize(Time.utc(2024, 1, 1, 0, 0, 5r / 10_000_000_000), type: Time), "2024-01-01T00:00:00Z"
-	assert_equal Example.serialize(Time.utc(2024, 1, 1, 0, 0, 15r / 10_000_000_000), type: Time), "2024-01-01T00:00:00.000000002Z"
+	# DateTime, since JRuby's Time holds no finer than a nanosecond.
+	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 5r / 10_000_000_000), type: DateTime), "2024-01-01T00:00:00+00:00"
+	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 15r / 10_000_000_000), type: DateTime), "2024-01-01T00:00:00.000000002+00:00"
 	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 2r / 3), type: DateTime), "2024-01-01T00:00:00.666666667+00:00"
 	assert_equal Example.json_schema(time)["const"], serialized
 
