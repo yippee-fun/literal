@@ -50,4 +50,6 @@ end
 test "inspect" do
 	assert_equal "_Map(a: String, b: _Nilable(Integer))", _Map(a: String, b: _Nilable(Integer)).inspect
 	assert_equal "_Map(\"a\" => String, 1 => Integer)", _Map("a" => String, 1 => Integer).inspect
+	assert_equal "_Map(\"a b\": String, \"+\": String, \"c=\": String, d?: String)", _Map("a b": String, "+": String, "c=": String, d?: String).inspect
+	assert_equal "_Map(\"ab\": String)", _Map("ab".encode(Encoding::UTF_16LE).to_sym => String).inspect
 end

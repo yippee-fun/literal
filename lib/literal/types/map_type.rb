@@ -21,13 +21,27 @@ class Literal::Types::MapType
 		pairs = @shape.map do |key, type|
 			case key
 			when Symbol
-				"#{key.name}: #{type.inspect}"
+				"#{label(key)}: #{type.inspect}"
 			else
 				"#{key.inspect} => #{type.inspect}"
 			end
 		end
 
 		"_Map(#{pairs.join(', ')})"
+	end
+
+	# The key as Ruby writes a label: bare when it's an identifier, quoted
+	# otherwise. Symbol#inspect escapes what the inspection's encoding can't
+	# hold, so unlike the name, it can be joined with the rest.
+	private def label(key)
+		inspected = key.inspect.delete_prefix(":")
+
+		case inspected
+		when /\A"/, /\A[[:alpha:]_][[:alnum:]_]*[?!]?\z/
+			inspected
+		else
+			key.name.inspect
+		end
 	end
 
 	def literal_upper_bound
