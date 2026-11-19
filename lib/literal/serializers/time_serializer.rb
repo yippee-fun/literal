@@ -167,12 +167,26 @@ class Literal::TimeSerializer < Literal::Serializer
 			end
 		end
 
-		# RFC 3339 date-times have four-digit years and offsets under a day.
-		unless rfc3339_fields(serialized)
-			raise Literal::ArgumentError, "Value #{value.inspect} cannot be written as an RFC 3339 date-time, which needs a year in 0000-9999 and an offset under a day"
+		# RFC 3339 date-times have four-digit years and offsets in whole minutes
+		# under a day. iso8601 drops an offset's seconds rather than refuse them.
+		unless rfc3339_fields(serialized) && written_offset_exact?(time)
+			raise Literal::ArgumentError, "Value #{value.inspect} cannot be written as an RFC 3339 date-time, which needs a year in 0000-9999 and an offset in whole minutes under a day"
 		end
 
 		serialized
+	end
+
+	private def written_offset_exact?(value)
+		return true if @utc
+
+		seconds = case value
+		when Time
+			value.utc_offset
+		when DateTime
+			value.offset * 86_400
+		end
+
+		(seconds % 60).zero?
 	end
 
 	private def rounded(value, digits)

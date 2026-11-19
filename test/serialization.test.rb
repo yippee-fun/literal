@@ -1516,6 +1516,17 @@ test "dates and times with years RFC 3339 cannot hold raise" do
 	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(9999, 12, 31, 23, 59, 59 + (9_999_999_999r / 10_000_000_000)), type: DateTime) }
 end
 
+test "times with offsets RFC 3339 cannot hold raise" do
+	time = Time.new(2024, 1, 1, 12, 0, 0, 30)
+	date_time = DateTime.new(2024, 1, 1, 12, 0, 0, Rational(30, 86_400))
+	utc = Literal::SerializationContext.new(Literal::TimeSerializer.with(utc: true))
+
+	assert_raises(Literal::ArgumentError) { Example.serialize(time, type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(date_time, type: DateTime) } unless date_time.offset.zero?
+	assert_equal utc.deserialize(utc.serialize(time, type: Time), type: Time), time
+	assert_equal utc.deserialize(utc.serialize(date_time, type: DateTime), type: DateTime), date_time
+end
+
 test "time fractions round half to even at nanosecond precision" do
 	time = Time.new(2024, 1, 1, 12, 0, 30.7, "+00:00")
 	serialized = Example.serialize(time, type: Time)
