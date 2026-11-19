@@ -21,6 +21,17 @@ module Literal
 	METHOD = Kernel.instance_method(:method)
 	HASH = Kernel.instance_method(:hash)
 	INSPECT = Kernel.instance_method(:inspect)
+	SINGLETON_CLASS = Kernel.instance_method(:singleton_class)
+	INSTANCE_METHOD = Module.instance_method(:instance_method)
+	DEFINE_METHOD = Module.instance_method(:define_method)
+	ALIAS_METHOD = Module.instance_method(:alias_method)
+	PRIVATE_METHOD_DEFINED = Module.instance_method(:private_method_defined?)
+	PROTECTED_METHOD_DEFINED = Module.instance_method(:protected_method_defined?)
+	PRIVATE = Module.instance_method(:private)
+	PROTECTED = Module.instance_method(:protected)
+	PUBLIC = Module.instance_method(:public)
+	ANCESTORS = Module.instance_method(:ancestors)
+	PREPEND = Module.instance_method(:prepend)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")

@@ -366,6 +366,40 @@ test "signs a subclass's method once under both classes' hooks" do
 	assert_raises(Literal::TypeError) { child.new.hello(1) }
 end
 
+test "signs past a class's own reflection methods" do
+	reflection = [
+		:instance_method,
+		:define_method,
+		:alias_method,
+		:private_method_defined?,
+		:protected_method_defined?,
+		:private,
+		:protected,
+		:public,
+		:singleton_class,
+		:ancestors,
+		:prepend,
+	]
+
+	klass = Class.new do
+		extend Literal::Signatures
+
+		singleton_class.class_eval do
+			reflection.each { |name| define_method(name) { |*| raise "called #{name}" } }
+		end
+
+		sig(String) >> String
+		def greet(name) = name
+
+		sig(String) >> String
+		def self.shout(text) = text
+	end
+
+	assert_equal klass.new.greet("Joel"), "Joel"
+	assert_raises(Literal::TypeError) { klass.new.greet(1) }
+	assert_raises(Literal::TypeError) { klass.shout(1) }
+end
+
 test "lets a class's own method hooks see each method once it is signed" do
 	klass = Class.new do
 		def self.seen = (@seen ||= [])

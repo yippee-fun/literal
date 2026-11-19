@@ -104,7 +104,7 @@ module Literal::Signatures
 					return if @__literal_signing__
 
 					if @__literal_signature__
-						__literal_bind_signature__(singleton_class, name)
+						__literal_bind_signature__(Literal::SINGLETON_CLASS.bind_call(self), name)
 					else
 						__literal_sign_module_function__(name)
 					end
@@ -120,9 +120,9 @@ module Literal::Signatures
 	# where hooks of its own could hide a method from them, so each class gets
 	# hooks of its own. TruffleRuby leaves out a module an ancestor already has.
 	private def __literal_hook_methods__
-		singleton = singleton_class
-		prepended = singleton.ancestors.take_while { |mod| !mod.equal?(singleton) }
-		singleton.prepend(MethodHooks.new) unless prepended.any?(MethodHooks)
+		singleton = Literal::SINGLETON_CLASS.bind_call(self)
+		prepended = Literal::ANCESTORS.bind_call(singleton).take_while { |mod| !Literal::EQUAL.bind_call(mod, singleton) }
+		Literal::PREPEND.bind_call(singleton, MethodHooks.new) unless prepended.any?(MethodHooks)
 	end
 
 	private def __literal_bind_signature__(owner, name)
@@ -136,18 +136,19 @@ module Literal::Signatures
 	# itself when it is on as the method is defined, else its checker.
 	private def __literal_sign_module_function__(name)
 		signed = @__literal_signed__&.[](name) or return
-		copy = __literal_own_method__(singleton_class, name) or return
+		singleton = Literal::SINGLETON_CLASS.bind_call(self)
+		copy = __literal_own_method__(singleton, name) or return
 
 		if __literal_same_body__(copy, signed.original)
-			__literal_sign__(singleton_class, name, signed.signature)
+			__literal_sign__(singleton, name, signed.signature)
 		elsif __literal_same_body__(copy, signed.checker)
-			__literal_sign__(singleton_class, name, signed.signature, exported: signed.original)
+			__literal_sign__(singleton, name, signed.signature, exported: signed.original)
 		end
 	end
 
 	# The owner's own method under the name, past any prepended module.
 	private def __literal_own_method__(owner, name)
-		method = owner.instance_method(name)
+		method = Literal::INSTANCE_METHOD.bind_call(owner, name)
 		method = method.super_method until method.nil? || Literal::EQUAL.bind_call(method.owner, owner)
 		method
 	end
@@ -164,8 +165,8 @@ module Literal::Signatures
 	# a checker, the method the checker was exported from.
 	private def __literal_sign__(owner, name, signature, exported: nil)
 		@__literal_signing__ = true
-		singleton = !owner.equal?(self)
-		prepended = !Literal::EQUAL.bind_call(owner.instance_method(name).owner, owner)
+		singleton = !Literal::EQUAL.bind_call(owner, self)
+		prepended = !Literal::EQUAL.bind_call(Literal::INSTANCE_METHOD.bind_call(owner, name).owner, owner)
 		original = exported || __literal_own_method__(owner, name)
 		parameters = original.parameters
 		__literal_refuse_mismatch__(signature, parameters, "#{self}#{singleton ? '.' : '#'}#{name}")
@@ -181,8 +182,8 @@ module Literal::Signatures
 			callee = "ORIGINAL.bind_call(self, "
 		else
 			unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
-			exported ? owner.define_method(unsigned, exported) : owner.alias_method(unsigned, name)
-			owner.__send__(:private, unsigned)
+			exported ? Literal::DEFINE_METHOD.bind_call(owner, unsigned, exported) : Literal::ALIAS_METHOD.bind_call(owner, unsigned, name)
+			Literal::PRIVATE.bind_call(owner, unsigned)
 			callee = "#{unsigned}("
 		end
 
@@ -194,8 +195,8 @@ module Literal::Signatures
 		# An explicit path, so every engine attributes these frames to Literal.
 		checker.module_eval(code, __FILE__, __LINE__)
 
-		owner.define_method(name, checker.instance_method(compiled))
-		owner.__send__(visibility, name)
+		Literal::DEFINE_METHOD.bind_call(owner, name, checker.instance_method(compiled))
+		visibility.bind_call(owner, name)
 
 		unless singleton || Class === self
 			# A clone shares the table, so it is replaced rather than changed.
@@ -317,9 +318,9 @@ module Literal::Signatures
 	end
 
 	private def __literal_visibility__(owner, name)
-		if owner.private_method_defined?(name, false) then :private
-		elsif owner.protected_method_defined?(name, false) then :protected
-		else :public
+		if Literal::PRIVATE_METHOD_DEFINED.bind_call(owner, name, false) then Literal::PRIVATE
+		elsif Literal::PROTECTED_METHOD_DEFINED.bind_call(owner, name, false) then Literal::PROTECTED
+		else Literal::PUBLIC
 		end
 	end
 
