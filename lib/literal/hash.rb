@@ -168,6 +168,10 @@ class Literal::Hash
 		self
 	end
 
+	def deconstruct_keys(keys)
+		keys ? @__value__.slice(*keys) : @__value__.dup
+	end
+
 	def delete(key, &block)
 		return @__value__.delete(key, &block) if block
 

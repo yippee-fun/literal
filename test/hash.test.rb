@@ -208,6 +208,19 @@ test "#to_h and #to_hash return detached plain copies, enabling double-splats" d
 	assert_equal kwargs.call(**hash), { a: 1 }
 end
 
+test "#deconstruct_keys supports pattern matching" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+
+	matched = case hash
+	in { a: Integer => a, **rest }
+		[a, rest]
+	end
+
+	assert_equal matched, [1, { b: 2 }]
+	assert_equal hash.deconstruct_keys([:a, :c]), { a: 1 }
+	refute_same hash.deconstruct_keys(nil), hash.__value__
+end
+
 test "#inspect" do
 	hash = Literal::Hash(Symbol, Integer).new({ a: 1 })
 

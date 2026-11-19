@@ -134,6 +134,18 @@ test "#to_ary converts to a detached plain array, enabling splats and destructur
 	assert_equal [a, b, c], [1, 2, 3]
 end
 
+test "#deconstruct supports pattern matching" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	matched = case array
+	in [first, *rest]
+		[first, rest]
+	end
+
+	assert_equal matched, [1, [2, 3]]
+	refute_same array.deconstruct, array.__value__
+end
+
 test "combining with a plain array type checks at the boundary" do
 	array = Literal::Array(Integer).new(1, 2, 3)
 

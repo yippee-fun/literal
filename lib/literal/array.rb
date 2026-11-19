@@ -238,6 +238,10 @@ class Literal::Array
 		@__value__.count(...)
 	end
 
+	def deconstruct
+		@__value__.dup
+	end
+
 	def delete(value, &block)
 		return @__value__.delete(value, &block) if block
 
