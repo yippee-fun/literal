@@ -79,6 +79,8 @@ class Literal::ArraySerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Array === raw
+
 		member_type = array_type_for(type).type
 
 		raw.map do |item|

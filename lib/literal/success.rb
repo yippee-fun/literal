@@ -5,14 +5,39 @@ class Literal::Success < Literal::Result
 		include Literal::Type
 
 		def initialize(type)
-			@type = type
+			@type = Literal::Freezing.frozen_member(type)
 			freeze
 		end
 
 		attr_reader :type
 
 		def ===(object)
-			Literal::Success === object && @type === object.value!
+			Literal::Success === object && !!(@type === object.value!)
+		end
+
+		def ==(other)
+			Generic === other && @type == other.type
+		end
+
+		def eql?(other)
+			Generic === other && Literal.member_eql?(@type, other.type)
+		end
+
+		def hash
+			literal_hash(Generic, @type)
+		end
+
+		def >=(other, context: nil)
+			case other
+			when Generic
+				Literal.structural_subtype?(other.type, @type, context:)
+			else
+				false
+			end
+		end
+
+		def literal_upper_bound
+			Literal::Success
 		end
 
 		def inspect
@@ -49,6 +74,21 @@ class Literal::Success < Literal::Result
 
 	def value!
 		@value
+	end
+
+	def ==(other)
+		return false unless Literal::Success === other
+
+		value = other.value!
+		Literal::EQUAL.bind_call(@value, value) || @value == value
+	end
+
+	def eql?(other)
+		Literal::Success === other && Literal.payload_eql?(@value, other.value!)
+	end
+
+	def hash
+		[Literal::Success, Literal.payload_hash(@value)].hash
 	end
 
 	def deconstruct

@@ -2,7 +2,7 @@
 
 # @api private
 class Literal::Types::FrozenType
-	ALWAYS_FROZEN = Set[Symbol, Integer, Float, Numeric, true, false, nil].freeze
+	ALWAYS_FROZEN = Set[Symbol, Integer, Float, true, false, nil].compare_by_identity.freeze
 
 	include Literal::Type
 	include Literal::Types::DraftTransparent
@@ -17,11 +17,20 @@ class Literal::Types::FrozenType
 			warn "_Frozen type is redundant for #{type.inspect} since it is always frozen."
 		end
 
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::FrozenType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::FrozenType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::FrozenType === other && Literal.member_eql?(@type, other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
@@ -33,8 +42,12 @@ class Literal::Types::FrozenType
 		"_Frozen(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		@type
+	end
+
 	def ===(value)
-		value.frozen? && @type === value
+		!!(value.frozen? && @type === value)
 	end
 
 	def >=(other, context: nil)
@@ -46,7 +59,7 @@ class Literal::Types::FrozenType
 			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], true, context:)
 
 			other.object_constraints.each do |constraint|
-				frozen_match ||= ALWAYS_FROZEN.include?(constraint)
+				frozen_match ||= ALWAYS_FROZEN.include?(constraint) || Literal::Types::FrozenType === constraint
 				type_match ||= Literal.subtype?(constraint, @type, context:)
 				return true if frozen_match && type_match
 			end
@@ -58,6 +71,8 @@ class Literal::Types::FrozenType
 			false
 		end
 	end
+
+	Anything = new(Literal::Types::VoidType::Instance)
 
 	freeze
 end

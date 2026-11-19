@@ -12,7 +12,7 @@ class Literal::JSONDataSerializer < Literal::Serializer
 	# serializers deliberately reject with diagnostic errors — mixed-numeric
 	# unions like _Union(1, 1.0), or collection literals used as types.
 	def handles_type?(type)
-		Literal.subtype?(type, self.type)
+		within_domain?(type, self.type)
 	end
 
 	def json_schema(type, generator: nil)

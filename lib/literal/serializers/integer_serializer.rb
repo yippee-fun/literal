@@ -27,19 +27,20 @@ class Literal::IntegerSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		value
+		representation(value, type)
 	end
 
 	def deserialize(value, type:)
 		value
 	end
 
-	# If we can coerce a float to an integer without losing anything, we’ll accept it.
+	# A float that's a whole number in JSON loads as that integer: 1e24 is
+	# 10**24, though the Float itself is a little less.
 	def coerce(value)
 		case value
 		when Float
-			coerced = value.to_i
-			(coerced == value) ? coerced : value
+			number = Literal::Serializer.json_equality_key(value)
+			(Integer === number) ? number : value
 		else
 			value
 		end

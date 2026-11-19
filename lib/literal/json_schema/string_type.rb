@@ -111,7 +111,7 @@ class Literal::JSONSchema::StringType < Literal::Data
 	end
 
 	private def parse_date(value)
-		::Date.iso8601(value)
+		::Date.iso8601(value, ::Date::GREGORIAN)
 		true
 	rescue ::ArgumentError
 		false

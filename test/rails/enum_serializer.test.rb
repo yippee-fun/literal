@@ -92,3 +92,31 @@ test "deserializing a class that isn't an enum raises" do
 
 	assert ArgumentError === error.cause
 end
+
+LIB = File.expand_path("../../lib", __dir__)
+
+test "the railtie registers the serializer with an application" do
+	script = <<~RUBY
+		require "rails"
+		require "active_job/railtie"
+		require "literal"
+
+		class SerializerApplication < Rails::Application
+			config.eager_load = false
+			config.logger = Logger.new(nil)
+			config.secret_key_base = "test"
+		end
+
+		SerializerApplication.initialize!
+
+		class Color < Literal::Enum(Integer)
+			Red = new(1)
+		end
+
+		exit ActiveJob::Arguments.deserialize(ActiveJob::Arguments.serialize([Color::Red])) == [Color::Red]
+	RUBY
+
+	assert system(RbConfig.ruby, "-I", LIB, "-e", script, err: File::NULL) do
+		"Expected an application with Active Job to serialize enums without registering the serializer by hand."
+	end
+end

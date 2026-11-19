@@ -5,14 +5,39 @@ class Literal::Failure < Literal::Result
 		include Literal::Type
 
 		def initialize(type)
-			@type = type
+			@type = Literal::Freezing.frozen_member(type)
 			freeze
 		end
 
 		attr_reader :type
 
 		def ===(object)
-			Literal::Failure === object && @type === object.error!
+			Literal::Failure === object && !!(@type === object.error!)
+		end
+
+		def ==(other)
+			Generic === other && @type == other.type
+		end
+
+		def eql?(other)
+			Generic === other && Literal.member_eql?(@type, other.type)
+		end
+
+		def hash
+			literal_hash(Generic, @type)
+		end
+
+		def >=(other, context: nil)
+			case other
+			when Generic
+				Literal.structural_subtype?(other.type, @type, context:)
+			else
+				false
+			end
+		end
+
+		def literal_upper_bound
+			Literal::Failure
 		end
 
 		def inspect
@@ -65,6 +90,21 @@ class Literal::Failure < Literal::Result
 
 	def error!
 		@error
+	end
+
+	def ==(other)
+		return false unless Literal::Failure === other
+
+		error = other.error!
+		Literal::EQUAL.bind_call(@error, error) || @error == error
+	end
+
+	def eql?(other)
+		Literal::Failure === other && Literal.payload_eql?(@error, other.error!)
+	end
+
+	def hash
+		[Literal::Failure, Literal.payload_hash(@error)].hash
 	end
 
 	def map(type)

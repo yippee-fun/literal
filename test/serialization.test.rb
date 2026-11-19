@@ -129,6 +129,19 @@ class SerializationSecret < Literal::Data
 	prop :secret, String
 end
 
+class SerializationReaderless < Literal::Data
+	prop :secret, String, reader: false
+	prop :class, String, reader: false
+end
+
+class SerializationParent < Literal::Data
+	prop :a, Integer
+end
+
+class SerializationChild < SerializationParent
+	prop :b, Integer
+end
+
 class SerializationRedactingSerializer < Literal::Serializer
 	def type
 		SerializationSecret
@@ -521,6 +534,51 @@ test "string length range serialization" do
 	)
 end
 
+test "length ranges always produce valid length keywords" do
+	assert_equal(
+		Example.json_schema(_String(length: 0...0)),
+		{ "type" => "string", "minLength" => 0, "not" => {} },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(length: -3..2.5)),
+		{ "type" => "string", "minLength" => 0, "maxLength" => 2 },
+	)
+
+	assert_equal(
+		Example.json_schema(_String(length: 1..Float::INFINITY)),
+		{ "type" => "string", "minLength" => 1 },
+	)
+end
+
+test "range bounds are written as JSON numbers, or omitted when inexact" do
+	assert_equal(
+		JSON.parse(JSON.generate(Example.json_schema(_Float(1/2r..BigDecimal("2.5"))))),
+		{ "type" => "number", "minimum" => 0.5, "maximum" => 2.5 },
+	)
+
+	assert_equal(
+		JSON.parse(JSON.generate(Example.json_schema(_Integer(4/2r...BigDecimal("10"))))),
+		{ "type" => "integer", "minimum" => 2, "exclusiveMaximum" => 10 },
+	)
+
+	assert_equal(Example.json_schema(_Integer(1/3r..BigDecimal("0.1"))), { "type" => "integer" })
+	assert_equal(Example.json_schema(_Integer(0.., 1/3r..)), { "type" => "integer", "minimum" => 0 })
+	assert_equal(Example.json_schema(_Integer(Rational((10 ** 400) + 1, 3)..)), { "type" => "integer" })
+end
+
+test "infinite range bounds are omitted from schemas" do
+	assert_equal(
+		JSON.parse(JSON.generate(Example.json_schema(_Integer(0..Float::INFINITY)))),
+		{ "type" => "integer", "minimum" => 0 },
+	)
+
+	assert_equal(
+		Example.json_schema(_Float(-Float::INFINITY...3.5, finite?: _Truthy)),
+		{ "type" => "number", "exclusiveMaximum" => 3.5 },
+	)
+end
+
 if defined?(JsRegex)
 	test "string regex pattern serialization" do
 		assert_equal(
@@ -554,6 +612,13 @@ test "json schema scalar type serialization" do
 		Example.json_schema(Literal::JSONSchema::Number(exclusive_minimum: 0, maximum: 1.5)),
 		{ "type" => "number", "exclusiveMinimum" => 0, "maximum" => 1.5 },
 	)
+end
+
+test "json schema number keeps integers integers" do
+	type = Literal::JSONSchema::Number(maximum: 10)
+
+	assert_same(Example.deserialize(Example.serialize(3, type:), type:), 3)
+	assert_equal(Example.deserialize(2.5, type:), 2.5)
 end
 
 test "json data json schema" do
@@ -1404,6 +1469,183 @@ test "datetime serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "dates and date-times are written and read in the proleptic Gregorian calendar" do
+	[
+		[Date.new(1582, 10, 10, Date::GREGORIAN), Date, "1582-10-10"],
+		[Date.new(1500, 1, 1), Date, "1500-01-10"],
+		[DateTime.new(1582, 10, 10, 12, 0, 0, "+00:00", Date::GREGORIAN), DateTime, "1582-10-10T12:00:00+00:00"],
+		[DateTime.new(1500, 1, 1, 12, 0, 0, "+00:00"), DateTime, "1500-01-10T12:00:00+00:00"],
+		[Time.utc(1500, 1, 10, 12), Time, "1500-01-10T12:00:00Z"],
+	].each do |original, type, serialized|
+		assert_equal(Example.serialize(original, type:), serialized)
+
+		loaded = Example.deserialize(serialized, type:)
+		assert_equal(loaded, original)
+		assert_equal(loaded.start, Date::ITALY) unless Time === loaded
+	end
+
+	assert_equal(Example.deserialize("1500-01-10", type: Date), Time.utc(1500, 1, 10).to_date)
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29", type: Date) }
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29T00:00:00Z", type: DateTime) }
+end
+
+test "date deserialization accepts only RFC 3339 dates" do
+	["tomorrow 2024-01-05", "Jan 5 2024", "2024-01-05T23:59:59-10:00", "20240105", "2024-02-30", "5", 5].each do |raw|
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: Date) }
+	end
+end
+
+test "dates and times with years RFC 3339 cannot hold raise" do
+	assert_raises(Literal::ArgumentError) { Example.serialize(Date.new(12345, 1, 1), type: Date) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(Date.new(-1, 1, 1), type: Date) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(Time.utc(12345, 1, 1), type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(12345, 1, 1), type: DateTime) }
+
+	# JRuby's DateTime can't be a whole day ahead of UTC.
+	day_ahead = begin
+		DateTime.new(2024, 1, 1, 12, 0, 0, 1)
+	rescue ArgumentError
+		nil
+	end
+	assert_raises(Literal::ArgumentError) { Example.serialize(day_ahead, type: DateTime) } if day_ahead
+
+	# Rounding up into the year 10000. Time at milliseconds, since JRuby's Time
+	# holds no finer than a nanosecond.
+	milliseconds = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3))
+	assert_raises(Literal::ArgumentError) { milliseconds.serialize(Time.utc(9999, 12, 31, 23, 59, 59 + (9_999r / 10_000)), type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(9999, 12, 31, 23, 59, 59 + (9_999_999_999r / 10_000_000_000)), type: DateTime) }
+end
+
+test "times with offsets RFC 3339 cannot hold raise" do
+	time = Time.new(2024, 1, 1, 12, 0, 0, 30)
+	date_time = DateTime.new(2024, 1, 1, 12, 0, 0, Rational(30, 86_400))
+	utc = Literal::SerializationContext.new(Literal::TimeSerializer.with(utc: true))
+
+	assert_raises(Literal::ArgumentError) { Example.serialize(time, type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.serialize(date_time, type: DateTime) } unless date_time.offset.zero?
+	assert_equal utc.deserialize(utc.serialize(time, type: Time), type: Time), time
+	assert_equal utc.deserialize(utc.serialize(date_time, type: DateTime), type: DateTime), date_time
+end
+
+test "time fractions round half to even at nanosecond precision" do
+	time = Time.new(2024, 1, 1, 12, 0, 30.7, "+00:00")
+	serialized = Example.serialize(time, type: Time)
+	loaded = Example.deserialize(serialized, type: Time)
+
+	assert_equal serialized, "2024-01-01T12:00:30.700000000+00:00"
+	assert_equal loaded, Time.new(2024, 1, 1, 12, 0, 30.7r, "+00:00")
+	assert_equal Example.serialize(loaded, type: Time), serialized
+
+	# DateTime, since JRuby's Time holds no finer than a nanosecond.
+	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 5r / 10_000_000_000), type: DateTime), "2024-01-01T00:00:00+00:00"
+	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 15r / 10_000_000_000), type: DateTime), "2024-01-01T00:00:00.000000002+00:00"
+	assert_equal Example.serialize(DateTime.new(2024, 1, 1, 0, 0, 2r / 3), type: DateTime), "2024-01-01T00:00:00.666666667+00:00"
+	assert_equal Example.json_schema(time)["const"], serialized
+
+	one = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 1))
+	assert_equal one.serialize(time, type: Time), "2024-01-01T12:00:30.7+00:00"
+	assert_equal one.serialize(Time.utc(2024, 1, 1, 0, 0, 25r / 100), type: Time), "2024-01-01T00:00:00.2Z"
+
+	zero = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 0))
+	assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 3r / 2), type: Time), "2024-01-01T00:00:02Z"
+	assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 5r / 2), type: Time), "2024-01-01T00:00:02Z"
+	assert_equal zero.serialize(DateTime.new(2024, 1, 1, 0, 0, 3r / 2), type: DateTime), "2024-01-01T00:00:02+00:00"
+end
+
+test "a union of time and datetime is not serializable" do
+	refute Example.serializable_type?(_Union(Time, DateTime))
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(Time, DateTime)) }
+	assert error.message.include?("both serialize to JSON string values")
+
+	refute Example.serializable_type?(_Union(Time.utc(2024, 1, 1), DateTime.new(2024, 1, 2)))
+
+	type = _Union(DateTime.new(2024, 1, 1), DateTime.new(2024, 1, 2))
+	assert_equal(Example.deserialize(Example.serialize(DateTime.new(2024, 1, 2), type:), type:), DateTime.new(2024, 1, 2))
+end
+
+test "a date type refuses to serialize a datetime rather than drop its time" do
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(2024, 1, 1, 10), type: Date) }
+
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize({ Date.new(2024, 1, 1) => 1, DateTime.new(2024, 1, 1, 10) => 2 }, type: _Hash(Date, Integer))
+	end
+end
+
+test "time deserialization accepts only RFC 3339 date-times" do
+	[
+		"2024-01-05T10:00:00",
+		"2024-01-05",
+		"2024-01-05 10:00:00Z",
+		"2024-02-30T10:00:00Z",
+		"2024-01-05T24:00:00Z",
+		"2024-01-05T10:00:00+25:00",
+		1,
+	].each do |raw|
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: Time) }
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: DateTime) }
+	end
+
+	assert_equal(Example.deserialize("2024-01-05t10:00:00z", type: Time), Time.utc(2024, 1, 5, 10))
+
+	# Time is Gregorian throughout, so 1500 has no leap day and 1582-10-10 exists.
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29T00:00:00Z", type: Time) }
+	assert_equal(Example.deserialize(Example.serialize(Time.utc(1582, 10, 10), type: Time), type: Time), Time.utc(1582, 10, 10))
+end
+
+test "leap seconds load as the second after them" do
+	{
+		"1990-12-31T23:59:60Z" => Time.utc(1991, 1, 1),
+		"1990-12-31T23:59:60.5Z" => Time.utc(1991, 1, 1, 0, 0, 1/2r),
+		"1990-12-31T15:59:60-08:00" => Time.utc(1991, 1, 1),
+		"2024-01-05T10:00:60+05:30" => Time.utc(2024, 1, 5, 4, 31),
+	}.each do |raw, instant|
+		time = Example.deserialize(raw, type: Time)
+		date_time = Example.deserialize(raw, type: DateTime)
+
+		assert_equal time, instant
+		assert_equal time, Time.iso8601(raw)
+		assert_equal time.utc_offset, Time.iso8601(raw).utc_offset
+		assert_equal date_time.to_time, instant
+		assert_equal date_time.offset, DateTime.iso8601(raw).offset
+	end
+
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1990-12-31T23:59:61Z", type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1990-12-31T23:59:61Z", type: DateTime) }
+end
+
+test "date-times with long fractions load exactly" do
+	raw = "2024-01-05T10:00:00.#{'1' * 200}Z"
+	fraction = Rational(("1" * 200).to_i, 10 ** 200)
+
+	assert_equal(Example.deserialize(raw, type: Time), Time.utc(2024, 1, 5, 10, 0, fraction))
+
+	# JRuby's DateTime overflows on a fraction of 200 digits, but holds 20.
+	raw = "2024-01-05T10:00:00.#{'1' * 20}Z"
+	fraction = Rational(("1" * 20).to_i, 10 ** 20)
+	date_time = Example.deserialize(raw, type: DateTime)
+
+	assert_equal date_time.sec_fraction, fraction
+	assert_equal [date_time.year, date_time.month, date_time.day, date_time.hour, date_time.minute, date_time.second, date_time.offset], [2024, 1, 5, 10, 0, 0, 0]
+end
+
+test "date-times load with their offsets" do
+	{
+		"2024-01-05T10:00:00Z" => "2024-01-05T10:00:00Z",
+		"2024-01-05T10:00:00-00:00" => "2024-01-05T10:00:00Z",
+		"2024-01-05T10:00:00+00:00" => "2024-01-05T10:00:00+00:00",
+		"2024-01-05T10:00:00+05:30" => "2024-01-05T10:00:00+05:30",
+		"2024-01-05T10:00:00-00:30" => "2024-01-05T10:00:00-00:30",
+	}.each do |raw, written|
+		time = Example.deserialize(raw, type: Time)
+		date_time = Example.deserialize(raw, type: DateTime)
+
+		assert_equal Example.serialize(time, type: Time), written
+		assert_equal date_time, DateTime.iso8601(raw)
+		assert_equal date_time.offset, DateTime.iso8601(raw).offset
+	end
+end
+
 test "float serialization roundtrip" do
 	original = 3.14
 
@@ -1466,6 +1708,40 @@ test "map serialization roundtrip" do
 
 	assert_equal(serialized, { "name" => "Joel", "age" => 42, "nickname" => nil })
 	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "string-keyed map serialization roundtrip" do
+	original = { "name" => "Joel", :age => 42 }
+	type = _Map("name" => String, :age => Integer)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "name" => "Joel", "age" => 42 })
+	assert_equal(Example.deserialize(serialized, type:), original)
+	assert_equal(Example.json_schema(type)["required"], ["name", "age"])
+end
+
+test "maps whose keys cannot name distinct JSON object keys are not serializable" do
+	[_Map(1 => String), _Map(:name => String, "name" => String)].each do |type|
+		refute Example.serializable_type?(type)
+
+		error = assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+		assert error.message.include?("keys must be Symbols or Strings")
+	end
+end
+
+test "map keys name JSON object keys in UTF-8" do
+	latin = "café".encode(Encoding::ISO_8859_1)
+	type = _Map(latin => String)
+	value = { latin => "x" }
+
+	raw = JSON.parse(JSON.generate(Example.serialize(value, type:)))
+
+	assert_equal Example.deserialize(raw, type:), value
+	assert_equal Example.json_schema(type)["properties"].keys, ["café"]
+
+	refute Example.serializable_type?(_Map(latin => String, "café" => String))
+	refute Example.serializable_type?(_Map("caf\xE9".b => String))
+	refute Example.serializable_type?(_Map("caf\xE9" => String))
 end
 
 test "undefined map value is omitted when serializing" do
@@ -1682,8 +1958,47 @@ test "range json schema" do
 end
 
 test "range deserialization requires the inclusive key" do
-	assert_raises(KeyError) do
+	assert_raises(Literal::ArgumentError) do
 		Example.deserialize({ "from" => 1, "to" => 5 }, type: _Range(Integer))
+	end
+end
+
+test "malformed input raises Literal errors" do
+	[
+		["str", SerializationPerson],
+		[1, Symbol],
+		[[1, 2], _Range(Integer)],
+		[{ "to" => 5, "inclusive" => true }, _Range(Integer)],
+		[{ "$type" => "unknown" }, _TaggedUnion(person: SerializationPerson, note: String)],
+		[{ "$type" => "note" }, _TaggedUnion(person: SerializationPerson, note: String)],
+		[{ "$type" => "off", "value" => true }, _TaggedUnion(off: false, on: true)],
+		["str", _TaggedUnion(person: SerializationPerson, note: String)],
+		[[1], _Tuple(Integer, Integer)],
+		["str", _Array(Integer)],
+		[{ "a" => 1 }, _Set(Integer)],
+		["str", _Map(name: String)],
+		["str", _Hash(String, Integer)],
+		[[[1, 2, 3]], _Hash(Integer, Integer)],
+		["5", Date],
+		["abc", _BigDecimal(finite?: _Truthy)],
+		[5, SerializationSuit],
+		["Hearts", SerializationSuit],
+	].each do |raw, type|
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type:) }
+	end
+end
+
+test "range deserialization requires a boolean inclusive" do
+	["yes", 0, 1, nil].each do |inclusive|
+		assert_raises(Literal::ArgumentError) do
+			Example.deserialize({ "from" => 1, "to" => 3, "inclusive" => inclusive }, type: _Range(Integer))
+		end
+	end
+end
+
+test "range deserialization refuses bounds that make no range" do
+	assert_raises(Literal::ArgumentError) do
+		Example.deserialize({ "from" => 1, "to" => "a", "inclusive" => true }, type: _Range(_Union(Integer, String)))
 	end
 end
 
@@ -1724,6 +2039,34 @@ test "structure serialization roundtrip" do
 
 	assert_equal(serialized, { "name" => "Joel", "age" => 42 })
 	assert_equal(Example.deserialize(serialized, type:), original)
+end
+
+test "structure properties without readers serialization roundtrip" do
+	original = SerializationReaderless.new(secret: "hunter2", class: "admin")
+	serialized = Example.serialize(original, type: SerializationReaderless)
+
+	assert_equal(serialized, { "secret" => "hunter2", "class" => "admin" })
+	assert_equal(Example.deserialize(serialized, type: SerializationReaderless), original)
+
+	shadowing = Class.new(Literal::Data) { prop :instance_variable_get, String }
+	assert_equal(Example.serialize(shadowing.new(instance_variable_get: "x"), type: shadowing), { "instance_variable_get" => "x" })
+end
+
+test "a class reader doesn't confuse serialization" do
+	struct = Class.new(Literal::Data) { prop :class, String }
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop :class, String
+		const_set(:A, new(1, class: "a"))
+	end
+
+	value = struct.new(class: "admin")
+
+	assert_equal(Example.serialize(value, type: struct), { "class" => "admin" })
+	assert_equal(Example.serialize(value, type: Example.type), { "class" => "admin" })
+	assert_equal(Example.deserialize({ "class" => "admin" }, type: struct), value)
+	assert_equal(Example.serialize(enum::A, type: enum), 1)
+	assert_equal(Example.serialize(enum::A, type: Example.type), 1)
+	assert_equal(Example.deserialize(1, type: enum), enum::A)
 end
 
 test "optional structure property serialization roundtrip" do
@@ -1923,6 +2266,14 @@ test "context type rejects values whose structure type is not serializable" do
 
 	assert_raises(Literal::ArgumentError) { Example.serialize(unsupported, type: Example.type) }
 	assert_raises(Literal::ArgumentError) { Example.serialize([unsupported], type: Example.type) }
+end
+
+test "context type rejects cyclic values" do
+	array = []
+	array << array
+
+	refute Example.type === array
+	refute Example.type === Object.new
 end
 
 test "kind does not match another context's serializable type" do
@@ -2371,6 +2722,21 @@ test "integer and constrained float union is not collapsed to number" do
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
+test "constrained integer and finite float union is not natural" do
+	# JSON Schema cannot tell 5 from 5.0, so these would match both members.
+	[
+		_Union(_Integer(0..), _Float(finite?: _Truthy)),
+		_Union(1, _Float(finite?: _Truthy)),
+		_Union(1, 2, _Float(finite?: _Truthy)),
+		_Union(Literal::JSONSchema::Integer(minimum: 0), _Float(finite?: _Truthy)),
+	].each do |type|
+		refute Example.serializable_type?(type)
+
+		error = assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+		assert error.message.include?("both serialize to JSON number values")
+	end
+end
+
 test "same-kind union serialization roundtrip" do
 	type = _Union(String, _String(length: 1..))
 	original = "Joel"
@@ -2806,7 +3172,7 @@ test "codecs reject encoded types that are not serializable" do
 	error = assert_raises(Literal::ArgumentError) { context.json_schema(SerializationOpaque) }
 
 	assert error.message.include?("there is no serializer for Object")
-	assert error.message.include?("SerializationOpaque → _Map(#{{ value: Object }.inspect}) → Object")
+	assert error.message.include?("SerializationOpaque → _Map(value: Object) → Object")
 end
 
 test "coerced properties deserialize without re-running the coercion" do
@@ -2885,6 +3251,25 @@ test "union of object members where one requires a key the other forbids" do
 	assert_equal(Example.deserialize(person_serialized, type:), person_original)
 end
 
+test "unions serialize a value as its most specific matching member" do
+	child = SerializationChild.new(a: 1, b: 2)
+
+	[_Union(SerializationParent, SerializationChild), _Union(SerializationChild, SerializationParent)].each do |type|
+		serialized = Example.serialize(child, type:)
+
+		assert_equal(serialized, { "a" => 1, "b" => 2 })
+		assert_equal(Example.deserialize(serialized, type:), child)
+	end
+
+	type = _TaggedUnion(parent: SerializationParent, child: SerializationChild)
+	serialized = Example.serialize(child, type:)
+
+	assert_equal(serialized, { "$type" => "child", "a" => 1, "b" => 2 })
+	assert_equal(Example.deserialize(serialized, type:), child)
+
+	assert_equal(Example.serialize(nil, type: _TaggedUnion(none: nil, name: String)), { "$type" => "none", "value" => nil })
+end
+
 test "union of object members whose extra keys are all optional is not naturally discriminated" do
 	type = _Union(SerializationTitled, SerializationDraft)
 
@@ -2901,6 +3286,45 @@ test "union of a structure and a map with distinct required keys serialization r
 
 	assert_equal(Example.deserialize(value_serialized, type:), value_original)
 	assert_equal(Example.deserialize(map_serialized, type:), map_original)
+end
+
+test "union of object members ignores keys no member declares when loading" do
+	assert_equal(
+		Example.deserialize({ "value" => "Joel", "extra" => 1 }, type: _Union(SerializationValueObject, String)),
+		SerializationValueObject.new(value: "Joel"),
+	)
+
+	type = _Union(SerializationValueObject, _Map(name: String))
+	assert_equal(Example.deserialize({ "value" => "Joel", "extra" => 1 }, type:), SerializationValueObject.new(value: "Joel"))
+	assert_equal(Example.deserialize({ "name" => "Joel", "extra" => 1 }, type:), { name: "Joel" })
+
+	type = _Union(SerializationUserEvent, SerializationAdminEvent)
+	assert_equal(
+		Example.deserialize({ "kind" => "admin", "name" => "Jill", "extra" => 1 }, type:),
+		SerializationAdminEvent.new(kind: "admin", name: "Jill"),
+	)
+
+	type = _Union(_Range(Integer), SerializationValueObject)
+	assert_equal(Example.deserialize({ "from" => 1, "to" => 2, "inclusive" => true, "extra" => 1 }, type:), 1..2)
+end
+
+test "union of object members refuses objects whose declared keys match several members" do
+	type = _Union(SerializationValueObject, _Map(name: String))
+
+	error = assert_raises(Literal::ArgumentError) do
+		Example.deserialize({ "value" => "Joel", "name" => "Joel" }, type:)
+	end
+	assert error.message.include?("No union member type for JSON object")
+end
+
+test "tagged unions ignore keys their members don't declare when loading" do
+	type = _TaggedUnion(person: SerializationValueObject, note: String)
+
+	assert_equal(
+		Example.deserialize({ "$type" => "person", "value" => "Joel", "extra" => 1 }, type:),
+		SerializationValueObject.new(value: "Joel"),
+	)
+	assert_equal(Example.deserialize({ "$type" => "note", "value" => "Hi", "extra" => 1 }, type:), "Hi")
 end
 
 test "union of a hash member and another object member is not naturally discriminated" do
@@ -3020,6 +3444,121 @@ test "integer const discriminants" do
 
 	assert_equal(Example.deserialize(v1_serialized, type:), { version: 1, payload: "a" })
 	assert_equal(Example.deserialize(v2_serialized, type:), { version: 2, payload: "b" })
+end
+
+test "numeric const discriminants compare as JSON numbers" do
+	# JSON Schema treats 1 and 1.0 as the same value.
+	refute Example.serializable_type?(_Union(_Map(version: 1, payload: String), _Map(version: 1.0, payload: Integer)))
+
+	type = _Union(_Map(version: 1, payload: String), _Map(version: 2, payload: String))
+
+	assert_equal(Example.deserialize({ "version" => 2.0, "payload" => "b" }, type:), { version: 2, payload: "b" })
+end
+
+test "const discriminants compare numbers as JSON numbers inside arrays and objects" do
+	integers = Class.new(Literal::Enum(_JSONData)) { const_set(:One, new([1, { "a" => 1 }])) }
+	floats = Class.new(Literal::Enum(_JSONData)) { const_set(:One, new([1.0, { "a" => 1.0 }])) }
+
+	assert_equal Example.const_domain(integers::One), Example.const_domain(floats::One)
+	refute Example.serializable_type?(_Union(_Map(kind: integers::One, payload: String), _Map(kind: floats::One, payload: Integer)))
+end
+
+test "integral JSON numbers load as integer union members" do
+	assert_equal Example.deserialize(2.0, type: _Union(1, 2, String)), 2
+	assert_equal Example.deserialize(2.0, type: _Union(Integer, String)), 2
+	assert_equal Example.deserialize(2.0, type: _Union(_Float(finite?: _Truthy), String)), 2.0
+	assert_raises(Literal::ArgumentError) { Example.deserialize(2.5, type: _Union(1, 2, String)) }
+
+	loaded = Example.deserialize(2.0, type: _Union(Integer, _Float(finite?: _Truthy), String))
+	assert_equal loaded, 2.0
+	assert Float === loaded
+
+	assert_equal Example.deserialize(1e24, type: Integer), 10 ** 24
+	assert_equal Example.deserialize(1e24, type: _Union(10 ** 24, 1e24.to_i, String)), 10 ** 24
+end
+
+test "values equal to a const type serialize as the const" do
+	date = Date.new(2026, 1, 1)
+	to_str = Object.new
+	def to_str.to_str = "a"
+	def to_str.==(other) = other == "a"
+
+	[
+		[1.0, 1, 1, 1],
+		[1r, 1, 1, 1],
+		[Complex(1), 1, 1, 1],
+		[1, 1.0, 1.0, 1.0],
+		[2.0, _Union(1, 2), 2, 2],
+		[2r, _Union(1, 2, "a"), 2, 2],
+		[1.0, _Nilable(1), 1, 1],
+		[1, BigDecimal("1"), "1.0", BigDecimal("1")],
+		[DateTime.new(2026, 1, 1), date, "2026-01-01", date],
+		[to_str, "a", "a", "a"],
+	].each do |value, type, written, loaded|
+		serialized = Example.serialize(value, type:)
+		assert serialized.eql?(written)
+		assert Example.deserialize(JSON.parse(JSON.generate(serialized)), type:).eql?(loaded)
+	end
+end
+
+test "values a const type matches but doesn't equal serialize as themselves" do
+	noon = DateTime.new(2026, 1, 1, 12)
+
+	assert_equal Example.serialize(noon, type: DateTime.new(2026, 1, 1, 3)), "2026-01-01T12:00:00+00:00"
+	assert_raises(Literal::ArgumentError) { Example.serialize(noon, type: Date.new(2026, 1, 1)) }
+end
+
+test "JSON numbers equal to a const type load as the const" do
+	[
+		[1.0, 1, 1],
+		[1, 1.0, 1.0],
+		[2.0, _Union(1, 2, "a"), 2],
+		[1e24, 10 ** 24, 10 ** 24],
+		[10 ** 24, 1e24, 1e24],
+	].each do |raw, type, const|
+		assert Example.deserialize(raw, type:).eql?(const)
+	end
+end
+
+test "enum members load from JSON equal values" do
+	enum = Class.new(Literal::Enum(_JSONData)) do
+		const_set(:One, new([1, { "a" => 1 }]))
+		const_set(:Two, new([2]))
+	end
+
+	assert_equal Example.deserialize([1.0, { "a" => 1.0 }], type: enum), enum::One
+	assert_equal Example.deserialize([2.0], type: enum::Two), enum::Two
+	assert_raises(Literal::ArgumentError) { Example.deserialize([2.5], type: enum) }
+end
+
+test "const discriminants compare floats by the decimal JSON writes for them" do
+	assert_equal Literal::Serializer.json_equality_key([1e24]), Literal::Serializer.json_equality_key([10 ** 24])
+	assert_equal Literal::Serializer.json_equality_key({ "a" => 0.1 }), { "a" => 1/10r }
+	refute_equal Literal::Serializer.json_equality_key(0.1), Literal::Serializer.json_equality_key(0.1000000000000001)
+
+	refute Example.serializable_type?(_Union(_Map(kind: 1e24, payload: String), _Map(kind: 10 ** 24, payload: Integer)))
+
+	type = _Union(_Map(kind: 0.1, payload: String), _Map(kind: 0.2, payload: String))
+	assert_equal(Example.deserialize({ "kind" => 0.2, "payload" => "b" }, type:), { kind: 0.2, payload: "b" })
+end
+
+test "consts with disjoint values can share a JSON type in a union" do
+	[
+		[_Nilable(_Union(:draft, :published)), [:draft, :published, nil]],
+		[_Union(:auto, :none, Integer), [:auto, :none, 3]],
+		[_Union("x", "y", nil), ["x", "y", nil]],
+		[_Union(true, false, nil), [true, false, nil]],
+		[_Union(1, 2, "a"), [1, 2, "a"]],
+	].each do |type, values|
+		values.each do |value|
+			assert_equal(Example.deserialize(Example.serialize(value, type:), type:), value)
+		end
+	end
+
+	assert_raises(Literal::ArgumentError) { Example.deserialize("other", type: _Union(:auto, :none, Integer)) }
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(:auto, "auto", nil)) }
+	assert error.message.include?("both serialize to JSON string values")
 end
 
 test "optional const keys do not discriminate object members" do
@@ -3198,6 +3737,22 @@ test "an enum member is serializable through the context's aggregate type" do
 	serialized = Example.serialize(SerializationPriority::Medium, type: Example.type)
 
 	assert_equal(serialized, 2)
+end
+
+test "enum members as constant types serialization roundtrip" do
+	type = SerializationSuit::Hearts
+
+	assert_equal(Example.serialize(SerializationSuit::Hearts, type:), "hearts")
+	assert_equal(Example.deserialize("hearts", type:), SerializationSuit::Hearts)
+	assert_equal(Example.json_schema(type), { "type" => "string", "enum" => ["hearts"] })
+	assert_raises(Literal::ArgumentError) { Example.deserialize("spades", type:) }
+
+	union = _Union(SerializationPriority::Low, SerializationPriority::High, nil)
+
+	assert Example.serializable_type?(union)
+	assert_equal(Example.serialize(SerializationPriority::High, type: union), 3)
+	assert_equal(Example.deserialize(3, type: union), SerializationPriority::High)
+	assert_raises(Literal::ArgumentError) { Example.deserialize(2, type: union) }
 end
 
 test "enum in a union with a distinguishable type roundtrips" do
@@ -3867,4 +4422,148 @@ test "identity hashes with repeated keys serialize the same in any order" do
 
 	assert_equal(Example.serialize(first, type: _JSONData).to_a, [["a", 1], ["a", 2]])
 	assert_equal(Example.serialize(second, type: _JSONData).to_a, [["a", 1], ["a", 2]])
+end
+
+test "scalar serializers refuse types requiring frozen values unless their domain is always frozen" do
+	context = Literal::SerializationContext.new(Literal::StringSerializer, Literal::IntegerSerializer, defaults: false)
+
+	refute context.serializable_type?(_Frozen(String))
+	refute context.serializable_type?(_Constraint(String, frozen?: true))
+	refute context.serializable_type?(_Intersection(String, _Frozen(String)))
+	assert context.serializable_type?(_Frozen(_Integer(1..)))
+end
+
+test "serializers refuse types requiring frozen values of a module" do
+	comparable = Class.new(Literal::StringSerializer) { def type = Comparable }
+
+	refute Literal::SerializationContext.new(comparable, defaults: false).serializable_type?(_Frozen(Comparable))
+
+	context = Literal::SerializationContext.new(comparable)
+	assert_equal(context.serializer_for_type(_Frozen(Comparable)).class, Literal::FrozenSerializer)
+	assert context.deserialize(+"a", type: _Frozen(Comparable)).frozen?
+end
+
+test "types requiring frozen values load frozen" do
+	[
+		[_Frozen(String), "a"],
+		[_Constraint(String, frozen?: true), "a"],
+		[_Intersection(String, _Frozen(String)), "a"],
+		[_Frozen(_Integer(1..)), 1],
+		[_Frozen(SerializationPriority), SerializationPriority::Low],
+		[_Frozen(Date), Date.new(2026, 1, 1).freeze],
+		[_Frozen(_Array(String)), ["a"].freeze],
+		[_Constraint(_Array(Integer), frozen?: true), [1].freeze],
+		[_Frozen(_Hash(String, _Array(String))), { "a" => ["b"].freeze }.freeze],
+		[_Frozen(_Set(String)), Set["a"].freeze],
+		[_Frozen(_Map(name: String)), { name: "a" }.freeze],
+		[_Frozen(_JSONData), { "a" => ["b"] }.freeze],
+		[_Frozen(Literal::Array(String)), Literal::Array(String).new("a").freeze],
+	].each do |type, value|
+		assert Example.serializable_type?(type)
+
+		serialized = Example.serialize(value, type:)
+		loaded = Example.deserialize(JSON.parse(JSON.generate(serialized)), type:)
+
+		assert_equal(loaded, value)
+		assert loaded.frozen?
+	end
+
+	assert_equal(Example.json_schema(_Frozen(_Array(String))), Example.json_schema(_Array(String)))
+	assert_equal(Example.json_schema(_Constraint(String, size: 1..2, frozen?: true)), Example.json_schema(_String(size: 1..2)))
+end
+
+test "types requiring frozen values deep-freeze plain data and copy what they freeze" do
+	raw = { "a" => [+"b"] }
+	loaded = Example.deserialize(raw, type: _Frozen(_JSONData))
+
+	assert loaded["a"].frozen?
+	assert loaded["a"][0].frozen?
+	refute raw.frozen?
+	refute raw["a"].frozen?
+	refute raw["a"][0].frozen?
+
+	loaded = Example.deserialize([+"a"], type: _Frozen(Literal::Array(String)))
+	assert loaded.frozen?
+	refute loaded.first.frozen?
+end
+
+test "frozen consts discriminate like their thawed consts" do
+	colors = _Union(_Frozen("red"), _Frozen("blue"))
+
+	assert Example.deserialize("blue", type: colors).frozen?
+	refute Example.serializable_type?(_Union(_Frozen("red"), "red"))
+end
+
+test "frozen members discriminate like their thawed types" do
+	type = _Union(_Frozen(String), Integer, _Frozen(_Map(name: String)))
+
+	assert_equal(Example.deserialize("a", type:), "a")
+	assert Example.deserialize("a", type:).frozen?
+	assert_equal(Example.deserialize(1, type:), 1)
+	assert Example.deserialize({ "name" => "a" }, type:).frozen?
+
+	refute Example.serializable_type?(_Union(_String(/\Ax/), _Frozen(_String(/\Ay/))))
+end
+
+test "types requiring frozen shapes freeze them whatever their props are named" do
+	shape = Class.new(Literal::Struct) { prop :freeze, String }
+	type = _Frozen(shape)
+
+	loaded = Literal::SerializationContext.new.deserialize({ "freeze" => "x" }, type:)
+
+	assert loaded.frozen?
+	assert_equal loaded[:freeze], "x"
+end
+
+test "types requiring frozen values see through deferred types and refuse frozen cycles" do
+	type = _Frozen(_Deferred { SerializationValueObject })
+
+	assert Example.serializable_type?(type)
+	assert_equal(Example.deserialize({ "value" => "a" }, type:), SerializationValueObject.new(value: "a"))
+
+	cycle = _Deferred { _Frozen(cycle) }
+	refute Example.serializable_type?(cycle)
+end
+
+test "deep freezing copies keep a hash's default and key comparison" do
+	identity = {}.compare_by_identity
+	identity[+"a"] = 1
+	identity[+"a"] = 2
+	frozen = Literal::Freezing.deep_frozen(identity)
+
+	assert frozen.compare_by_identity?
+	assert_equal(frozen.size, 2)
+	assert_equal(Literal::Freezing.deep_frozen(Hash.new(5))["missing"], 5)
+end
+
+class SerializationPrivatelyFreezingMoney < SerializationMoney
+	private def freeze
+		super
+		nil
+	end
+end
+
+class SerializationPrivatelyFreezingMoneyCodec < SerializationMoneyCodec
+	def type
+		SerializationPrivatelyFreezingMoney
+	end
+
+	def decode(value)
+		SerializationPrivatelyFreezingMoney.new(value[:cents], value[:currency])
+	end
+end
+
+test "types requiring frozen values freeze custom objects through their own freeze, which may be private" do
+	context = Literal::SerializationContext.new(SerializationPrivatelyFreezingMoneyCodec)
+	loaded = context.deserialize({ "cents" => 1, "currency" => "GBP" }, type: _Frozen(SerializationPrivatelyFreezingMoney))
+
+	assert SerializationPrivatelyFreezingMoney === loaded
+	assert loaded.frozen?
+end
+
+test "types requiring frozen values whose thawed type has no serializer explain why" do
+	refute Example.serializable_type?(_Frozen(Object))
+
+	error = Example.unserializable_type_error(_Frozen(Object))
+	assert_equal(error.message, "Type _Frozen(Object) cannot be serialized because there is no serializer for Object.")
 end

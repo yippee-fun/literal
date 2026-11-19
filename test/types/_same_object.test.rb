@@ -21,3 +21,7 @@ test "hierarchy" do
 	assert_subtype _SameObject(10), 5..15
 	refute_subtype _SameObject(object), Symbol
 end
+
+test "inspect" do
+	assert_equal '_SameObject("a")', _SameObject("a").inspect
+end
