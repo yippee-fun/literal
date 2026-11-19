@@ -54,8 +54,9 @@ class Literal::Types::MapType
 		when Literal::Types::MapType
 			other_shape = other.shape
 
+			# A key the other map leaves unconstrained can hold anything.
 			@shape.all? do |k, v|
-				Literal.structural_subtype?(other_shape[k], v, context:)
+				Literal.structural_subtype?(other_shape.fetch(k, Literal::Types::VoidType::Instance), v, context:)
 			end
 		else
 			false

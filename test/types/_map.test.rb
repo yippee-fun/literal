@@ -19,6 +19,10 @@ test "hierarchy" do
 	refute_subtype _Map(a: Array), _Map(a: Enumerable, b: Numeric)
 	refute_subtype _Map(a: String, b: Integer), _Map(a: Enumerable, b: Numeric)
 	refute_subtype nil, _Map(a: String)
+
+	# A key the subtype doesn't constrain can hold anything.
+	refute_subtype _Map(a: String), _Map(a: String, b: _Nilable(Integer))
+	assert_subtype _Map(a: String), _Map(a: String, b: _Void)
 end
 
 test "error message" do
