@@ -162,7 +162,6 @@ test "an exception inside props closes the batch and keeps the props declared be
 	end
 
 	assert_equal example.schema_compilations, 1
-	assert_equal example.new(name: "Joel").to_h, { name: "Joel" }
 
 	example.prop :age, Integer
 	assert_equal example.schema_compilations, 2
@@ -182,23 +181,26 @@ test "a prop added outside a batch after a batch recompiles" do
 	assert_equal example.new(name: "Joel", age: 30).to_h, { name: "Joel", age: 30 }
 end
 
-test "an instance built while the batch is open sees every prop declared so far" do
+test "an instance built while the batch is open sees every prop declared so far, and closes the shape" do
 	early = nil
-	early_hash = nil
+	refused = nil
 
 	example = counted do
 		props do
 			prop :name, String
 			prop :age, Integer
 			early = new(name: "Joel", age: 30)
-			early_hash = early.to_h
-			prop :email, _Nilable(String)
+			begin
+				prop :email, _Nilable(String)
+			rescue Literal::ArgumentError => error
+				refused = error
+			end
 		end
 	end
 
-	assert_equal early_hash, { name: "Joel", age: 30 }
-	assert_equal early.to_h, { name: "Joel", age: 30, email: nil }
-	assert_equal example.new(name: "Joel", age: 30, email: "joel@example.com").to_h, { name: "Joel", age: 30, email: "joel@example.com" }
+	assert_equal early.to_h, { name: "Joel", age: 30 }
+	assert refused.message.include?("because it already has instances")
+	assert_equal example.literal_properties.map(&:name), [:name, :age]
 end
 
 test "a user-defined initializer that calls super works while the batch is open" do
@@ -420,8 +422,8 @@ test "Literal::Enum members can be built while the batch is open" do
 	example = Class.new(Literal::Enum(String)) do
 		begin_props
 		prop :label, String
-		const_set(:A, new("a", label: "A"))
 		prop :rank, _Nilable(Integer)
+		const_set(:A, new("a", label: "A"))
 		const_set(:B, new("b", label: "B", rank: 2))
 		commit_props
 	end

@@ -1516,9 +1516,11 @@ test "uses the current prop shape after the class changes" do
 		prop :name, String
 	end
 
-	assert Literal::Draft(klass).new(name: "Ada").check.success?
+	stale = Literal::Draft(klass)
 
 	klass.prop :age, Integer
+
+	refute Literal::Draft(klass).equal?(stale)
 
 	person = Literal::Draft(klass).new(name: "Ada", age: 42).check.value!
 	assert_equal 42, person.age

@@ -43,6 +43,7 @@ class Literal::DataStructure
 	def self.from_props(props)
 		instance = __literal_from_props__(props)
 		Literal::SEND.bind_call(instance, :__literal_run_checks__)
+		__literal_used__
 		instance
 	end
 
@@ -140,6 +141,7 @@ class Literal::DataStructure
 		# Restoring a dumped object is still construction: an object that breaks
 		# the shape's checks must not come back to life either.
 		__literal_run_checks__
+		Literal::CLASS.bind_call(self).__send__(:__literal_used__)
 	end
 
 	# Assign final property values from a Hash keyed by Symbol property name,

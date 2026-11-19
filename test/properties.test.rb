@@ -1074,3 +1074,107 @@ test "readers may replace Ruby's own methods" do
 
 	assert_equal [value.method, value.display, value.format, value.class], ["a", "b", "c", "d"]
 end
+
+test "props are refused once the shape has an instance" do
+	[Literal::Data, Literal::Struct, Literal::Object].each do |base|
+		klass = Class.new(base) { prop :name, String }
+		klass.new(name: "Joel")
+
+		error = assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
+		assert error.message.include?("because it already has instances")
+	end
+end
+
+test "an instance built without new closes the shape too" do
+	from_props = Class.new(Literal::Data) { prop :name, String }
+	from_props.from_props(name: "Joel")
+	assert_raises(Literal::ArgumentError) { from_props.prop :age, Integer }
+
+	packed = Class.new(Literal::Data) { prop :name, String }
+	payload = Class.new(Literal::Data) { prop :name, String }.new(name: "Joel").as_pack
+	packed.from_pack(payload)
+	assert_raises(Literal::ArgumentError) { packed.prop :age, Integer }
+end
+
+test "a subclass's instance closes its ancestors, but a parent's leaves a subclass open" do
+	parent = Class.new(Literal::Data) { prop :name, String }
+	child = Class.new(parent)
+	child.new(name: "Joel")
+
+	assert_raises(Literal::ArgumentError) { parent.prop :age, Integer }
+	assert_raises(Literal::ArgumentError) { child.prop :age, Integer }
+
+	open = Class.new(Literal::Data) { prop :name, String }
+	open.new(name: "Joel")
+	late = Class.new(open) { prop :age, Integer }
+
+	assert_equal late.new(name: "Joel", age: 30).to_h, { name: "Joel", age: 30 }
+end
+
+test "checks are refused once a shape that can't judge its instances has one" do
+	klass = Class.new(Literal::Data) { prop :name, String }
+	klass.new(name: "Joel")
+
+	error = assert_raises(Literal::ArgumentError) { klass.check(:name, "must not be empty") { |name:| !name.empty? } }
+	assert error.message.include?("because it already has instances")
+end
+
+test "an enum's props are refused after its first member, its checks are not" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop :label, String
+		const_set(:A, new(1, label: "a"))
+	end
+
+	assert_raises(Literal::ArgumentError) { enum.prop :rank, Integer }
+	enum.check(:label, "must not be empty") { |label:| !label.empty? }
+end
+
+test "watching for the first instance costs new nothing after it" do
+	klass = Class.new(Literal::Data) { prop :name, String }
+
+	refute_equal klass.method(:new).owner, Class
+	klass.new(name: "Joel")
+	assert_equal klass.method(:new).owner, Class
+end
+
+test "a failed construction leaves the shape open" do
+	klass = Class.new(Literal::Data) { prop :name, String }
+
+	assert_raises(ArgumentError) { klass.new }
+	assert_raises(Literal::TypeError) { klass.from_props(name: 1) }
+
+	klass.prop :age, Integer, default: 0
+	assert_equal klass.new(name: "Joel").to_h, { name: "Joel", age: 0 }
+end
+
+test "from_props and from_pack failing after assignment leave the shape open" do
+	klass = Class.new(Literal::Data) do
+		prop :name, String
+		check(:name, "must be filled") { |name:| !name.empty? }
+	end
+
+	assert_raises(NameError) { klass.from_props(name: "Joel", unknown: 1) }
+	assert_raises(Literal::CheckError) { klass.from_props(name: "") }
+	assert_raises(Literal::CheckError) { klass.from_pack([2, { name: "" }, true, [].freeze]) }
+
+	klass.prop :age, Integer, default: 0
+	assert_equal klass.from_props(name: "Joel").to_h, { name: "Joel", age: 0 }
+	assert_raises(Literal::ArgumentError) { klass.prop :email, String }
+end
+
+test "watching for the first instance keeps new private where the shape made it so" do
+	own = Class.new(Literal::Data) do
+		prop :name, String
+		private_class_method :new
+
+		def self.named(name) = new(name:)
+	end
+
+	inherited = Class.new(own)
+
+	[own, inherited].each do |klass|
+		assert_raises(NoMethodError) { klass.new(name: "Joel") }
+		assert_equal klass.named("Joel").name, "Joel"
+		assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
+	end
+end

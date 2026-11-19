@@ -38,6 +38,12 @@ module Literal::Properties
 		base.include(DocString)
 		base.include(Literal::Checks::Enforced)
 		base.include(base.__send__(:__literal_extension__))
+		base.__send__(:__literal_watch_first_instance__)
+	end
+
+	def inherited(subclass)
+		super
+		subclass.__send__(:__literal_watch_first_instance__)
 	end
 
 	# The short form of `checks`: one predicate, one message, filed against
@@ -93,6 +99,13 @@ module Literal::Properties
 		if (inheritor = subclasses.first)
 			raise Literal::ArgumentError.new(
 				"Cannot declare checks on #{self}, because #{inheritor} has already inherited them."
+			)
+		end
+
+		# Only a shape that knows its instances can judge them against a new check.
+		if @__literal_used__ && !__literal_existing_instances__
+			raise Literal::ArgumentError.new(
+				"Cannot declare checks on #{self}, because it already has instances."
 			)
 		end
 
@@ -253,6 +266,11 @@ module Literal::Properties
 
 		if frozen?
 			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it is frozen.")
+		end
+
+		# An instance made before would be missing it.
+		if @__literal_used__
+			raise Literal::ArgumentError.new("Cannot define #{name.inspect} on #{self}, because it already has instances.")
 		end
 
 		queue = subclasses
@@ -436,6 +454,42 @@ module Literal::Properties
 	rescue NameError
 		# A temporary name, which a generated module carries.
 		nil
+	end
+
+	# Marks the shape used when `new` first makes one, then steps out of the
+	# way, so later instances cost nothing more. Included, not prepended, so
+	# the shape's own `new` — or its own `private_class_method :new` — still
+	# comes first, and as private as the `new` it stands in front of.
+	private def __literal_watch_first_instance__
+		watch = Module.new
+		private_new = singleton_class.private_method_defined?(:new)
+
+		watch.define_method(:new) do |*args, **kwargs, &block|
+			instance = super(*args, **kwargs, &block)
+			__literal_used__
+
+			SCHEMA_METHODS_LOCK.synchronize do
+				if watch.method_defined?(:new, false) || watch.private_method_defined?(:new, false)
+					watch.remove_method(:new)
+				end
+			end
+
+			instance
+		end
+
+		watch.__send__(:private, :new) if private_new
+		singleton_class.include(watch)
+	end
+
+	# The shape has an instance, so its properties are fixed: one declared now
+	# would be missing from it. So are its ancestors', which it holds too.
+	private def __literal_used__
+		shape = self
+
+		while Literal::Properties === shape && !shape.instance_variable_get(:@__literal_used__)
+			shape.instance_variable_set(:@__literal_used__, true) unless shape.frozen?
+			shape = shape.superclass
+		end
 	end
 
 	private def __literal_add_property__(property)
