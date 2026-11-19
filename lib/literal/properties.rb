@@ -196,6 +196,10 @@ module Literal::Properties
 	end
 
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
+		unless Literal::Property.valid_name?(name)
+			raise Literal::ArgumentError.new("The property name #{name.inspect} must be a Symbol that Ruby accepts as a local variable name.")
+		end
+
 		seal = nil
 
 		# A block built from a Literal::Coercion or Literal::Seal carries its

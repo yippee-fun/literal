@@ -2,13 +2,22 @@
 
 class Literal::Property
 	ORDER = { :positional => 0, :* => 1, :keyword => 2, :** => 3, :& => 4 }.freeze
-	RUBY_KEYWORDS = %i[alias and begin break case class def do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield].to_h { |k| [k, "__#{k}__"] }.freeze
+	# What Ruby accepts as a local variable, which every generated parameter is.
+	# `_1` to `_9` are reserved for numbered block parameters.
+	NAME_PATTERN = /\A(?!_[1-9]\z)[a-z_\p{^ASCII}&&[^\p{Lu}\p{Lt}]][a-zA-Z0-9_\p{^ASCII}]*\z/
+	RUBY_KEYWORDS = %i[__ENCODING__ __FILE__ __LINE__ alias and begin break case class def do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield].to_h { |k| [k, "__#{k}__"] }.freeze
 
 	VISIBILITY_OPTIONS = Set[false, :private, :protected, :public].freeze
 	VISIBILITY_ORDER = { false => 0, :private => 1, :protected => 2, :public => 3 }.freeze
 	KIND_OPTIONS = Set[:positional, :*, :keyword, :**, :&].freeze
 
 	include Comparable
+
+	def self.valid_name?(name)
+		Symbol === name && NAME_PATTERN.match?(name.name.encode(Encoding::UTF_8))
+	rescue EncodingError
+		false
+	end
 
 	def initialize(name:, type:, kind:, reader:, writer:, predicate:, default:, description:, coercion:, seal: nil)
 		@name = name

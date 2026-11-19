@@ -915,3 +915,30 @@ test "a batch's signature is judged when it commits" do
 		end
 	end
 end
+
+test "props can be named after Ruby keywords" do
+	[:class, :end, :__FILE__, :__LINE__, :__ENCODING__].each do |name|
+		keyword = Class.new(Literal::Data) { prop name, Integer, reader: false }
+		positional = Class.new(Literal::Data) { prop name, Integer, :positional, reader: false }
+
+		assert_equal keyword.new(name => 5).to_h, { name => 5 }
+		assert_equal positional.new(5).to_h, { name => 5 }
+	end
+end
+
+test "prop refuses names that aren't Ruby local variable names" do
+	["name", :defined?, :BEGIN, :END, :Name, :foo?, :"a-b", :_1, :"a = 1; b"].each do |name|
+		error = assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { prop name, String } }
+
+		assert error.message.include?("must be a Symbol that Ruby accepts as a local variable name")
+	end
+
+	assert_raises(Literal::ArgumentError) { Literal::Data.define("a = 1; b": String) }
+end
+
+test "prop accepts valid names in other encodings" do
+	name = "café".encode(Encoding::ISO_8859_1).to_sym
+	klass = Class.new(Literal::Data) { prop name, String }
+
+	assert_equal klass.new(name => "x").to_h, { name => "x" }
+end
