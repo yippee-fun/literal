@@ -140,7 +140,10 @@ test "marshalling restores the frozen state of property values" do
 end
 
 class ::RootStructPrivateFreeze
-	private def freeze = raise("private freeze called")
+	private def freeze
+		super
+		nil
+	end
 end
 
 class ::RootStructWithPrivateFreezeProp < Literal::Struct
@@ -149,8 +152,20 @@ end
 
 test "marshalling refreezes a property value whose own freeze is private" do
 	a = RootStructWithPrivateFreezeProp.new(payload: Literal::FREEZE.bind_call(RootStructPrivateFreeze.new))
+	payload = Marshal.load(Marshal.dump(a)).payload
 
-	assert Literal::FROZEN.bind_call(Marshal.load(Marshal.dump(a)).payload)
+	assert RootStructPrivateFreeze === payload
+	assert Literal::FROZEN.bind_call(payload)
+end
+
+class ::RootStructWithLiteralArrayProp < Literal::Struct
+	prop :items, Literal::Array(Integer)
+end
+
+test "marshalling refreezes a property value through its own freeze" do
+	a = RootStructWithLiteralArrayProp.new(items: Literal::Array(Integer).new(1, 2).freeze)
+
+	assert Marshal.load(Marshal.dump(a)).items.__value__.frozen?
 end
 
 test "marshalling loads version 1 payloads" do

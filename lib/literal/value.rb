@@ -68,7 +68,7 @@ class Literal::Value
 			value = Literal::Freezing.restore_frozen(value, __type__)
 		in [2, value, was_frozen, value_was_frozen]
 			value = Literal::Freezing.restore_frozen(value, __type__)
-			Literal::FREEZE.bind_call(value) if value_was_frozen
+			Literal::Freezing.shallow_frozen(value) if value_was_frozen
 		end
 
 		Literal.check(value, __type__)

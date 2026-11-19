@@ -19,8 +19,11 @@ module Literal::Freezing
 	end
 
 	# The object, frozen by its own #freeze, which may be private or return
-	# something else. A shape's own #freeze may be a reader.
+	# something else. A shape's own #freeze may be a reader. One already frozen
+	# is left alone, since its #freeze may not expect to run again.
 	def shallow_frozen(value)
+		return value if Literal::FROZEN.bind_call(value)
+
 		if Literal::Properties === Literal::CLASS.bind_call(value) || !Literal.implements?(value, :freeze)
 			Literal::FREEZE.bind_call(value)
 		else

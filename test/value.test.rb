@@ -103,6 +103,27 @@ test "from_pack restores the value's frozen state before checking it" do
 	assert_equal Age.from_pack([1, 20, true]), Age.new(20)
 end
 
+test "from_pack refreezes the value through its own freeze" do
+	numbers = Literal::Value(Literal::Array(Integer))
+	pack = Marshal.load(Marshal.dump(numbers.new(Literal::Array(Integer).new(1).freeze).as_pack))
+
+	assert numbers.from_pack(pack).value.__value__.frozen?
+end
+
+test "from_pack leaves a value that is already frozen alone" do
+	payload_class = Class.new do
+		def freeze
+			@frozen_by_own_freeze = true
+			super
+		end
+	end
+
+	value_class = Literal::Value(payload_class)
+	payload = payload_class.new.freeze
+
+	assert value_class.from_pack(value_class.new(payload).as_pack).value.equal?(payload)
+end
+
 test "from_pack restores nested values the type requires to be frozen" do
 	names = Literal::Value(Literal::Types._Array(Literal::Types._Frozen(String)))
 	frozen_names = Literal::Value(Literal::Types._Frozen(Literal::Types._Array(Literal::Types._Frozen(String))))
@@ -177,13 +198,25 @@ test "from_pack loads values without a frozen? method" do
 end
 
 test "from_pack refreezes a value whose own freeze is private or overridden" do
-	private_freeze = Class.new { private def freeze = raise("private freeze called") }
-	overridden_freeze = Class.new(private_freeze) { public def freeze = raise("overridden freeze called") }
+	private_freeze = Class.new do
+		private def freeze
+			super
+			nil
+		end
+	end
+
+	overridden_freeze = Class.new(private_freeze) do
+		def freeze
+			super
+			:frozen
+		end
+	end
 
 	[private_freeze, overridden_freeze].each do |payload_class|
 		value_class = Literal::Value(payload_class)
 		loaded = value_class.from_pack(value_class.new(Literal::FREEZE.bind_call(payload_class.new)).as_pack)
 
+		assert payload_class === loaded.value
 		assert Literal::FROZEN.bind_call(loaded.value)
 	end
 end
