@@ -74,7 +74,9 @@ class Literal::Types::ConstraintType
 				@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
 		when Literal::Types::UnionType
 			other.<=(self, context:)
-		when Module
+		# A numeric literal admits every value == to it (10 == 10.0), so it can't
+		# stand in for them as a single value.
+		when Module, Numeric
 			return false unless @property_constraints.empty?
 
 			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
@@ -171,12 +173,7 @@ class Literal::Types::ConstraintType
 	end
 
 	private def literal_value?(value)
-		case value
-		when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
-			true
-		else
-			!!(defined?(::BigDecimal) && ::BigDecimal === value)
-		end
+		value in Array | Hash | String | Symbol | true | false | nil
 	end
 
 	freeze

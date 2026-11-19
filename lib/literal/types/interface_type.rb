@@ -5,7 +5,9 @@ class Literal::Types::InterfaceType
 	include Literal::Type
 
 	# List of `===` method owners where the comparison will only match for objects with the same class
-	OwnClassTypeMethodOwners = Set[String, Integer, Kernel, Float, NilClass, TrueClass, FalseClass].freeze
+	OwnClassTypeMethodOwners = Set[String, Kernel, NilClass, TrueClass, FalseClass].freeze
+
+	CoreNumerics = [Integer, Float, Rational, Complex].freeze
 
 	def initialize(methods)
 		raise Literal::ArgumentError.new("_Interface type must have at least one method.") if methods.size < 1
@@ -36,6 +38,12 @@ class Literal::Types::InterfaceType
 			@methods.subset?(public_methods)
 		when Literal::Types::ConstraintType
 			@methods.all? { |method| other.object_constraints.any? { |type| covers_method?(type, method, context:) } }
+		when Numeric
+			# 1 == 1.0 == 1r == Complex(1), so a numeric literal admits a value of
+			# every core numeric class, as well as itself.
+			self === other &&
+				CoreNumerics.all? { |numeric| self >= numeric } &&
+				(!defined?(::BigDecimal) || self >= ::BigDecimal)
 		else
 			if OwnClassTypeMethodOwners.include?(other.method(:===).owner)
 				self === other

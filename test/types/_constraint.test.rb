@@ -26,7 +26,7 @@ test "hierarchy" do
 	refute_subtype _Constraint(String, size: 1), _Constraint(String, size: 4)
 	refute_subtype _Constraint(String, size: 1..), _Constraint(Object, zzz: _Any?)
 	refute_subtype _Constraint(Object), _Constraint(Object, name: _Nilable(String))
-	assert_subtype 3.14, _Float(finite?: _Truthy)
+	refute_subtype 3.14, _Float(finite?: _Truthy)
 	refute_subtype Float::INFINITY, _Float(finite?: _Truthy)
 	assert_subtype _Float(1..10), _Float(finite?: _Truthy)
 	refute_subtype _Float(1..), _Float(finite?: _Truthy)
@@ -41,7 +41,7 @@ test "hierarchy" do
 	assert_subtype _Float(finite?: _Truthy), _Float(finite?: true)
 	refute_subtype _Float(finite?: _Boolean), _Float(finite?: true)
 	refute_subtype _Constraint(Object, finite?: _Truthy), _Constraint(Object, finite?: true)
-	assert_subtype 3.14, _Float(finite?: true)
+	refute_subtype 3.14, _Float(finite?: true)
 	refute_subtype Float::INFINITY, _Float(finite?: true)
 	assert_subtype _Float(1..10), _Float(finite?: true)
 	refute_subtype _Float(1..), _Float(finite?: true)
@@ -92,4 +92,12 @@ test "=== with property constraints" do
 	refute age_constraint === [1]
 	refute age_constraint === [1, 2, 3, 4]
 	refute age_constraint === Set[1, 2]
+end
+
+test "numeric literals are bounded by Numeric" do
+	# 10 admits 10.0, so it is only a subtype of constraints every numeric
+	# equal to it satisfies.
+	assert_subtype 10, _Constraint(Numeric, 5..15)
+	refute_subtype 10, _Integer(5..15)
+	refute_subtype 10, _Constraint(Numeric, integer?: true)
 end
