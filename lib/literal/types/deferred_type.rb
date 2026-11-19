@@ -82,7 +82,7 @@ class Literal::Types::DeferredType
 	end
 
 	def >=(other, context: nil)
-		Literal.subtype?(other, materialize, context:)
+		Literal.subtype?(other, self, context:)
 	end
 
 	freeze

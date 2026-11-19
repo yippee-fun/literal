@@ -286,6 +286,13 @@ module Literal
 		context.structural { subtype?(type, supertype, context:) }
 	end
 
+	# Like subtype?, but for a check whose sides are swapped relative to the
+	# caller's, as when _Not(A) <= _Not(B) asks B <= A.
+	def self.contravariant_subtype?(type, supertype, context: nil)
+		context ||= SubtypeContext.new
+		context.contravariant { subtype?(type, supertype, context:) }
+	end
+
 	def self.subtype?(type, supertype, context: nil)
 		return !!(supertype >= type) if Module === type && Module === supertype && !(Literal::Type === supertype)
 
@@ -298,17 +305,17 @@ module Literal
 		return context.fetch(raw_key) if context.memoized?(raw_key)
 
 		# Coinductive cycle handling: if we are already in the middle of proving this
-		# exact pair, assume it holds — provided the recursion has passed through a
-		# structural constructor (see SubtypeContext#assume). This is what makes
-		# subtyping between recursive (looping) types terminate with the right answer.
+		# exact pair, assume it holds — provided the cycle justifies it (see
+		# SubtypeContext#assume). This is what makes subtyping between recursive
+		# (looping) types terminate with the right answer.
 		return context.assume(raw_key) unless context.acquire(raw_key)
 
 		raw_acquired = true
 
 		subtype = type
 
-		subtype = subtype.materialize if Types::DeferredType === subtype
-		supertype = supertype.materialize if Types::DeferredType === supertype
+		subtype = context.unfold_left(subtype) if Types::DeferredType === subtype
+		supertype = context.unfold_right(supertype) if Types::DeferredType === supertype
 		resolved_key = [OBJECT_ID.bind_call(subtype), OBJECT_ID.bind_call(supertype)]
 
 		if resolved_key != raw_key
@@ -341,7 +348,7 @@ module Literal
 
 		case subtype
 		in Types::DeferredType unless Types::DeferredType === supertype
-			subtype?(subtype.materialize, supertype, context:)
+			subtype?(context.unfold_left(subtype), supertype, context:)
 		in Types::UnionType
 			subtype.all? { |member| subtype?(member, supertype, context:) }
 		in Types::NilableType
@@ -397,6 +404,9 @@ module Literal
 			subtype == FalseClass
 		else
 			case supertype
+			when Types::DeferredType
+				subtype?(subtype, context.unfold_right(supertype), context:) ||
+					(Types::DeferredType === subtype && subtype?(context.unfold_left(subtype), supertype, context:))
 			when Literal::Type
 				supertype.>=(subtype, context:) || bounded_subtype?(subtype, supertype, context)
 			when Module

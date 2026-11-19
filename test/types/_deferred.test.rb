@@ -233,16 +233,86 @@ test "a deferred chain compared with itself or _Never stays unmaterialized" do
 	assert_subtype _Never, chain
 end
 
-test "mutually deferred aliases are subtypes of each other and nothing else" do
+test "deferred alias cycles match nothing, like _Never" do
 	b = nil
 	a = _Deferred { b }
 	b = _Deferred { a }
+	itself = _Deferred { itself }
+
+	refute a === 1
+	refute itself === 1
 
 	assert_subtype a, b
 	assert_subtype b, a
 	assert_subtype a, a
-	refute_subtype a, String
+	assert_subtype a, itself
+	assert_subtype itself, a
+	assert_subtype a, String
+	assert_subtype itself, String
+	assert_subtype itself, _Never
+	assert_subtype _Array(itself), _Array(Integer)
+
 	refute_subtype String, a
+	refute_subtype String, itself
+	refute_subtype _Void, itself
+end
+
+test "a recursive union on the left is a subtype of what its other members fit" do
+	node = _Deferred { _Union(String, node) }
+	union = _Union(String, _Deferred { union })
+	nilable = _Deferred { _Nilable(nilable) }
+
+	refute node === 1
+	assert node === "a"
+
+	assert_subtype node, _Void
+	assert_subtype node, String
+	assert_subtype _Deferred { node }, _Void
+	assert_subtype union, _Any
+	assert_subtype union, String
+	assert_subtype nilable, nil
+	assert_subtype _Array(node), _Array(String)
+
+	refute_subtype node, Integer
+	refute_subtype union, Symbol
+	refute_subtype nilable, String
+end
+
+test "a cycle that unfolds the right side proves nothing" do
+	never = _Deferred { never }
+	integers = _Deferred { _Union(Integer, integers) }
+	node = _Deferred { _Union(String, node) }
+
+	refute_subtype String, never
+	refute_subtype String, integers
+	refute_subtype node, never
+	refute_subtype node, integers
+
+	assert_subtype Integer, integers
+	assert_subtype never, integers
+end
+
+test "recursive unions on both sides compare by their members" do
+	strings = _Deferred { _Union(String, strings) }
+	more_strings = _Deferred { _Union(more_strings, String) }
+	numbers = _Deferred { _Union(Integer, Float, numbers) }
+
+	assert_subtype strings, more_strings
+	assert_subtype more_strings, strings
+	refute_subtype numbers, strings
+	refute_subtype strings, numbers
+end
+
+test "a recursive type under _Not swaps sides" do
+	never = _Deferred { never }
+	node = _Deferred { _Union(String, node) }
+
+	assert_subtype _Not(String), _Not(never)
+	assert_subtype _Not(String), _Not(node)
+	assert_subtype _Not(node), _Not(String)
+
+	refute_subtype _Not(never), _Not(String)
+	refute_subtype _Not(Integer), _Not(node)
 end
 
 test "a deferred alias of a deferred chain matches it without forcing the shared tail" do

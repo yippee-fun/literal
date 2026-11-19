@@ -2478,16 +2478,18 @@ end
 test "a scalar union that only refers back to itself is not serializable" do
 	type = _Deferred { _Union(String, type) }
 
-	refute Example.serializable_type?(type)
-	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	[type, _Deferred { _Deferred { type } }].each do |type|
+		refute Example.serializable_type?(type)
+		assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	end
 end
 
-test "self-referential tagged unions are not serializable" do
+test "a tagged union member that only refers back to the union holds no values" do
 	type = nil
 	type = _TaggedUnion(a: _Deferred { type }, b: String)
 
-	refute Example.kind === type
-	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	assert Example.kind === type
+	assert_equal(Example.json_schema(type), Example.json_schema(_TaggedUnion(a: String, b: _Never)))
 end
 
 test "mutually recursive container types" do
@@ -2853,7 +2855,9 @@ test "never serializes to a schema that matches nothing" do
 end
 
 test "types with no values serialize as never" do
-	[_Deferred { _Never }].each do |nothing|
+	itself = _Deferred { itself }
+
+	[_Deferred { _Never }, itself].each do |nothing|
 		assert Example.kind === nothing
 		assert_equal(Example.json_schema(nothing), { "not" => {} })
 		assert_equal(Example.json_schema(_Union(String, nothing)), Example.json_schema(Literal::Types::UnionType.new([String, _Never])))
