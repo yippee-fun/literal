@@ -34,7 +34,7 @@ module Literal::Checks::Checker
 
 		return result_type.failure(errors.to_errors) if !sound || errors.any?
 
-		result_type.success(draft.__send__(:__finalize_unchecked__))
+		result_type.success(Literal::Draft::API::FINALIZE_UNCHECKED.bind_call(draft))
 	end
 
 	# `only` narrows to the checks whose outcome depends on one property — what
@@ -199,7 +199,7 @@ module Literal::Checks::Checker
 	# coercion, so the type check that follows reports against the value the
 	# coercion actually produced.
 	private def coerce(draft, property, value, errors)
-		property.coerce(value, context: draft.__context__)
+		property.coerce(value, context: Literal::Draft::API::CONTEXT.bind_call(draft))
 	rescue Literal::CheckError => error
 		# The coercion built a nested value that broke its own checks; those
 		# surface under this prop with their paths.
@@ -221,7 +221,7 @@ module Literal::Checks::Checker
 			return false
 		end
 
-		draft.__store__(property.name, value)
+		Literal::Draft::API::STORE.bind_call(draft, property.name, value)
 		true
 	end
 
@@ -238,7 +238,7 @@ module Literal::Checks::Checker
 
 		# Only a Proc default reads the receiver, and the sync it triggers is
 		# not free.
-		receiver = (Proc === property.default) ? draft.__context__ : nil
+		receiver = (Proc === property.default) ? Literal::Draft::API::CONTEXT.bind_call(draft) : nil
 		value = shape.__send__(:missing_prop_value, property, receiver)
 
 		if property.coercion
@@ -270,7 +270,7 @@ module Literal::Checks::Checker
 
 		# Through store, so the prop's own seal and type still answer for the
 		# value the nested shape built.
-		store(draft, property, nested_draft.__send__(:__finalize_unchecked__), errors)
+		store(draft, property, Literal::Draft::API::FINALIZE_UNCHECKED.bind_call(nested_draft), errors)
 	end
 
 	# A Hash stands for a shape only when exactly one is reachable — which of

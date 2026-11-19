@@ -90,6 +90,7 @@ class Literal::Draft < Literal::Struct
 			end
 
 			define_singleton_method(:__type__) { type }
+			prepend API
 
 			if type.name && respond_to?(:set_temporary_name)
 				set_temporary_name "Literal::Draft(#{type.name})"
@@ -124,7 +125,7 @@ class Literal::Draft < Literal::Struct
 					if Literal::Draft === value
 						value
 					else
-						__context__.instance_exec(value, &original_coercion)
+						API::CONTEXT.bind_call(self).instance_exec(value, &original_coercion)
 					end
 				})
 			)
@@ -182,110 +183,124 @@ class Literal::Draft < Literal::Struct
 		freeze
 	end
 
-	# Build the drafted type from the properties that have been set. The
-	# drafted type's defaults apply to anything left unset, and its required
-	# properties are enforced here. Any properties passed here are assigned
-	# to the draft first — through its writers, so they're coerced and type
-	# checked like any other assignment.
-	#
-	# Nested drafts finalize too, depth-first — unless the drafted type's
-	# property accepts the draft as-is, in which case the slot wanted a draft
-	# and it stays one. The draft itself is never mutated by building: aside
-	# from any props and block given here, finalizing twice builds two
-	# independent values.
-	#
-	# A block receives the draft after any props are assigned and before the
-	# value is built — for last touches like conditional assignment.
-	def finalize(**props, &)
-		self.class.__type__.from_props(__finalize_attributes__(props, &))
-	end
-
-	# Finalize without enforcing the drafted type's checks or sealing again, for
-	# the checker, which has already done both against this draft. Private,
-	# or any caller could turn a failing draft into a value that breaks its
-	# shape's checks.
-	private def __finalize_unchecked__
-		type = self.class.__type__
-		type.__send__(:__literal_from_props__, __finalize_attributes__({}), seal: false)
-	end
-
-	private def __finalize_attributes__(props)
-		type = self.class.__type__
-
-		unless type.respond_to?(:from_props)
-			raise Literal::ArgumentError.new("Cannot finalize a draft into #{type}, because it doesn't support from_props.")
+	# The draft's own methods. Every draft class prepends them, so a drafted
+	# property's reader never shadows one: a property named `finalize` is read
+	# with `draft[:finalize]`.
+	module API
+		# Build the drafted type from the properties that have been set. The
+		# drafted type's defaults apply to anything left unset, and its required
+		# properties are enforced here. Any properties passed here are assigned
+		# to the draft first — through its writers, so they're coerced and type
+		# checked like any other assignment.
+		#
+		# Nested drafts finalize too, depth-first — unless the drafted type's
+		# property accepts the draft as-is, in which case the slot wanted a draft
+		# and it stays one. The draft itself is never mutated by building: aside
+		# from any props and block given here, finalizing twice builds two
+		# independent values.
+		#
+		# A block receives the draft after any props are assigned and before the
+		# value is built — for last touches like conditional assignment.
+		def finalize(**props, &)
+			self.class.__type__.from_props(__finalize_attributes__(props, &))
 		end
 
-		props.each { |name, value| self[name] = value }
+		# Finalize without enforcing the drafted type's checks or sealing again, for
+		# the checker, which has already done both against this draft. Private,
+		# or any caller could turn a failing draft into a value that breaks its
+		# shape's checks.
+		private def __finalize_unchecked__
+			type = self.class.__type__
+			type.__send__(:__literal_from_props__, __finalize_attributes__({}), seal: false)
+		end
 
-		yield self if block_given?
+		private def __finalize_attributes__(props)
+			type = self.class.__type__
 
-		properties = type.literal_properties
-		attributes = {}
-
-		to_h.each do |name, value|
-			next if Literal::Undefined == value
-
-			if Literal::Draft === value && !(properties[name].type === value)
-				value = value.finalize
+			unless type.respond_to?(:from_props)
+				raise Literal::ArgumentError.new("Cannot finalize a draft into #{type}, because it doesn't support from_props.")
 			end
 
-			attributes[name] = value
+			props.each { |name, value| self[name] = value }
+
+			yield self if block_given?
+
+			properties = type.literal_properties
+			attributes = {}
+
+			to_h.each do |name, value|
+				next if Literal::Undefined == value
+
+				if Literal::Draft === value && !(properties[name].type === value)
+					value = FINALIZE.bind_call(value)
+				end
+
+				attributes[name] = value
+			end
+
+			attributes
 		end
 
-		attributes
+		# Answers a Literal::Result carrying the built value or every error found:
+		# the type errors and, once the types hold, the shape's checks. The draft
+		# itself is never mutated.
+		def check
+			Literal::Checks::Checker.check(self.class.__checked_type__, self)
+		end
+
+		def sound?
+			check.success?
+		end
+
+		# For the checker, which has already coerced the value and checked it
+		# against the prop's real type, and must not do either twice.
+		def __store__(name, value)
+			property = self.class.literal_properties[name] ||
+				raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
+
+			instance_variable_set(property.__ivar__, value)
+		end
+
+		# Coercions and defaults are written for the drafted type — they may call
+		# its own methods and read the properties assigned before them, exactly as
+		# they do in the generated initializer. So they run against an instance of
+		# the drafted type carrying the draft's values as they stand, synced on
+		# each use. One instance per draft, shared with the checker, kept in a
+		# capitalized slot because no property can be named one.
+		def __context__
+			context = (@Context ||= self.class.__type__.allocate)
+
+			self.class.__type__.literal_properties.each do |property|
+				value = instance_variable_get(property.__ivar__)
+
+				if Literal::Undefined == value
+					# An unset slot reads as unset — including one set and then reset,
+					# whose earlier sync must not linger.
+					if context.instance_variable_defined?(property.__ivar__)
+						context.remove_instance_variable(property.__ivar__)
+					end
+				else
+					context.instance_variable_set(property.__ivar__, value)
+				end
+			end
+
+			context
+		end
+
+		# For Literal's own calls, which no subclass method may intercept.
+		FINALIZE = instance_method(:finalize)
+		FINALIZE_UNCHECKED = instance_method(:__finalize_unchecked__)
+		STORE = instance_method(:__store__)
+		CONTEXT = instance_method(:__context__)
 	end
 
-	# Answers a Literal::Result carrying the built value or every error found:
-	# the type errors and, once the types hold, the shape's checks. The draft
-	# itself is never mutated.
-	def check
-		Literal::Checks::Checker.check(self.class.__checked_type__, self)
-	end
+	include API
 
-	def sound?
-		check.success?
-	end
-
-	# For the checker, which has already coerced the value and checked it
-	# against the prop's real type, and must not do either twice.
-	def __store__(name, value)
-		property = self.class.literal_properties[name] ||
-			raise(NameError.new("unknown attribute: #{name.inspect} for #{self.class}"))
-
-		instance_variable_set(property.__ivar__, value)
-	end
-
-	# A copy gets its own context: the memoized receiver below belongs to one
-	# draft, or checking the copy would write onto an object the original
-	# can still reach.
+	# A copy gets its own context: the memoized receiver API#__context__ keeps
+	# belongs to one draft, or checking the copy would write onto an object
+	# the original can still reach.
 	private def initialize_copy(source)
 		super
-		remove_instance_variable(:@__context__) if instance_variable_defined?(:@__context__)
-	end
-
-	# Coercions and defaults are written for the drafted type — they may call
-	# its own methods and read the properties assigned before them, exactly as
-	# they do in the generated initializer. So they run against an instance of
-	# the drafted type carrying the draft's values as they stand, synced on
-	# each use. One instance per draft, shared with the checker.
-	def __context__
-		context = (@__context__ ||= self.class.__type__.allocate)
-
-		self.class.__type__.literal_properties.each do |property|
-			value = instance_variable_get(property.__ivar__)
-
-			if Literal::Undefined == value
-				# An unset slot reads as unset — including one set and then reset,
-				# whose earlier sync must not linger.
-				if context.instance_variable_defined?(property.__ivar__)
-					context.remove_instance_variable(property.__ivar__)
-				end
-			else
-				context.instance_variable_set(property.__ivar__, value)
-			end
-		end
-
-		context
+		remove_instance_variable(:@Context) if instance_variable_defined?(:@Context)
 	end
 end

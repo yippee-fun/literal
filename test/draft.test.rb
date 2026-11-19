@@ -394,6 +394,43 @@ test "drafts accept any shape their drafted type accepts" do
 	assert_equal Literal::Draft(klass).new.class.__type__, klass
 end
 
+test "the draft's own methods win over drafted readers of the same name" do
+	klass = Class.new(Literal::Data) do
+		prop :finalize, String
+		prop :check, String
+		prop :sound, String, predicate: :public
+		prop :__store__, String
+		prop :__context__, String
+		prop :__finalize_attributes__, String
+		prop :__finalize_unchecked__, String
+	end
+
+	props = { finalize: "a", check: "b", sound: "c", __store__: "d", __context__: "e", __finalize_attributes__: "f", __finalize_unchecked__: "g" }
+
+	value = klass.build(**props)
+
+	assert klass === value
+	assert_equal value.to_h, props
+
+	draft = Literal::Draft(klass).new(**props)
+
+	assert_equal draft[:finalize], "a"
+	assert draft.sound?
+	assert_equal draft.check.value!, value
+	assert_equal Literal::Draft(klass).check(props).value!, value
+	assert_equal draft.finalize, value
+end
+
+test "nested drafts finalize through the draft's own finalize" do
+	inner = Class.new(Literal::Data) { prop :finalize, String }
+	outer = Class.new(Literal::Data) { prop :inner, inner }
+
+	draft = Literal::Draft(outer).new(inner: Literal::Draft(inner).new(finalize: "x"))
+
+	assert_equal draft.finalize.inner.finalize, "x"
+	assert_equal draft.check.value!.inner.finalize, "x"
+end
+
 test "drafts mirror the drafted type's reader visibility" do
 	klass = Class.new(Literal::Struct) do
 		prop :name, String, reader: :private
@@ -405,4 +442,15 @@ test "drafts mirror the drafted type's reader visibility" do
 	assert draft.class.private_method_defined?(:name)
 	refute draft.respond_to?(:age)
 	assert_equal draft.finalize.to_h, { name: "John", age: 1 }
+end
+
+test "a property named __context__ keeps its own slot when coercions run" do
+	klass = Class.new(Literal::Data) do
+		prop :__context__, String
+		prop :count, Integer, &:to_i
+	end
+
+	value = klass.build(__context__: "ctx") { |draft| draft.count = "3" }
+
+	assert_equal value.to_h, { __context__: "ctx", count: 3 }
 end
