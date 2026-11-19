@@ -111,5 +111,8 @@ class Literal::TypeError < TypeError
 
 	private def inspect_object(object)
 		Literal.implements?(object, :inspect) ? Literal::SEND.bind_call(object, :inspect) : Literal::INSPECT.bind_call(object)
+	rescue => error
+		# Such as TruffleRuby's Kernel#inspect calling a __send__ property.
+		"#<#{Literal::CLASS.bind_call(object)} (inspect raised #{error.class})>"
 	end
 end

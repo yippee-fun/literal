@@ -69,6 +69,13 @@ test "renders a BasicObject's own inspect" do
 	assert error.message.include?("): custom\n")
 end
 
+test "a value whose inspect raises is rendered" do
+	object = Class.new { def inspect = raise("boom") }.new
+	error = assert_raises(Literal::TypeError) { Literal.check(object, String) }
+
+	assert(/Actual \(#<Class:0x\h+>\): #<#<Class:0x\h+> \(inspect raised RuntimeError\)>\n/.match?(error.message))
+end
+
 test "a value with a __send__ property is rendered" do
 	shape = Class.new(Literal::Data) { prop :__send__, String }
 	error = assert_raises(Literal::TypeError) { Literal.check(shape.new(__send__: "x"), String) }
