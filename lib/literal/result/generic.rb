@@ -2,6 +2,7 @@
 
 class Literal::Result::Generic
 	include Literal::Type
+	include Literal::Types::Distributed
 
 	def initialize(success_type, failure_type)
 		@success_type = success_type
@@ -37,6 +38,8 @@ class Literal::Result::Generic
 
 	def >=(other, context: nil)
 		case other
+		when Literal::Types::Distributed, Literal::Types::DeferredType
+			Literal.subtype?(other, self, context:)
 		when Literal::Success::Generic
 			Literal.structural_subtype?(other.type, @success_type, context:)
 		when Literal::Failure::Generic

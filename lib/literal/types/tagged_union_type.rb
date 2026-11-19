@@ -2,6 +2,7 @@
 
 class Literal::Types::TaggedUnionType
 	include Literal::Type
+	include Literal::Types::Distributed
 
 	def initialize(**members)
 		raise Literal::ArgumentError.new("_TaggedUnion type must have at least one member.") if members.empty?
@@ -145,7 +146,12 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def >=(other, context: nil)
-		@members.each_value.any? { |type| Literal.subtype?(other, type, context:) }
+		case other
+		when Literal::Types::Distributed, Literal::Types::DeferredType
+			Literal.subtype?(other, self, context:)
+		else
+			@members.each_value.any? { |type| Literal.subtype?(other, type, context:) }
+		end
 	end
 
 	freeze

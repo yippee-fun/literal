@@ -236,7 +236,7 @@ module Literal
 		return !!(supertype >= type) if Module === type && Module === supertype && !(Literal::Type === supertype)
 
 		context ||= SubtypeContext.new
-		raw_key = [type.object_id, supertype.object_id]
+		raw_key = [OBJECT_ID.bind_call(type), OBJECT_ID.bind_call(supertype)]
 		raw_acquired = false
 		resolved_key = nil
 		resolved_acquired = false
@@ -255,7 +255,7 @@ module Literal
 
 		subtype = subtype.materialize if Types::DeferredType === subtype
 		supertype = supertype.materialize if Types::DeferredType === supertype
-		resolved_key = [subtype.object_id, supertype.object_id]
+		resolved_key = [OBJECT_ID.bind_call(subtype), OBJECT_ID.bind_call(supertype)]
 
 		if resolved_key != raw_key
 			if context.memoized?(resolved_key)

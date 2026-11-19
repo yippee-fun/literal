@@ -4,6 +4,7 @@
 class Literal::Types::NilableType
 	include Literal::Type
 	include Literal::Types::DraftTransparent
+	include Literal::Types::Distributed
 
 	def initialize(type)
 		@type = type
@@ -45,6 +46,8 @@ class Literal::Types::NilableType
 
 	def >=(other, context: nil)
 		case other
+		when Literal::Types::Distributed, Literal::Types::DeferredType
+			Literal.subtype?(other, self, context:)
 		when Literal::Types::VoidType
 			@type == Literal::Types::AnyType::Instance
 		when nil

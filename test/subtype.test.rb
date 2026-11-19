@@ -191,3 +191,32 @@ test "a type is a subtype of an intersection of types it is a subtype of" do
 	assert_subtype _Array(String), _Constraint(Array, Enumerable)
 	refute_subtype _Array(String), _Constraint(Array, size: 1)
 end
+
+test "a union's own comparison operators distribute it" do
+	union = _Union(String, _Array(Integer), 1)
+	nilable = _Nilable(String)
+	tagged = _TaggedUnion(string: String, integer: Integer)
+	result = Literal::Result(String, Integer)
+
+	[union, nilable, tagged, result].each do |type|
+		assert type <= Object
+		assert type >= type
+		assert type <= type
+		assert type >= _Deferred { type }
+	end
+
+	assert _Union(String, Integer) >= _Union(Integer, String)
+	assert _Union(String, Integer, nil) >= nilable
+	assert nilable >= _Union(String, nil)
+	assert tagged >= _Union(String, Integer)
+	assert _Union(String, Integer) >= tagged
+	assert result >= _Union(Literal::Success(String), Literal::Failure(Integer))
+	assert nilable <= _Union(String, nil)
+
+	refute _Union(String, Integer) <= String
+	refute nilable >= _Union(String, Integer)
+	refute tagged <= String
+
+	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
+	refute _TaggedUnion(string: String, any: matcher) <= Object
+end
