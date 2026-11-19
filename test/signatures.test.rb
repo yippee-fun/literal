@@ -81,6 +81,23 @@ test "types the methods of a module" do
 	assert_raises(Literal::TypeError) { calculator.add(1, "2") }
 end
 
+test "checks an override that calls a signed super" do
+	parent = Class.new do
+		extend Literal::Signatures
+
+		sig(Integer) >> Integer
+		def double(number) = number * 2
+	end
+
+	child = Class.new(parent) do
+		sig(Integer) >> Integer
+		def double(number) = super + 1
+	end
+
+	assert_equal child.new.double(2), 5
+	assert_raises(Literal::TypeError) { child.new.double("2") }
+end
+
 test "lets Ruby refuse a missing argument" do
 	assert_raises(::ArgumentError) { SignedGreeter.new.greet }
 end

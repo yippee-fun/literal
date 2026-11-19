@@ -83,7 +83,7 @@ module Literal::Signatures
 		__literal_refuse_mismatch__(signature, parameters, "#{self}#{singleton ? '.' : '#'}#{name}")
 
 		visibility = __literal_visibility__(owner, name)
-		unsigned = :"__literal_unsigned_#{name.object_id}__"
+		unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
 		owner.alias_method(unsigned, name)
 		owner.__send__(:private, unsigned)
 
