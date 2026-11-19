@@ -1,0 +1,25 @@
+# frozen_string_literal: true
+
+class Literal::JSONSchemaNumberSerializer < Literal::Serializer
+	Type = Literal::JSONSchema::NumberType
+
+	def type
+		Type
+	end
+
+	def json_type(type)
+		"number"
+	end
+
+	def json_schema(type, generator: nil)
+		type.json_schema
+	end
+
+	def serialize(value, type:)
+		value
+	end
+
+	def deserialize(raw, type:)
+		raw
+	end
+end

@@ -20,3 +20,7 @@ test "heirarchy" do
 	refute_subtype Enumerable, _Class(Enumerable)
 	refute_subtype Class, _Class(Enumerable)
 end
+
+test "=== returns a boolean" do
+	assert_equal false, _Class(Integer) === String
+end

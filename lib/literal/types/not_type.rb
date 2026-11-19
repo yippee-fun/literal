@@ -5,11 +5,26 @@ class Literal::Types::NotType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::NotType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::NotType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::NotType === other && Literal.member_eql?(@type, other.type)
+	end
+
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @type
+	end
 
 	def inspect
 		"_Not(#{@type.inspect})"
@@ -22,11 +37,10 @@ class Literal::Types::NotType
 	def >=(other, context: nil)
 		case other
 		when Literal::Types::NotType
-			Literal.subtype?(other.type, @type, context:)
+			# Contravariant: _Not(A) <= _Not(B) iff B <= A. Excluding more makes you narrower.
+			Literal.subtype?(@type, other.type, context:)
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
-		when Literal::Types::IntersectionType
-			other.types.any? { |type| Literal.subtype?(type, self, context:) }
 		else
 			false
 		end

@@ -5,13 +5,34 @@ class Literal::Types::ConstraintType
 	include Literal::Type
 
 	def initialize(object_constraints, property_constraints)
-		@object_constraints = object_constraints
-		@property_constraints = property_constraints
+		@object_constraints = Literal::Freezing.frozen_member(object_constraints)
+		@property_constraints = Literal::Freezing.frozen_member(property_constraints)
+		@hash = literal_hash(Literal::Types::ConstraintType, @object_constraints, @property_constraints)
 		freeze
 	end
 
 	attr_reader :object_constraints
 	attr_reader :property_constraints
+	attr_reader :hash
+
+	def ==(other)
+		Literal::Types::ConstraintType === other &&
+			@object_constraints == other.object_constraints &&
+			@property_constraints == other.property_constraints
+	end
+
+	def eql?(other)
+		Literal::Types::ConstraintType === other &&
+			Literal.member_eql?(@object_constraints, other.object_constraints) &&
+			Literal.member_eql?(@property_constraints, other.property_constraints)
+	end
+
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		@object_constraints.each { |type| yield type }
+		@property_constraints.each_value { |type| yield type }
+	end
 
 	def inspect
 		"_Constraint(#{inspect_constraints})"
@@ -29,10 +50,10 @@ class Literal::Types::ConstraintType
 		result = true
 
 		@property_constraints.each do |a, t|
-			# We intentionally don’t return early here becuase it triggers an allocation.
-			if result && !(t === value.public_send(a))
-				result = false
-			end
+			# We intentionally don’t return or break early here becuase both trigger an allocation.
+			next unless result
+
+			result = false unless t === value.public_send(a)
 		rescue NoMethodError => e
 			raise unless e.name == a && e.receiver == value
 			return false
@@ -51,29 +72,30 @@ class Literal::Types::ConstraintType
 
 			other_property_constraints = other.property_constraints
 			return false unless @property_constraints.all? do |k, v|
-				Literal.subtype?(other_property_constraints[k], v, context:)
-			end
-
-			true
-		when Literal::Types::IntersectionType
-			other_object_constraints = other.types
-			return false unless @object_constraints.all? do |constraint|
-				other_object_constraints.any? { |c| Literal.subtype?(c, constraint, context:) }
+				(other_property_constraints.key?(k) && Literal.subtype?(other_property_constraints[k], v, context:)) ||
+					other_object_constraints.any? { |constraint| constraint_property_subtype?(constraint, k, v, context:) } ||
+					boolean_predicate_subtype?(other, k, v, context:)
 			end
 
 			true
 		when Literal::Types::FrozenType
-			@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
+			# The only property _Frozen can vouch for is frozen?.
+			@property_constraints.all? { |property, type| :frozen? == property && Literal.subtype?(true, type, context:) } &&
+				@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
+		when Symbol, true, false, nil
+			# These literals are == only to themselves, so each is its only value.
+			self === other
 		else
-			false
+			# Property constraints can't be proven of types, nor of other literals,
+			# which admit every value == to them ("a" == +"a", 1 == 1.0).
+			@property_constraints.empty? &&
+				@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		end
 	end
 
 	def <=(other, context: nil)
-		case other
-		when Module
-			@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) }
-		end
+		@object_constraints.any? { |constraint| Literal.subtype?(constraint, other, context:) } ||
+			@property_constraints.any? { |property, type| property_entails_type?(property, type, other, context:) }
 	end
 
 	def record_literal_type_errors(context)
@@ -106,6 +128,56 @@ class Literal::Types::ConstraintType
 		if @property_constraints.length > 0
 			@property_constraints.map { |k, t| "#{k}: #{t.inspect}" }.join(", ")
 		end
+	end
+
+	# Some property constraints prove class membership: any Numeric where
+	# integer? is truthy is an Integer, so _Constraint(10, integer?: _Truthy)
+	# <= Integer. The constraint must admit only truthy values and the
+	# receiver must be bounded by the fact's receiver, or it proves nothing.
+	private def property_entails_type?(property, type, other, context:)
+		facts = Literal::Types::PredicateFacts[property]
+		return false unless facts
+		return false unless Literal.subtype?(type, Literal::Types::TruthyType::Instance, context:)
+
+		facts.any? do |receiver, knowledge|
+			(entailed = knowledge[:entails]) &&
+				@object_constraints.any? { |constraint| Literal.subtype?(constraint, receiver, context:) } &&
+				Literal.subtype?(entailed, other, context:)
+		end
+	end
+
+	# A predicate known to return only booleans can only produce the booleans
+	# the other constraint admits, so the requirement reduces to admitting
+	# each of those.
+	private def boolean_predicate_subtype?(other, property, type, context:)
+		facts = Literal::Types::PredicateFacts[property]
+		return false unless facts
+
+		other_type = other.property_constraints[property]
+		return false unless other_type
+
+		return false unless facts.any? do |receiver, knowledge|
+			knowledge[:boolean] &&
+				other.object_constraints.any? { |constraint| Literal.subtype?(constraint, receiver, context:) }
+		end
+
+		[true, false].all? { |result| !(other_type === result) || type === result }
+	end
+
+	# A bounded Range proves finite? returns exactly true, satisfying any
+	# property constraint that admits true.
+	private def constraint_property_subtype?(constraint, property, type, context:)
+		case [constraint, property]
+		in [Range, :finite?]
+			finite_range?(constraint) && Literal.subtype?(true, type, context:)
+		else
+			false
+		end
+	end
+
+	private def finite_range?(range)
+		Numeric === range.begin && range.begin.finite? &&
+			Numeric === range.end && range.end.finite?
 	end
 
 	freeze

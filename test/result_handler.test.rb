@@ -47,6 +47,17 @@ test "can ignore a branch without a block" do
 	assert_equal nil, handled
 end
 
+test "plain success handler covers a void success type" do
+	result = Literal::Result(_Void, Symbol) { |type| type.success(nil) }
+
+	handled = result.handle do |on|
+		on.success { "handled" }
+		on.failure(Symbol)
+	end
+
+	assert_equal "handled", handled
+end
+
 test "treats split handlers as exhaustive for union success types" do
 	result = Literal::Result(_Union(String, Integer), Symbol) { |type| type.success("hello") }
 
@@ -81,4 +92,26 @@ test "uses mapped success type metadata for failure coverage" do
 	end
 
 	assert_equal "error: missing", handled
+end
+
+test "success and failure handlers together cover a nested result type" do
+	inner = Literal::Result(Integer, String)
+	result = Literal::Result(inner, Symbol) { |type| type.success(inner.failure("inner")) }
+
+	handled = result.handle do |on|
+		on.success(Literal::Success(Integer)) { |success| success.value! + 1 }
+		on.success(Literal::Failure(String)) { |failure| "inner: #{failure.error!}" }
+		on.failure(Symbol)
+	end
+
+	assert_equal "inner: inner", handled
+
+	error = assert_raises(Literal::ArgumentError) do
+		result.handle do |on|
+			on.success(Literal::Success(Integer))
+			on.failure(Symbol)
+		end
+	end
+
+	assert_equal "No success handler covers #{inner.inspect}", error.message
 end

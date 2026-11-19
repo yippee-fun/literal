@@ -3,7 +3,7 @@
 module Literal::Types
 	extend self
 
-	# Matches any value except `nil`. Use `_Any?` or `_Void` to match any value including `nil`.
+	# Matches any value except `nil`. Use `_Any?` to also match `nil`.
 	# ```ruby
 	# _Any
 	# ```
@@ -11,12 +11,14 @@ module Literal::Types
 		AnyType::Instance
 	end
 
-	# Matches any value including `nil`. This is the same as `_Void` and the opposite of `_Never`.
+	# Matches any value including `nil` — the nilable counterpart of `_Any`,
+	# and the opposite of `_Never`. It is equivalent to `_Void` in the type
+	# hierarchy, but `_Void` signals that the value must not be depended on.
 	# ```ruby
 	# _Any?
 	# ```
 	def _Any?
-		VoidType::Instance
+		NilableAnyType
 	end
 
 	# Matches if the value is an `Array` and all the elements of the array match the given type.
@@ -34,6 +36,22 @@ module Literal::Types
 	def _Array?(type)
 		_Nilable(
 			_Array(type)
+		)
+	end
+
+	# Matches if the value is a `BigDecimal` and matches the given constraints.
+	# Serialization requires finite values, so use `_BigDecimal(finite?: _Truthy)` rather than `BigDecimal` there.
+	# ```ruby
+	# _BigDecimal(finite?: _Truthy)
+	# ```
+	def _BigDecimal(...)
+		_Constraint(BigDecimal, ...)
+	end
+
+	# Nilable version of `_BigDecimal`.
+	def _BigDecimal?(...)
+		_Nilable(
+			_BigDecimal(...)
 		)
 	end
 
@@ -87,6 +105,21 @@ module Literal::Types
 		)
 	end
 
+	# Matches if the value is an instance of exactly the given class.
+	# ```ruby
+	# _Instance(Date)
+	# ```
+	def _Instance(type)
+		InstanceType.new(type)
+	end
+
+	# Nilable version of `_Instance`.
+	def _Instance?(...)
+		_Nilable(
+			_Instance(...)
+		)
+	end
+
 	# Similar to `_Intersection`, but allows you to specify attribute constraints as keyword arguments.
 	# ```ruby
 	# _Constraint(Array, size: 1..3)
@@ -116,7 +149,7 @@ module Literal::Types
 	# _Date(year: 2025)
 	# ```
 	def _Date(...)
-		_Constraint(Date, ...)
+		_Constraint(_Instance(Date), ...)
 	end
 
 	# Nilable version of `_Date`.
@@ -153,6 +186,23 @@ module Literal::Types
 	def _Descendant?(...)
 		_Nilable(
 			_Descendant(...)
+		)
+	end
+
+	# Matches what a slot typed as the given type may hold while drafting: the
+	# type with representation (`_Frozen`) and finality relaxed, so a
+	# `Literal::Properties` class also admits a draft of it.
+	# ```ruby
+	# _DraftState(_Frozen(_Array(String)))
+	# ```
+	def _DraftState(type)
+		DraftStateType.new(type)
+	end
+
+	# Nilable version of `_DraftState`.
+	def _DraftState?(...)
+		_Nilable(
+			_DraftState(...)
 		)
 	end
 
@@ -247,7 +297,9 @@ module Literal::Types
 
 	# Matches if *all* given types are matched.
 	def _Intersection(*types)
-		IntersectionType.new(types)
+		raise Literal::ArgumentError.new("_Intersection type must have at least one type.") if types.size < 1
+
+		_Constraint(*types)
 	end
 
 	# Nilable version of `_Intersection`
@@ -310,8 +362,27 @@ module Literal::Types
 	end
 
 	# Matches if the value is either `nil` or the given type.
-	def _Nilable(...)
-		NilableType.new(...)
+	#
+	# A union gets `nil` folded into it rather than wrapped, so that nesting
+	# `_Nilable` and `_Union` in either order produces the same type. The common
+	# case — a single non-union type — stays a `NilableType`, whose two-branch
+	# `===` is an order of magnitude faster than a union's.
+	def _Nilable(type)
+		case type
+		when NilableType
+			type
+		when UnionType
+			_Union(type, nil)
+		else
+			NilableType.new(type)
+		end
+	end
+
+	# Matches if the value is the given type or `Literal::Undefined`, i.e. the
+	# value may be omitted entirely. Unlike `_Nilable`, which permits an
+	# explicit `nil`.
+	def _Optional(t)
+		_Union(t, Literal::Undefined)
 	end
 
 	# Matches if the given type is *not* matched.
@@ -455,9 +526,25 @@ module Literal::Types
 		)
 	end
 
-	# Matches if *any* given type is matched.
+	# Matches if *any* given type is matched. Unions simplify at construction:
+	# `_Never` members hold no values and are dropped, a union of only
+	# `_Never` members is `_Never`, a union containing `_Any?` can hold
+	# anything and is just `_Any?`, and a union left with a single member is
+	# that member. `_Void` is deliberately not absorbed: it signals that the
+	# value must not be depended on, which is not a claim a union can make on
+	# its behalf.
 	def _Union(*types)
-		UnionType.new(types)
+		union = UnionType.new(types)
+		members = union.to_a
+		inhabited = members.reject { |member| NeverType === member }
+
+		return NeverType::Instance if inhabited.empty?
+		# Nilable members are flattened into the union, so nilable-any arrives as
+		# `_Any` alongside nil rather than as a NilableType member.
+		return NilableAnyType if inhabited.include?(nil) && inhabited.any? { |member| AnyType === member }
+		return inhabited.first if inhabited.length == 1
+
+		(inhabited.length == members.length) ? union : UnionType.new(inhabited)
 	end
 
 	# Nilable version of `_Union`
@@ -479,6 +566,8 @@ module Literal::Types
 		)
 	end
 
+	# Matches any value, but signals that the value must not be depended on —
+	# unlike `_Any?`, which positively accepts any value.
 	def _Void
 		VoidType::Instance
 	end
@@ -487,9 +576,10 @@ module Literal::Types
 	CallableType = _Interface(:call)
 	LambdaType = _Constraint(Proc, lambda?: true)
 
+	NilableAnyType = _Nilable(AnyType::Instance)
 	NilableBooleanType = _Nilable(BooleanType::Instance)
 	NilableCallableType = _Nilable(CallableType)
-	NilableJSONDataType = _Nilable(JSONDataType)
+	NilableJSONDataType = _Nilable(JSONDataType::Instance)
 	NilableLambdaType = _Nilable(LambdaType)
 	NilableProcableType = _Nilable(ProcableType)
 end

@@ -1,0 +1,19 @@
+# frozen_string_literal: true
+
+module Literal::Coercions
+	# Shallow: freezes a copy, so the caller’s object is never mutated.
+	# References held by the value (array elements, hash values) stay mutable.
+	Immutable = Literal::Seal { |it| Literal::FROZEN.bind_call(it) ? it : Literal::Freezing.shallow_frozen(it.dup) }
+
+	# Deep: makes the value Ractor-shareable, freezing the entire object graph.
+	# Works on a deep copy, so the caller’s object is never mutated. Raises
+	# Ractor::IsolationError for values that cannot be made shareable (IO,
+	# Thread, procs capturing mutable state).
+	DeepImmutable = Literal::Seal { |it|
+		Ractor.shareable?(it) ? it : Ractor.make_shareable(it, copy: true)
+	}
+
+	# Converts empty values ("", [], {}) to nil, for optional properties where
+	# empty input means absent. Everything else passes through untouched.
+	NilIfEmpty = Literal::Coercion { |it| (it.respond_to?(:empty?) && it.empty?) ? nil : it }
+end

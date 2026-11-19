@@ -8,7 +8,6 @@ class Literal::Types::JSONDataType
 
 	COMPATIBLE_TYPES = Set[
 		Integer,
-		Float,
 		String,
 		true,
 		false,
@@ -19,16 +18,28 @@ class Literal::Types::JSONDataType
 
 	def inspect = "_JSONData"
 
+	def literal_upper_bound
+		Literal::Types._Union(String, Integer, Float, TrueClass, FalseClass, NilClass, Array, Hash)
+	end
+
 	def ===(value)
 		case value
-		when String, Integer, Float, true, false, nil
+		when String, Integer, true, false, nil
 			true
+		when Float
+			value.finite?
 		when Hash
-			value.each do |k, v|
-				return false unless String === k && self === v
+			# The match guard answers false on re-entry, so self-referential
+			# values are rejected rather than recursing forever.
+			Literal.with_match_guard(self, value) do
+				# Hash#all? yields each pair as a new array; each_pair doesn't.
+				value.each_pair { |k, v| return false unless String === k && self === v }
+				true
 			end
 		when Array
-			value.all?(self)
+			Literal.with_match_guard(self, value) do
+				value.all?(self)
+			end
 		else
 			false
 		end
@@ -36,8 +47,10 @@ class Literal::Types::JSONDataType
 
 	def record_literal_type_errors(context)
 		case value = context.actual
-		when String, Integer, Float, true, false, nil
+		when String, Integer, true, false, nil
 			# nothing to do
+		when Float
+			context.add_child(label: inspect, expected: "finite Float", actual: value) unless value.finite?
 		when Hash
 			value.each do |k, v|
 				context.add_child(label: "[]", expected: String, actual: k) unless String === k
@@ -57,9 +70,10 @@ class Literal::Types::JSONDataType
 		when Literal::Types::ArrayType
 			Literal.subtype?(other.type, self, context:)
 		when Literal::Types::HashType
-			(Literal.subtype?(other.key_type, self, context:) && Literal.subtype?(other.value_type, self, context:))
+			Literal.subtype?(other.key_type, String, context:) && Literal.subtype?(other.value_type, self, context:)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |type| self.>=(type, context:) }
+			Literal.subtype?(other, Literal::Types._Float(finite?: Literal::Types._Truthy), context:) ||
+				other.object_constraints.any? { |type| self.>=(type, context:) }
 		else
 			false
 		end

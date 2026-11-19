@@ -12,12 +12,13 @@ Gem::Specification.new do |spec|
 	spec.description = "Enums, properties, generics, structured objects and runtime type checking."
 	spec.homepage = "https://literal.fun"
 	spec.license = "MIT"
-	spec.required_ruby_version = ">= 3.1"
+	spec.required_ruby_version = ">= 3.3"
 
 	spec.metadata["homepage_uri"] = spec.homepage
 	spec.metadata["source_code_uri"] = "https://github.com/joeldrapper/literal"
 	spec.metadata["changelog_uri"] = "https://github.com/joeldrapper/literal/releases"
 	spec.metadata["funding_uri"] = "https://github.com/sponsors/joeldrapper"
+	spec.metadata["mailing_list_uri"] = "https://www.rubyforum.org/tag/literal"
 
 	spec.files = Dir[
 		"README.md",

@@ -1,0 +1,216 @@
+# frozen_string_literal: true
+
+require "date"
+require "time"
+
+class Literal::TimeSerializer < Literal::Serializer
+	Type = _Union(Time, DateTime)
+	Precision = _Nilable(_Integer(0..9))
+	Format = /\A(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))\z/i
+
+	def self.with(precision: nil, utc: false)
+		check_precision(precision)
+		options = { precision:, utc: }
+
+		Class.new(self) do
+			define_method(:initialize) { |context, **overrides| super(context, **options, **overrides) }
+
+			define_singleton_method(:name) do
+				"#{superclass.name}.with(#{options.map { |key, value| "#{key.name}: #{value.inspect}" }.join(', ')})"
+			end
+
+			singleton_class.alias_method(:to_s, :name)
+			singleton_class.alias_method(:inspect, :name)
+		end
+	end
+
+	def self.check_precision(precision)
+		unless Precision === precision
+			raise Literal::ArgumentError, "precision must be nil or an Integer in 0..9, got #{precision.inspect}"
+		end
+	end
+
+	def initialize(context, precision: nil, utc: false)
+		super(context)
+		self.class.check_precision(precision)
+		@precision = precision
+		@utc = utc
+	end
+
+	attr_reader :precision
+	attr_reader :utc
+
+	def type
+		Type
+	end
+
+	def handles_type?(type)
+		!bound_of(type).nil?
+	end
+
+	def json_type(type)
+		"string"
+	end
+
+	def json_schema(type, generator: nil)
+		case type
+		when Time, DateTime
+			{ "type" => "string", "format" => "date-time", "const" => serialize_time(type) }
+		when Literal::Types::ConstraintType
+			constraint_json_schema(type)
+		else
+			{ "type" => "string", "format" => "date-time" }
+		end
+	end
+
+	def serialize(value, type:)
+		serialize_time(representation(value, type))
+	end
+
+	def deserialize(raw, type:)
+		fields = rfc3339_fields(raw)
+
+		unless fields
+			raise Literal::ArgumentError, "Value #{raw.inspect} is not an RFC 3339 date-time and cannot be deserialized as #{type.inspect}"
+		end
+
+		year, month, day, hour, minute, second, offset = fields
+
+		# A leap second is read as the second after it, as Time.iso8601 reads it
+		# on every engine. DateTime.new refuses one, and only CRuby's Time.new
+		# keeps it.
+		leap_second = (second >= 60) ? 1 : 0
+		second -= leap_second
+
+		# Built from the fields rather than parsed again, since engines' ISO 8601
+		# parsers differ in how much of a long fraction they keep.
+		if DateTime == bound_of(type)
+			# The fraction is added, since JRuby's DateTime.new silently loses a
+			# long one. Like a loaded Date, it switches back to Ruby's default
+			# calendar.
+			whole = second.floor
+			date_time = DateTime.new(year, month, day, hour, minute, whole, Rational(offset || 0, 86_400), Date::GREGORIAN)
+			(date_time + Rational(second - whole + leap_second, 86_400)).italy
+		else
+			Time.new(year, month, day, hour, minute, second, offset || "UTC") + leap_second
+		end
+	end
+
+	# Time or DateTime, whichever bounds the type, including constants and
+	# unions of them. Both serialize alike, so a type holding both can't be
+	# told apart on the way back in, and has no bound.
+	private def bound_of(type)
+		[Time, DateTime].find do |bound|
+			bound === type ||
+				within_domain?(type, bound) ||
+				(Literal::Types::UnionType === type && type.all?(bound))
+		end
+	end
+
+	# Ruby's ISO 8601 parsers accept dates without times, times without
+	# offsets (read in the machine's timezone) and out-of-range fields they
+	# silently roll over, so the format and ranges are checked first.
+	# Returns the fields, with the second exact and the offset in seconds, or
+	# nil for UTC: Z, or -00:00, which RFC 3339 gives no local offset. Dates
+	# are proleptic Gregorian. Second 60 is a leap second, which RFC 3339
+	# allows at any time, deferring to the table of those announced.
+	private def rfc3339_fields(raw)
+		return unless String === raw && (match = Format.match(raw))
+
+		*date_and_time, fraction, sign, offset_hour, offset_minute = match.captures
+		year, month, day, hour, minute, second = date_and_time.map(&:to_i)
+		offset_hour, offset_minute = offset_hour.to_i, offset_minute.to_i
+
+		return unless Date.valid_date?(year, month, day, Date::GREGORIAN) && hour < 24 && minute < 60 && second <= 60 && offset_hour < 24 && offset_minute < 60
+
+		second += Rational(fraction.to_i, 10 ** fraction.length) if fraction
+		offset = (offset_hour * 3600) + (offset_minute * 60)
+
+		case sign
+		in "+"
+			[year, month, day, hour, minute, second, offset]
+		in "-" if offset > 0
+			[year, month, day, hour, minute, second, -offset]
+		in "-" | nil
+			[year, month, day, hour, minute, second, nil]
+		end
+	end
+
+	private def constraint_json_schema(type)
+		{ "type" => "string", "format" => "date-time" }.tap do |schema|
+			type.object_constraints.each do |constraint|
+				case constraint
+				when Time, DateTime
+					schema["const"] = serialize_time(constraint)
+				end
+			end
+		end
+	end
+
+	# Fractions are rounded half to even at the written precision, never
+	# finer than a nanosecond. Times built from Floats sit a binary hair
+	# either side of the decimal they were written as, and rounding recovers
+	# it where truncating would turn 30.7 into 30.699999999.
+	private def serialize_time(value)
+		digits = @precision || 9
+		time = rounded(value, digits)
+		digits = 0 if @precision.nil? && fraction_of(time).zero?
+
+		serialized = case time
+		when Time
+			@utc ? time.getutc.iso8601(digits) : time.iso8601(digits)
+		when DateTime
+			if @utc
+				"#{time.new_offset(0).gregorian.iso8601(digits).delete_suffix('+00:00')}Z"
+			else
+				time.gregorian.iso8601(digits)
+			end
+		end
+
+		# RFC 3339 date-times have four-digit years and offsets in whole minutes
+		# under a day. iso8601 drops an offset's seconds rather than refuse them.
+		unless rfc3339_fields(serialized) && written_offset_exact?(time)
+			raise Literal::ArgumentError, "Value #{value.inspect} cannot be written as an RFC 3339 date-time, which needs a year in 0000-9999 and an offset in whole minutes under a day"
+		end
+
+		serialized
+	end
+
+	private def written_offset_exact?(value)
+		return true if @utc
+
+		seconds = case value
+		when Time
+			value.utc_offset
+		when DateTime
+			value.offset * 86_400
+		end
+
+		(seconds % 60).zero?
+	end
+
+	private def rounded(value, digits)
+		# The whole second counts, so a tie at zero digits rounds to an even second.
+		# A Rational even when whole, since JRuby's Integer#round takes no half:.
+		seconds = Rational(value.sec) + fraction_of(value)
+		scale = 10 ** digits
+		adjustment = Rational((seconds * scale).round(half: :even), scale) - seconds
+
+		case value
+		when Time
+			# JRuby's Time#+ gets negative Rationals wrong.
+			adjustment.negative? ? value - -adjustment : value + adjustment
+		when DateTime
+			value + (adjustment / 86_400)
+		end
+	end
+
+	private def fraction_of(value)
+		case value
+		when Time
+			value.subsec
+		when DateTime
+			value.sec_fraction
+		end
+	end
+end

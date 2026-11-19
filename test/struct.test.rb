@@ -1,5 +1,61 @@
 # frozen_string_literal: true
 
+test "props support predicates" do
+	example = Class.new(Literal::Struct) do
+		prop :enabled, _Boolean, predicate: :public
+	end
+
+	assert_equal example.new(enabled: true).enabled?, true
+	assert_equal example.new(enabled: false).enabled?, false
+end
+
+class StructOptional < Literal::Struct
+	prop? :name, String
+end
+
+test "prop? defines a public reader and writer by default" do
+	example = StructOptional.new
+
+	assert_equal example.name, Literal::Undefined
+
+	example.name = "Joel"
+	assert_equal example.name, "Joel"
+
+	assert_raises(Literal::TypeError) { example.name = 1 }
+end
+
+test "prop? honours explicitly supplied visibility options" do
+	example = Class.new(Literal::Struct) do
+		prop? :name, String, reader: :private, writer: :private
+	end.new
+
+	refute example.respond_to?(:name)
+	refute example.respond_to?(:name=)
+	assert_equal example.__send__(:name), Literal::Undefined
+end
+
+test "prop? serializes undefined by omission and restores it from a missing key" do
+	context = Literal::SerializationContext.new
+	example = StructOptional.new
+
+	assert_equal context.serialize(example, type: StructOptional), {}
+
+	deserialized = context.deserialize({}, type: StructOptional)
+	assert_equal deserialized.name, Literal::Undefined
+
+	example.name = "Joel"
+	assert_equal context.serialize(example, type: StructOptional), { "name" => "Joel" }
+end
+
+test "Literal::Data prop? keeps a public reader and no writer" do
+	example = Class.new(Literal::Data) do
+		prop? :name, String
+	end.new
+
+	assert_equal example.name, Literal::Undefined
+	refute example.respond_to?(:name=)
+end
+
 class Person < Literal::Struct
 	prop :name, String
 end
@@ -68,6 +124,56 @@ test "marshalling a frozen struct" do
 	assert b.frozen?
 end
 
+class ::RootStructWithFrozenProp < Literal::Struct
+	prop :tags, _Frozen(_Array(String))
+	prop :list, _Array(String)
+end
+
+test "marshalling restores the frozen state of property values" do
+	a = RootStructWithFrozenProp.new(tags: ["a"].freeze, list: ["b"])
+
+	b = Marshal.load(Marshal.dump(a))
+
+	assert_equal b, a
+	assert b.tags.frozen?
+	refute b.list.frozen?
+end
+
+class ::RootStructPrivateFreeze
+	private def freeze
+		super
+		nil
+	end
+end
+
+class ::RootStructWithPrivateFreezeProp < Literal::Struct
+	prop :payload, RootStructPrivateFreeze
+end
+
+test "marshalling refreezes a property value whose own freeze is private" do
+	a = RootStructWithPrivateFreezeProp.new(payload: Literal::FREEZE.bind_call(RootStructPrivateFreeze.new))
+	payload = Marshal.load(Marshal.dump(a)).payload
+
+	assert RootStructPrivateFreeze === payload
+	assert Literal::FROZEN.bind_call(payload)
+end
+
+class ::RootStructWithLiteralArrayProp < Literal::Struct
+	prop :items, Literal::Array(Integer)
+end
+
+test "marshalling refreezes a property value through its own freeze" do
+	a = RootStructWithLiteralArrayProp.new(items: Literal::Array(Integer).new(1, 2).freeze)
+
+	assert Marshal.load(Marshal.dump(a)).items.__value__.frozen?
+end
+
+test "marshalling loads version 1 payloads" do
+	a = RootStruct.from_pack([1, { name: "Joel" }, false])
+
+	assert_equal a.name, "Joel"
+end
+
 test "as_pack/from_pack" do
 	a = RootStruct.new(name: "Joel")
 	a.freeze
@@ -127,4 +233,79 @@ test do
 	with_keyword_property_names[:begin] = "start2"
 	with_keyword_property_names.end = "finish2"
 	assert_equal(with_keyword_property_names.to_h, { :begin => "start2", :end => "finish2", :module => nil })
+end
+
+class ::RootStructWithSealedProp < Literal::Struct
+	SEAL_CALLS = []
+
+	prop :tags, _Array(String), &(Literal::Seal { |it|
+		SEAL_CALLS << it
+		it.frozen? ? it : it.dup.freeze
+	})
+end
+
+test "seals run at construction but not when marshal loading" do
+	a = RootStructWithSealedProp.new(tags: ["a"])
+
+	assert a.tags.frozen?
+
+	calls_before = RootStructWithSealedProp::SEAL_CALLS.size
+	b = Marshal.load(Marshal.dump(a))
+
+	assert_equal RootStructWithSealedProp::SEAL_CALLS.size, calls_before
+	assert b.tags.frozen?
+	assert_equal b, a
+end
+
+test "indexed assignment names the invalid key's class" do
+	error = assert_raises(TypeError) { Person.new(name: "Joel")[0] = "x" }
+
+	assert_equal error.message, "expected a string or symbol, got Integer"
+end
+
+test "indexed assignment respects the writer's visibility" do
+	klass = Class.new(Literal::Struct) do
+		prop :open, String
+		prop :hidden, String, writer: :private
+		prop :guarded, String, writer: :protected
+		prop :fixed, String, writer: false
+	end
+
+	struct = klass.new(open: "a", hidden: "b", guarded: "c", fixed: "d")
+
+	struct[:open] = "x"
+	assert_equal struct.open, "x"
+
+	[:hidden, :guarded, :fixed].each do |name|
+		error = assert_raises(NoMethodError) { struct[name] = "x" }
+		expected = assert_raises(NoMethodError) { struct.public_send(:"#{name}=", "x") }
+
+		assert_equal error.message, expected.message
+		refute_equal struct[name], "x"
+	end
+end
+
+test "indexed assignment behaves exactly like the writer" do
+	klass = Class.new(Literal::Struct) do
+		prop :count, Integer, &:to_i
+		prop :name, String
+		prop :label, String
+
+		def name=(value)
+			super(value.upcase)
+		end
+	end
+
+	struct = klass.new(count: 1, name: "a", label: "b")
+
+	struct["count"] = "5"
+	assert_equal struct.count, 5
+
+	struct[:name] = "joel"
+	assert_equal struct.name, "JOEL"
+
+	assert_raises(Literal::TypeError) { struct[:label] = 1 }
+
+	struct.freeze
+	assert_raises(FrozenError) { struct[:count] = 2 }
 end

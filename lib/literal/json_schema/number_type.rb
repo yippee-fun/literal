@@ -1,0 +1,54 @@
+# frozen_string_literal: true
+
+class Literal::JSONSchema::NumberType < Literal::Data
+	include Literal::Type
+
+	prop :minimum, _Nilable(::Numeric)
+	prop :exclusive_minimum, _Nilable(::Numeric)
+	prop :maximum, _Nilable(::Numeric)
+	prop :exclusive_maximum, _Nilable(::Numeric)
+	prop :multiple_of, _Nilable(::Numeric)
+
+	def after_initialize
+		if multiple_of && multiple_of <= 0
+			raise Literal::ArgumentError, "multiple_of must be greater than 0."
+		end
+	end
+
+	def inspect
+		"Literal::JSONSchema::Number(#{json_schema.inspect})"
+	end
+
+	def ===(value)
+		return false unless ::Integer === value || ::Float === value
+		return false if ::Float === value && !value.finite?
+
+		number_matches?(value)
+	end
+
+	def <=(other, context: nil)
+		return true if other == Literal::JSONSchema::NumberType
+
+		Literal.subtype?(::Numeric, other, context:)
+	end
+
+	def json_schema
+		{ "type" => "number" }.tap do |schema|
+			schema["minimum"] = minimum unless minimum.nil?
+			schema["exclusiveMinimum"] = exclusive_minimum unless exclusive_minimum.nil?
+			schema["maximum"] = maximum unless maximum.nil?
+			schema["exclusiveMaximum"] = exclusive_maximum unless exclusive_maximum.nil?
+			schema["multipleOf"] = multiple_of unless multiple_of.nil?
+		end
+	end
+
+	private def number_matches?(value)
+		return false if !minimum.nil? && value < minimum
+		return false if !exclusive_minimum.nil? && value <= exclusive_minimum
+		return false if !maximum.nil? && value > maximum
+		return false if !exclusive_maximum.nil? && value >= exclusive_maximum
+		return false if !multiple_of.nil? && value % multiple_of != 0
+
+		true
+	end
+end

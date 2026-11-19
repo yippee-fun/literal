@@ -5,18 +5,37 @@ class Literal::Types::RangeType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::RangeType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::RangeType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::RangeType === other && Literal.member_eql?(@type, other.type)
+	end
+
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @type
+	end
 
 	def inspect
 		"_Range(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Range
+	end
+
 	def ===(value)
-		Range === value && (
+		Range === value && !!(
 			(
 				@type === value.begin && (nil === value.end || @type === value.end)
 			) || (
@@ -28,7 +47,7 @@ class Literal::Types::RangeType
 	def >=(other, context: nil)
 		case other
 		when Literal::Types::RangeType
-			Literal.subtype?(other.type, @type, context:)
+			Literal.structural_subtype?(other.type, @type, context:)
 		else
 			false
 		end

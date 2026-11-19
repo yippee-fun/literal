@@ -8,10 +8,21 @@ class Literal::Types::SameObjectType
 
 	def initialize(object)
 		@object = object
+		@hash = [Literal::Types::SameObjectType, Literal::OBJECT_ID.bind_call(object)].hash
 		freeze
 	end
 
-	attr_reader :object
+	attr_reader :object, :hash
+
+	def ==(other)
+		Literal::Types::SameObjectType === other && EQUAL_METHOD.bind_call(@object, other.object)
+	end
+
+	alias_method :eql?, :==
+
+	def inspect
+		"_SameObject(#{@object.inspect})"
+	end
 
 	def ===(value)
 		EQUAL_METHOD.bind_call(@object, value)
@@ -24,6 +35,12 @@ class Literal::Types::SameObjectType
 		else
 			false
 		end
+	end
+
+	# The only value is @object itself, so this is a subtype of any type that
+	# admits it — including e.g. Integer for _SameObject(10), where bare 10 is not.
+	def <=(other, context: nil)
+		!!(other === @object)
 	end
 
 	freeze

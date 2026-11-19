@@ -5,14 +5,33 @@ class Literal::Types::ArrayType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::ArrayType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::ArrayType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::ArrayType === other && Literal.member_eql?(@type, other.type)
+	end
+
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		yield @type
+	end
 
 	def inspect
 		"_Array(#{@type.inspect})"
+	end
+
+	def literal_upper_bound
+		Array
 	end
 
 	def map(&)
@@ -27,7 +46,9 @@ class Literal::Types::ArrayType
 	def >=(other, context: nil)
 		case other
 		when Literal::Types::ArrayType
-			Literal.subtype?(other.type, @type, context:)
+			Literal.structural_subtype?(other.type, @type, context:)
+		when Literal::Types::ConstraintType
+			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
 		else
 			false
 		end

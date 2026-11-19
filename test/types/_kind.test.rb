@@ -27,11 +27,23 @@ test "===" do
 	assert _Kind(Module) === Module
 	refute _Kind(String) === Class
 
-	assert _Kind(_Array(Integer)) === _Array(1)
+	assert _Kind(_Array(Integer)) === _Array(_Integer(1))
 	assert _Kind(_Array(numeric_kind.type)) === _Array(1)
 
 	union_type = _Union(String, Integer)
 	union_kind = union_type.map { |it| _Kind(it) }
 
 	assert union_kind === Integer
+end
+
+test "hierarchy" do
+	assert_subtype _Kind(Integer), _Kind(Integer)
+	assert_subtype _Kind(Integer), _Kind(Numeric)
+	assert_subtype _Kind(_String(length: 10)), _Kind(_String(length: 5..15))
+	assert_subtype _Class(Integer), _Kind(Numeric)
+	assert_subtype _Descendant(Numeric), _Kind(Numeric)
+
+	refute_subtype _Kind(Numeric), _Kind(Integer)
+	refute_subtype _Kind(Integer), _Kind(String)
+	refute_subtype _Kind(_Nilable(Integer)), _Kind(Numeric)
 end

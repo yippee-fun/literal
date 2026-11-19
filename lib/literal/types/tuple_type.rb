@@ -7,14 +7,33 @@ class Literal::Types::TupleType
 	def initialize(types)
 		raise Literal::ArgumentError.new("_Tuple type must have at least one type.") if types.size < 1
 
-		@types = types
+		@types = Literal::Freezing.frozen_member(types)
+		@hash = literal_hash(Literal::Types::TupleType, @types)
 		freeze
 	end
 
-	attr_reader :types
+	attr_reader :types, :hash
+
+	def ==(other)
+		Literal::Types::TupleType === other && @types == other.types
+	end
+
+	def eql?(other)
+		Literal::Types::TupleType === other && Literal.member_eql?(@types, other.types)
+	end
+
+	def literal_child_types
+		return enum_for(__method__) unless block_given?
+
+		@types.each { |type| yield type }
+	end
 
 	def inspect
 		"_Tuple(#{@types.map(&:inspect).join(', ')})"
+	end
+
+	def literal_upper_bound
+		Array
 	end
 
 	def ===(value)
@@ -50,7 +69,12 @@ class Literal::Types::TupleType
 	def >=(other, context: nil)
 		case other
 		when Literal::Types::TupleType
-			@types == other.types
+			other_types = other.types
+			return false unless @types.size == other_types.size
+
+			@types.each_with_index.all? do |type, i|
+				Literal.structural_subtype?(other_types[i], type, context:)
+			end
 		else
 			false
 		end

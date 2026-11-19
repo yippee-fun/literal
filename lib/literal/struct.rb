@@ -2,7 +2,7 @@
 
 class Literal::Struct < Literal::DataStructure
 	class << self
-		def prop(name, type, kind = :keyword, reader: :public, writer: :public, default: nil, description: nil)
+		def prop(name, type, kind = :keyword, reader: :public, writer: :public, predicate: false, default: nil, description: nil)
 			super
 		end
 	end
@@ -13,10 +13,11 @@ class Literal::Struct < Literal::DataStructure
 		when String
 			key = key.intern
 		else
-			raise TypeError.new("expected a string or symbol, got #{key.inspect.class}")
+			::Kernel.raise TypeError.new("expected a string or symbol, got #{key.class}")
 		end
 
-		prop = self.class.literal_properties[key] || raise(NameError.new("unknown attribute: #{key.inspect} for #{self.class}"))
-		__send__(:"#{prop.name}=", value)
+		shape = Literal::CLASS.bind_call(self)
+		prop = shape.literal_properties[key] || ::Kernel.raise(NameError.new("unknown attribute: #{key.inspect} for #{shape}"))
+		Literal::PUBLIC_SEND.bind_call(self, :"#{prop.name.name}=", value)
 	end
 end

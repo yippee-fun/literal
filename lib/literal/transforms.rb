@@ -117,7 +117,7 @@ Literal::Transforms = {
 		last: Object,
 		max: Object,
 		min: Object,
-		size: Integer,
+		size: Literal::Types._Nilable(Literal::Types._Union(Integer, Float)),
 		to_a: Array,
 		to_s: String,
 	},
