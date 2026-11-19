@@ -180,6 +180,20 @@ unless RUBY_ENGINE == "truffleruby"
 	end
 end
 
+test "stops watching for an end once it refuses a second sig" do
+	Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+		class Twice
+			extend Literal::Signatures
+
+			begin
+				sig(String) >> String
+				sig(String) >> String
+			rescue Literal::ArgumentError
+			end
+		end
+	RUBY
+end
+
 test "does not watch for an end once the method is defined" do
 	Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
 		class Settled

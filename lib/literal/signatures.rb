@@ -52,8 +52,10 @@ module Literal::Signatures
 	KEYWORD = [:keyreq, :key].freeze
 
 	def sig(*positional, **keywords)
-		if @__literal_signature__
-			raise Literal::ArgumentError, "#{self}: the sig at #{@__literal_signature__.site} has no method after it"
+		if (pending = @__literal_signature__)
+			@__literal_signature__ = nil
+			@__literal_signature_watch__&.disable
+			raise Literal::ArgumentError, "#{self}: the sig at #{pending.site} has no method after it"
 		end
 
 		@__literal_signature__ = Signature.new(positional.freeze, keywords.freeze, caller_locations(1, 1).first)
