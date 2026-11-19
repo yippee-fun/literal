@@ -66,10 +66,13 @@ class Literal::RangeSerializer < Literal::Serializer
 		from = deserialize_contents(raw["from"], type: bound)
 		to = deserialize_contents(raw["to"], type: bound)
 
-		if raw.fetch("inclusive")
+		case raw.fetch("inclusive")
+		when true
 			from..to
-		else
+		when false
 			from...to
+		else
+			raise Literal::ArgumentError, "Range inclusive must be a boolean, got #{raw['inclusive'].inspect}"
 		end
 	end
 

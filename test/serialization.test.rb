@@ -1735,6 +1735,14 @@ test "range deserialization requires the inclusive key" do
 	end
 end
 
+test "range deserialization requires a boolean inclusive" do
+	["yes", 0, 1, nil].each do |inclusive|
+		assert_raises(Literal::ArgumentError) do
+			Example.deserialize({ "from" => 1, "to" => 3, "inclusive" => inclusive }, type: _Range(Integer))
+		end
+	end
+end
+
 test "ranges discriminate in unions through their shape" do
 	type = _Union(_Range(Integer), String)
 
