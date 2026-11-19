@@ -63,3 +63,15 @@ test "recursive types can be compared" do
 	refute_subtype json_data, strict_json_data
 	refute_subtype _Array(json_data), _Array(strict_json_data)
 end
+
+test "results resting on a failed coinductive assumption are not memoized" do
+	a = b = left = right = nil
+	a = _Union(String, _Deferred { left })
+	b = _Union(String, _Deferred { right })
+	left = _Tuple(a, Symbol)
+	right = _Tuple(b, String)
+	other = _Tuple(b, Symbol)
+
+	refute_subtype left, other
+	refute_subtype left, _Union(right, other)
+end
