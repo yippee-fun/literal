@@ -66,8 +66,11 @@ module Literal::ConstantTracker
 			LISTS[references] = true
 
 			if LISTS.size > @lists_limit
-				LISTS.clear
-				CONSTANTS.each_value { |list| LISTS[list] = true }
+				# Gathered before LISTS lets go, or a collection part way through
+				# would take lists not yet reached.
+				live = {}.compare_by_identity
+				CONSTANTS.each_value { |list| live[list] = true }
+				LISTS.replace(live)
 				@lists_limit = [LISTS.size * 2, MINIMUM_LISTS_LIMIT].max
 			end
 		end

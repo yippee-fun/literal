@@ -97,6 +97,26 @@ if RUBY_ENGINE == "ruby"
 	end
 end
 
+# Only CRuby collects garbage on every allocation under GC.stress.
+if RUBY_ENGINE == "ruby"
+	test "pruning the reference lists keeps every live constant's names" do
+		owner = Module.new
+		objects = Array.new(100) { |index| Object.new.tap { |object| owner.const_set(:"Payload#{index}", object) } }
+		limit = Literal::ConstantTracker.instance_variable_get(:@lists_limit)
+
+		begin
+			Literal::ConstantTracker.instance_variable_set(:@lists_limit, 0)
+			GC.stress = true
+			owner.const_set(:Pruning, Object.new)
+		ensure
+			GC.stress = false
+			Literal::ConstantTracker.instance_variable_set(:@lists_limit, limit)
+		end
+
+		assert objects.all? { |object| Literal.const_ref(object).any? }
+	end
+end
+
 test "preserves live aliases through garbage collection" do
 	object = Object.new
 	owner = Module.new
