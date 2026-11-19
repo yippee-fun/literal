@@ -76,6 +76,12 @@ class Literal::TimeSerializer < Literal::Serializer
 
 		year, month, day, hour, minute, second, offset = fields
 
+		# A leap second is read as the second after it, as Time.iso8601 reads it
+		# on every engine. DateTime.new refuses one, and only CRuby's Time.new
+		# keeps it.
+		leap_second = (second >= 60) ? 1 : 0
+		second -= leap_second
+
 		# Built from the fields rather than parsed again, since engines' ISO 8601
 		# parsers differ in how much of a long fraction they keep.
 		if DateTime == bound_of(type)
@@ -84,9 +90,9 @@ class Literal::TimeSerializer < Literal::Serializer
 			# calendar.
 			whole = second.floor
 			date_time = DateTime.new(year, month, day, hour, minute, whole, Rational(offset || 0, 86_400), Date::GREGORIAN)
-			(date_time + ((second - whole) / 86_400)).italy
+			(date_time + Rational(second - whole + leap_second, 86_400)).italy
 		else
-			Time.new(year, month, day, hour, minute, second, offset || "UTC")
+			Time.new(year, month, day, hour, minute, second, offset || "UTC") + leap_second
 		end
 	end
 
@@ -106,7 +112,8 @@ class Literal::TimeSerializer < Literal::Serializer
 	# silently roll over, so the format and ranges are checked first.
 	# Returns the fields, with the second exact and the offset in seconds, or
 	# nil for UTC: Z, or -00:00, which RFC 3339 gives no local offset. Dates
-	# are proleptic Gregorian.
+	# are proleptic Gregorian. Second 60 is a leap second, which RFC 3339
+	# allows at any time, deferring to the table of those announced.
 	private def rfc3339_fields(raw)
 		return unless String === raw && (match = Format.match(raw))
 
@@ -114,7 +121,7 @@ class Literal::TimeSerializer < Literal::Serializer
 		year, month, day, hour, minute, second = date_and_time.map(&:to_i)
 		offset_hour, offset_minute = offset_hour.to_i, offset_minute.to_i
 
-		return unless Date.valid_date?(year, month, day, Date::GREGORIAN) && hour < 24 && minute < 60 && second < 60 && offset_hour < 24 && offset_minute < 60
+		return unless Date.valid_date?(year, month, day, Date::GREGORIAN) && hour < 24 && minute < 60 && second <= 60 && offset_hour < 24 && offset_minute < 60
 
 		second += Rational(fraction.to_i, 10 ** fraction.length) if fraction
 		offset = (offset_hour * 3600) + (offset_minute * 60)

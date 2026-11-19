@@ -1582,6 +1582,27 @@ test "time deserialization accepts only RFC 3339 date-times" do
 	assert_equal(Example.deserialize(Example.serialize(Time.utc(1582, 10, 10), type: Time), type: Time), Time.utc(1582, 10, 10))
 end
 
+test "leap seconds load as the second after them" do
+	{
+		"1990-12-31T23:59:60Z" => Time.utc(1991, 1, 1),
+		"1990-12-31T23:59:60.5Z" => Time.utc(1991, 1, 1, 0, 0, 1/2r),
+		"1990-12-31T15:59:60-08:00" => Time.utc(1991, 1, 1),
+		"2024-01-05T10:00:60+05:30" => Time.utc(2024, 1, 5, 4, 31),
+	}.each do |raw, instant|
+		time = Example.deserialize(raw, type: Time)
+		date_time = Example.deserialize(raw, type: DateTime)
+
+		assert_equal time, instant
+		assert_equal time, Time.iso8601(raw)
+		assert_equal time.utc_offset, Time.iso8601(raw).utc_offset
+		assert_equal date_time.to_time, instant
+		assert_equal date_time.offset, DateTime.iso8601(raw).offset
+	end
+
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1990-12-31T23:59:61Z", type: Time) }
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1990-12-31T23:59:61Z", type: DateTime) }
+end
+
 test "date-times with long fractions load exactly" do
 	raw = "2024-01-05T10:00:00.#{'1' * 200}Z"
 	fraction = Rational(("1" * 200).to_i, 10 ** 200)
