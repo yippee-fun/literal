@@ -197,6 +197,8 @@ module Literal
 	end
 
 	def self.subtype?(type, supertype, context: nil)
+		return supertype >= type if Module === type && Module === supertype && !(Literal::Type === supertype)
+
 		context ||= SubtypeContext.new
 		raw_key = [type.object_id, supertype.object_id]
 		raw_acquired = false
