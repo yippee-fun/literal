@@ -4304,6 +4304,16 @@ test "scalar serializers refuse types requiring frozen values unless their domai
 	assert context.serializable_type?(_Frozen(_Integer(1..)))
 end
 
+test "serializers refuse types requiring frozen values of a module" do
+	comparable = Class.new(Literal::StringSerializer) { def type = Comparable }
+
+	refute Literal::SerializationContext.new(comparable, defaults: false).serializable_type?(_Frozen(Comparable))
+
+	context = Literal::SerializationContext.new(comparable)
+	assert_equal(context.serializer_for_type(_Frozen(Comparable)).class, Literal::FrozenSerializer)
+	assert context.deserialize(+"a", type: _Frozen(Comparable)).frozen?
+end
+
 test "types requiring frozen values load frozen" do
 	[
 		[_Frozen(String), "a"],

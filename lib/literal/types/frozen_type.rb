@@ -72,7 +72,7 @@ class Literal::Types::FrozenType
 		end
 	end
 
-	Anything = new(BasicObject)
+	Anything = new(Literal::Types::VoidType::Instance)
 
 	freeze
 end
