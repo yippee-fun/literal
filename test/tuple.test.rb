@@ -126,6 +126,16 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	assert_equal tuple.to_a, ["a", 1]
 end
 
+test "#initialize copies the types, so the caller's reference is harmless" do
+	types = [String, Integer]
+	tuple = Literal::Tuple.new(["a", 1], types:)
+
+	types[0] = Integer
+
+	assert_equal tuple.__types__, [String, Integer]
+	assert tuple.__types__.frozen?
+end
+
 test "#initialize copies the values into a plain array, not an Array subclass" do
 	subclass = Class.new(Array)
 	tuple = Literal::Tuple(String, Integer).coerce(subclass["a", 1])

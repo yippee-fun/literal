@@ -115,6 +115,7 @@ class Literal::Tuple
 	include Enumerable
 
 	def initialize(value, types:)
+		types = types.dup.freeze unless types.frozen?
 		collection_type = Literal::Types._Tuple(*types)
 
 		Literal.check(value, collection_type) do |c|
