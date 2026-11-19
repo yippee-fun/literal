@@ -234,7 +234,7 @@ class Literal::Enum
 
 	def name
 		klass = self.class
-		"#{klass.name}::#{klass.names[self]}"
+		"#{klass.name || klass.inspect}::#{klass.names[self]}"
 	end
 
 	alias_method :inspect, :name

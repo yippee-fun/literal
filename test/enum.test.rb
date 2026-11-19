@@ -345,3 +345,14 @@ test "#find_by with more than one index names find_by" do
 	error = assert_raises(ArgumentError) { Color.find_by(hex: "#FF0000", lower_hex: "#ff0000") }
 	assert_equal error.message, "You can only specify one index when using `find_by`."
 end
+
+test "a member of an anonymous enum is named after the enum's inspect" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		const_set(:A, new(1))
+	end
+
+	assert_equal enum::A.name, "#{enum.inspect}::A"
+
+	error = assert_raises(ArgumentError) { enum.new(1) }
+	assert_equal error.message, "The value 1 is already used by #{enum.inspect}::A."
+end
