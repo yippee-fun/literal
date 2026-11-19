@@ -3,16 +3,23 @@
 class Literal::Flags
 	include Enumerable
 
-	def initialize(value = 0, **new_flags)
-		if new_flags.length > 0
+	def initialize(value = Literal::Undefined, **new_flags)
+		if new_flags.empty?
+			value = 0 if Literal::Undefined == value
+		elsif Literal::Undefined == value
 			value = self.class.calculate_from_hash(new_flags)
+		else
+			raise Literal::ArgumentError.new("Pass either a value or flags to #{self.class.inspect}.new, not both.")
 		end
 
-		@value = value
-		freeze
+		__initialize_from_value__(value)
 	end
 
 	def __initialize_from_value__(value)
+		Literal.check(value, Literal::Types._Integer(0...(1 << self.class::BITS))) do |c|
+			c.fill_receiver(receiver: self, method: "#initialize")
+		end
+
 		@value = value
 		freeze
 	end
@@ -27,6 +34,10 @@ class Literal::Flags
 		if unique_values.length != flags.length
 			raise Literal::ArgumentError.new("Flags must be unique.")
 		end
+
+		bit_type = Literal::Types._Integer(0...self::BITS)
+
+		flags.each_value { |bit| Literal.check(bit, bit_type) }
 
 		const_set(:FLAGS, flags.dup.freeze)
 

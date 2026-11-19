@@ -160,3 +160,29 @@ test "| and & refuse anything else" do
 	assert_raises(Literal::ArgumentError) { bold | child.new(admin: true) }
 	assert_raises(Literal::ArgumentError) { bold & child.new(admin: true) }
 end
+
+test ".new refuses a value that isn't an integer its bits can hold" do
+	assert_raises(Literal::TypeError) { Example.new(256) }
+	assert_raises(Literal::TypeError) { Example.new(-1) }
+	assert_raises(Literal::TypeError) { Example.new("x") }
+	assert_raises(Literal::TypeError) { Example.new(1.0) }
+	assert_raises(Literal::TypeError) { Example.new(nil) }
+	assert_raises(Literal::TypeError) { Example.from_int(256) }
+	assert_raises(Literal::TypeError) { Example.new(bold: true) | 256 }
+
+	assert_equal Example.new(255).to_i, 255
+	assert_equal Example.new.to_i, 0
+end
+
+test ".new refuses both a value and flags" do
+	assert_raises(Literal::ArgumentError) { Example.new(1, italic: true) }
+	assert_raises(Literal::ArgumentError) { Example.new(0, italic: true) }
+end
+
+test ".define refuses bits the flags can't hold" do
+	assert_raises(Literal::TypeError) { Class.new(Literal::Flags8) { define(big: 8) } }
+	assert_raises(Literal::TypeError) { Class.new(Literal::Flags8) { define(negative: -1) } }
+	assert_raises(Literal::TypeError) { Class.new(Literal::Flags8) { define(fractional: 1.5) } }
+
+	assert_equal Class.new(Literal::Flags16) { define(big: 15) }.new(big: true).to_i, 1 << 15
+end
