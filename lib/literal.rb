@@ -9,6 +9,9 @@ module Literal
 	FROZEN = Kernel.instance_method(:frozen?)
 	INSTANCE_VARIABLE_GET = Kernel.instance_method(:instance_variable_get)
 	METHOD = Kernel.instance_method(:method)
+	RESPOND_TO = Kernel.instance_method(:respond_to?)
+	HASH = Kernel.instance_method(:hash)
+	CLASS = Kernel.instance_method(:class)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")
@@ -31,6 +34,20 @@ module Literal
 	end
 
 	Immediate = Types._Union(Integer, Float, Symbol, nil, Types._Boolean)
+
+	SINGLETON_METHODS = Kernel.instance_method(:singleton_methods)
+
+	# Kernel#respond_to? needs respond_to_missing?, which BasicObject lacks on JRuby.
+	def self.implements?(object, method_name)
+		class_of_object = CLASS.bind_call(object)
+
+		if class_of_object.private_method_defined?(:respond_to_missing?) || class_of_object.method_defined?(:respond_to_missing?)
+			RESPOND_TO.bind_call(object, method_name, true)
+		else
+			class_of_object.private_method_defined?(method_name) || class_of_object.method_defined?(method_name) ||
+				SINGLETON_METHODS.bind_call(object).include?(method_name)
+		end
+	end
 
 	def self.const_name(object)
 		const_ref(object).first&.name

@@ -265,3 +265,68 @@ test "results with equal contents are equal" do
 	refute type.success(1).eql?(Literal::Result(Float, String).success(1.0))
 	assert_equal type.success(1), Literal::Result(Numeric, String).success(1)
 end
+
+test "a result is equal to itself, like an array, even holding NaN" do
+	nan = Float::NAN
+	success = Literal::Result(Float, Float).success(nan)
+	failure = Literal::Result(Float, Float).failure(nan)
+
+	assert_equal success, success
+	assert success.eql?(success)
+	assert_equal success, Literal::Result(Float, Float).success(nan)
+	assert_equal failure, Literal::Result(Float, Float).failure(nan)
+	assert failure.eql?(Literal::Result(Float, Float).failure(nan))
+
+	refute_equal success, Literal::Result(Float, Float).success(0.0 / 0.0)
+end
+
+test "results holding a BasicObject compare and hash by identity" do
+	object = BasicObject.new
+	type = Literal::Result(BasicObject, BasicObject)
+
+	assert_equal type.success(object), type.success(object)
+	assert type.success(object).eql?(type.success(object))
+	assert_equal type.success(object).hash, type.success(object).hash
+	refute type.success(object).eql?(type.success(BasicObject.new))
+
+	assert_equal type.failure(object), type.failure(object)
+	assert type.failure(object).eql?(type.failure(object))
+	assert_equal type.failure(object).hash, type.failure(object).hash
+	refute type.failure(object).eql?(type.failure(BasicObject.new))
+end
+
+test "results use a BasicObject payload's singleton eql? and hash" do
+	payloads = Array.new(2) do
+		payload = BasicObject.new
+		def payload.eql?(_other) = true
+		def payload.hash = 1
+		payload
+	end
+	type = Literal::Result(BasicObject, BasicObject)
+
+	assert type.success(payloads[0]).eql?(type.success(payloads[1]))
+	assert_equal type.success(payloads[0]).hash, type.success(payloads[1]).hash
+end
+
+test "results hash their payload with its own hash, even a private one" do
+	payload = Class.new do
+		def initialize(id) = @id = id
+		attr_reader :id
+
+		def eql?(other) = id == other.id
+		private def hash = id.hash
+	end
+
+	type = Literal::Result(Object, Object)
+
+	assert_equal type.success(payload.new(1)).hash, type.success(payload.new(1)).hash
+	assert_equal type.failure(payload.new(1)).hash, type.failure(payload.new(1)).hash
+	assert({ type.success(payload.new(1)) => true }[type.success(payload.new(1))])
+end
+
+test "results delegate equality and hashing through a delegator" do
+	type = Literal::Result(BasicObject, BasicObject)
+
+	assert type.success(SimpleDelegator.new(1)).eql?(type.success(SimpleDelegator.new(1)))
+	assert_equal type.success(SimpleDelegator.new(1)).hash, type.success(SimpleDelegator.new(1)).hash
+end

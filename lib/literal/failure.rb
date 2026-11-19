@@ -93,15 +93,22 @@ class Literal::Failure < Literal::Result
 	end
 
 	def ==(other)
-		Literal::Failure === other && @error == other.error!
+		return false unless Literal::Failure === other
+
+		error = other.error!
+		Literal::EQUAL.bind_call(@error, error) || @error == error
 	end
 
 	def eql?(other)
-		Literal::Failure === other && @error.eql?(other.error!)
+		return false unless Literal::Failure === other
+
+		error = other.error!
+		Literal::EQUAL.bind_call(@error, error) || (Literal.implements?(@error, :eql?) && @error.__send__(:eql?, error))
 	end
 
 	def hash
-		[Literal::Failure, @error].hash
+		error_hash = Literal.implements?(@error, :hash) ? @error.__send__(:hash) : Literal::HASH.bind_call(@error)
+		[Literal::Failure, error_hash].hash
 	end
 
 	def map(type)
