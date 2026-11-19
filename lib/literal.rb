@@ -340,6 +340,8 @@ module Literal
 		return true if subtype == Types::NeverType::Instance || supertype == subtype
 
 		case subtype
+		in Types::DeferredType unless Types::DeferredType === supertype
+			subtype?(subtype.materialize, supertype, context:)
 		in Types::UnionType
 			subtype.all? { |member| subtype?(member, supertype, context:) }
 		in Types::NilableType
