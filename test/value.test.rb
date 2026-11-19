@@ -44,3 +44,26 @@ test "collection values convert to their core collection" do
 	assert_equal({ a: 1 }, Literal::Value(Hash).new({ a: 1 }).to_h)
 	assert_equal Set[1], Literal::Value(Set).new(Set[1]).to_set
 end
+
+test "equal values are eql? and hash alike" do
+	assert Age.new(20).eql?(Age.new(20))
+	assert_equal Age.new(20).hash, Age.new(20).hash
+	assert_equal({ Age.new(20) => true }[Age.new(20)], true)
+
+	refute Age.new(20).eql?(UserID.new(20))
+
+	number = Literal::Value(Numeric)
+
+	assert_equal number.new(1), number.new(1.0)
+	refute number.new(1).eql?(number.new(1.0))
+end
+
+test "eql? and hash agree when a subclass overrides the reader" do
+	shouting = Class.new(Literal::Value(String)) do
+		def value = super.upcase
+	end
+
+	assert shouting.new("a").eql?(shouting.new("a"))
+	assert shouting.new("a").eql?(shouting.new("A"))
+	assert_equal shouting.new("a").hash, shouting.new("A").hash
+end

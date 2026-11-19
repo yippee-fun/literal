@@ -46,6 +46,14 @@ class Literal::Value
 
 	alias_method :==, :===
 
+	def eql?(other)
+		self.class == other.class && value.eql?(other.value)
+	end
+
+	def hash
+		[self.class, value].hash
+	end
+
 	def as_pack
 		marshal_dump
 	end
