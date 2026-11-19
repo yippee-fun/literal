@@ -21,8 +21,13 @@ class Literal::Types::TaggedUnionType
 
 		@members = flattened.freeze
 		@pairs = flattened.map(&:freeze).freeze
+		primitive_pairs, type_pairs = @pairs.partition do |(_tag, type)|
+			Literal::Types::UnionType::PRIMITIVES.any? { |primitive| primitive === type }
+		end
+		@primitive_pairs = primitive_pairs.uniq { |(_tag, type)| type }.to_h { |pair| [pair[1], pair] }.freeze
+		@type_pairs = type_pairs.freeze
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(flattened.each_value)
-		@hash = [Literal::Types::TaggedUnionType, @pairs].hash
+		@hash = literal_hash(Literal::Types::TaggedUnionType, @pairs)
 		freeze
 	end
 
@@ -58,8 +63,11 @@ class Literal::Types::TaggedUnionType
 		end
 	end
 
+	# Literal members match with ==, as in a union, so === agrees with resolve.
 	private def member_match?(value)
-		@members.any? { |_tag, type| type === value }
+		!primitive_pair(value).nil? ||
+			@type_pairs.any? { |(_tag, type)| type === value } ||
+			@primitive_pairs.each_value.any? { |(_tag, primitive)| primitive == value }
 	end
 
 	def [](tag)
@@ -81,8 +89,13 @@ class Literal::Types::TaggedUnionType
 		member_for(value) || raise(Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}."))
 	end
 
+	# Like UnionType#resolve: a literal member the value is, or else a most
+	# specific matching type, or else a literal the value is merely == to.
 	private def member_for(value)
-		pairs = @pairs
+		pair = primitive_pair(value)
+		return pair if pair
+
+		pairs = @type_pairs
 
 		i, len = 0, pairs.size
 		while i < len
@@ -101,12 +114,19 @@ class Literal::Types::TaggedUnionType
 			i += 1
 		end
 
+		@primitive_pairs.each_value.find { |(_tag, primitive)| primitive == value }
+	end
+
+	private def primitive_pair(value)
+		@primitive_pairs[value]
+	rescue
 		nil
 	end
 
 	# Pairs `first` and `second` both match; no pair between them does.
 	private def most_specific_pair(first, second, value)
-		matches = [@pairs[first], @pairs[second], *@pairs[(second + 1)..].select { |(_tag, type)| type === value }]
+		pairs = @type_pairs
+		matches = [pairs[first], pairs[second], *pairs[(second + 1)..].select { |(_tag, type)| type === value }]
 		Literal::Types::UnionType.most_specific(matches) { |(_tag, type)| type }
 	end
 

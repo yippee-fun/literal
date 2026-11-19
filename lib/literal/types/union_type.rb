@@ -5,6 +5,10 @@ class Literal::Types::UnionType
 	include Literal::Type
 	include Literal::Types::DraftTransparent
 
+	# Literal values, which a value resolves to first when it is one and last
+	# when it is merely == to one.
+	PRIMITIVES = [Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil].freeze
+
 	def initialize(queue)
 		raise Literal::ArgumentError.new("_Union type must have at least one type.") if queue.size < 1
 		types = []
@@ -24,7 +28,7 @@ class Literal::Types::UnionType
 				# is what makes `_Optional(_Nilable(String))` and
 				# `_Nilable(_Optional(String))` the same union.
 				queue.unshift(type.type, nil)
-			when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
+			when *PRIMITIVES
 				primitives << type
 			else
 				types << type

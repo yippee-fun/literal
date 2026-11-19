@@ -177,3 +177,31 @@ test "a cyclic value re-entering a tagged union through a proc member does not m
 	refute tagged === array
 	assert tagged === [1, [2, []]]
 end
+
+test "resolution finds literal members like a union" do
+	type = _TaggedUnion(one: 1, float: Float, a: "a", string: String)
+
+	assert_equal type.resolve(1), [:one, 1]
+	assert_equal type.resolve(1.0), [:float, Float]
+	assert_equal type.resolve(1r), [:one, 1]
+	assert_equal type.resolve("a"), [:a, "a"]
+	assert_equal type.resolve("b"), [:string, String]
+	assert_equal _TaggedUnion(float: 1.0, integer: 1).tag_for(1), :integer
+	assert_equal _TaggedUnion(first: 1, second: 1).tag_for(1), :first
+end
+
+test "literal members match with == like a union's, so === agrees with resolution" do
+	literal = +"x"
+	def literal.===(value) = value == "y"
+	type = _TaggedUnion(string: literal, integer: Integer)
+
+	assert type === "x"
+	refute type === "y"
+	assert_equal type.tag_for("x"), :string
+end
+
+test "a tagged union can hold a matcher without a hash method" do
+	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
+
+	assert _TaggedUnion(any: matcher) === 1
+end
