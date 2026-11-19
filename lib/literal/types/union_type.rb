@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "delegate"
+
 class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
@@ -48,6 +50,12 @@ class Literal::Types::UnionType
 		@primitive_list = primitives.to_a.freeze
 		@hash = literal_hash(Literal::Types::UnionType, @types, @primitive_list)
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
+		# Only an instance of a primitive's class can be eql? to it — any String,
+		# Array or Hash to one of those, whatever their subclasses — or else a
+		# delegator, which forwards eql? and hash to the object it wraps.
+		member_classes = primitives.map { |primitive| [String, Array, Hash].find { |base| base === primitive } || primitive.class }.uniq
+		member_classes << Delegator if member_classes.any?
+		@member_classes = member_classes.freeze
 
 		freeze
 	end
@@ -265,8 +273,17 @@ class Literal::Types::UnionType
 		primitive_member?(value) || !equal_primitive_index(value).nil?
 	end
 
+	# The Set lookup hashes the value, which walks everything inside a struct
+	# or an array, so it's skipped for values that can't be eql? to a primitive.
 	private def primitive_member?(value)
-		@primitives.include?(value)
+		classes = @member_classes
+		i, len = 0, classes.size
+		while i < len
+			return @primitives.include?(value) if classes[i] === value
+			i += 1
+		end
+
+		false
 	rescue
 		false
 	end
