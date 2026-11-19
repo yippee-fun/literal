@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "monitor"
+
 module Literal::Properties
 	include Literal::Types
 
@@ -409,6 +411,7 @@ module Literal::Properties
 		batching = __literal_open_batches__ > 0
 
 		if batching
+			@__literal_last_deferred_property__ = new_property
 			code = new_property && __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
 		else
 			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
@@ -429,7 +432,7 @@ module Literal::Properties
 	end
 
 	SCHEMA_METHODS = [:initialize, :to_h, :to_hash].freeze
-	SCHEMA_METHODS_MUTEX = Mutex.new
+	SCHEMA_METHODS_LOCK = Monitor.new
 
 	private def __literal_schema_methods__
 		SCHEMA_METHODS
@@ -471,13 +474,22 @@ module Literal::Properties
 		return unless @__literal_schema_methods_deferred__
 
 		# A second thread reaching a stand-in waits here, then finds the real
-		# methods in place.
-		SCHEMA_METHODS_MUTEX.synchronize do
+		# methods in place. Re-entrant, because generating can materialize a
+		# deferred type whose block defines another shape with a batch of its own.
+		SCHEMA_METHODS_LOCK.synchronize do
 			next unless @__literal_schema_methods_deferred__
+
+			# What the last declaration would have emitted without a batch, so a
+			# reader that takes a schema-wide method's name fares the same.
+			last_property = @__literal_last_deferred_property__
+			code = __generate_literal_methods__(last_property)
 
 			extension = __literal_extension__
 			__literal_schema_methods__.each { |name| extension.alias_method(name, name) }
-			extension.module_eval(__generate_literal_methods__(nil), __FILE__, __LINE__)
+			__literal_silence_redefinitions__(last_property) if last_property
+			extension.module_eval(code, __FILE__, __LINE__)
+
+			@__literal_last_deferred_property__ = nil
 			@__literal_schema_methods_deferred__ = false
 		end
 	end

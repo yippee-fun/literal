@@ -527,3 +527,51 @@ test "a reader named after a schema-wide method does not displace it while the b
 	assert_equal early, 1
 	assert_equal example.new(name: "Joel", hash: "abc").hash, example.new(name: "Joel", hash: "abc").hash
 end
+
+test "generating can define another shape with a batch of its own" do
+	inner = nil
+
+	outer = Class.new(Literal::Struct) do
+		props do
+			prop :child, _Deferred {
+				inner ||= Class.new(Literal::Struct) do
+					props do
+						prop :name, String
+					end
+				end
+
+				_Nilable(inner)
+			}
+		end
+	end
+
+	assert_equal outer.new.to_h, { child: nil }
+	assert_equal outer.new(child: inner.new(name: "Joel")).child.name, "Joel"
+end
+
+test "a reader named after a schema-wide method fares as it would without a batch" do
+	last = proc do
+		prop :name, String
+		prop :to_h, String, reader: :public
+	end
+
+	earlier = proc do
+		prop :to_h, String, reader: :public
+		prop :name, String
+	end
+
+	[last, earlier].each do |declarations|
+		unbatched = Class.new { extend Literal::Properties }.tap { |it| it.class_exec(&declarations) }
+		batched = Class.new { extend Literal::Properties }.tap { |it| it.props { it.class_exec(&declarations) } }
+
+		assert_equal batched.new(name: "Joel", to_h: "x").to_h, unbatched.new(name: "Joel", to_h: "x").to_h
+	end
+end
+
+test "a Literal::Enum frozen by hand is not mistaken for a finished one" do
+	example = Class.new(Literal::Enum(String)) do
+		freeze
+	end
+
+	assert_raises(ArgumentError) { example.__send__(:defined) }
+end
