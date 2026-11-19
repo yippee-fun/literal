@@ -95,8 +95,10 @@ class Literal::Draft < Literal::Struct
 				set_temporary_name "Literal::Draft(#{type.name})"
 			end
 
-			type.literal_properties.each do |property|
-				__draft_property__(property)
+			props do
+				type.literal_properties.each do |property|
+					__draft_property__(property)
+				end
 			end
 		end
 

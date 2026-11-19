@@ -42,6 +42,13 @@ class Literal::Enum
 			end
 		end
 
+		# A hook for anything that knows when the class body has closed, sparing
+		# the wait for the TracePoint — which never fires for an anonymous class.
+		private def defined
+			__after_defined__
+			super if defined?(super)
+		end
+
 		def position_of(member)
 			coerce(member).__position__
 		end
@@ -128,6 +135,7 @@ class Literal::Enum
 		end
 
 		def __after_defined__
+			return if @finished
 			raise ArgumentError if frozen?
 
 			if RUBY_VERSION < "3.2"
@@ -155,6 +163,7 @@ class Literal::Enum
 				@indexes[name] = index
 			end
 
+			@finished = true
 			@values.freeze
 			@members.freeze
 			freeze
