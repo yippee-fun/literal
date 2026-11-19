@@ -716,6 +716,40 @@ unless RUBY_ENGINE == "truffleruby"
 		assert error.message.include?("has no method after it")
 	end
 
+	test "waits past a body reopening the class inside the one the sig is in" do
+		namespace = Module.new
+		namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+			Namespace = self
+
+			class Reopened
+				extend Literal::Signatures
+
+				sig(String) >> String
+				class Namespace::Reopened; end
+				def echo(text) = text
+			end
+		RUBY
+
+		assert_raises(Literal::TypeError) { namespace::Reopened.new.echo(1) }
+	end
+
+	test "refuses a dangling sig once a body reopening the class inside it ends" do
+		error = assert_raises(Literal::ArgumentError) do
+			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				Namespace = self
+
+				class Reopened
+					extend Literal::Signatures
+
+					sig(String) >> String
+					class Namespace::Reopened; end
+				end
+			RUBY
+		end
+
+		assert error.message.include?("has no method after it")
+	end
+
 	test "labels a class body that ends on a sig past its own to_s" do
 		error = assert_raises(Literal::ArgumentError) do
 			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)

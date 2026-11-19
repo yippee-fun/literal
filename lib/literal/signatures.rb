@@ -347,12 +347,13 @@ module Literal::Signatures
 	# MRI also ends a class body that an exception is unwinding, so there the
 	# watch tracks the exceptions raised since the sig and not rescued, and
 	# leaves one in flight to propagate.
-	WATCHED = ((RUBY_ENGINE == "ruby") ? [:end, :raise, :rescue] : [:end]).freeze
+	WATCHED = ((RUBY_ENGINE == "ruby") ? [:class, :end, :raise, :rescue] : [:class, :end]).freeze
 
-	# Watches the end of the class or module body the sig is written in, and
-	# only until the next method is defined. A block, such as one passed to
-	# `Class.new`, has no `end` event, and TruffleRuby has no TracePoint, so
-	# there a sig with nothing after it is caught by the next sig.
+	# Watches the end of the class or module body the sig is written in, past
+	# any body reopening the class inside it, and only until the next method is
+	# defined. A block, such as one passed to `Class.new`, has no `end` event,
+	# and TruffleRuby has no TracePoint, so there a sig with nothing after it is
+	# caught by the next sig.
 	private def __literal_await_method__
 		return if RUBY_ENGINE == "truffleruby"
 
@@ -362,6 +363,7 @@ module Literal::Signatures
 		owner = self
 		thread = Thread.current
 		unwinding = []
+		reopened = 0
 		@__literal_signature_watch__ = TracePoint.new(*WATCHED) do |tp|
 			next unless thread.equal?(Thread.current)
 
@@ -370,13 +372,19 @@ module Literal::Signatures
 				unwinding << tp.raised_exception
 			in :rescue
 				unwinding.reject! { |error| Literal::EQUAL.bind_call(error, tp.raised_exception) }
+			in :class
+				reopened += 1 if Literal::EQUAL.bind_call(tp.self, owner)
 			in :end
 				next unless Literal::EQUAL.bind_call(tp.self, owner)
 
-				tp.disable
-				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
-				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature_watch__, nil)
-				raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{signature.site} has no method after it" if unwinding.empty?
+				if reopened > 0
+					reopened -= 1
+				else
+					tp.disable
+					Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
+					Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature_watch__, nil)
+					raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{signature.site} has no method after it" if unwinding.empty?
+				end
 			end
 		end
 		@__literal_signature_watch__.enable
