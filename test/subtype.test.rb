@@ -122,3 +122,35 @@ test "literal types are subtypes of the modules bounding their members" do
 	refute_subtype _JSONData, Comparable
 	refute_subtype _TaggedUnion(a: String, b: Array), Comparable
 end
+
+test "a union is a subtype of anything all its members are subtypes of" do
+	assert_subtype _Union(true, false), _Boolean
+	assert_subtype _Nilable(String), _JSONData
+	assert_subtype _Union(String, Integer), _JSONData
+	assert_subtype _TaggedUnion(a: String, b: Integer), _JSONData
+	assert_subtype _Union(String, _Nilable(Integer)), _Nilable(_JSONData)
+	assert_subtype _Union(1, 2), 0..5
+	assert_subtype _Union(String, Symbol), _Interface(:to_s)
+	assert_subtype _Union(_Array(String), _Array(Integer)), _Array(_Union(String, Integer))
+
+	refute_subtype _Union(true, nil), _Boolean
+	refute_subtype _Nilable(String), _JSONData(String)
+	refute_subtype _Union(String, Symbol), _JSONData
+	refute_subtype _TaggedUnion(a: String, b: Symbol), String
+end
+
+test "a serializable value type is not necessarily a serializable type" do
+	context = Literal::SerializationContext.new
+
+	assert Literal.subtype?(_Union(String, Symbol), context.type)
+	refute context.kind === _Union(String, Symbol)
+	refute context.property_kind === _Union(String, Symbol, Literal::Undefined)
+	assert context.property_kind === _Deferred { _Optional(String) }
+end
+
+test "<= on a type agrees with subtype?" do
+	assert _Nilable(Integer) <= _Nilable(Numeric)
+	assert _Union(true, false) <= _Boolean
+	assert _TaggedUnion(a: String, b: Integer) <= _JSONData
+	refute _Nilable(String) <= _JSONData(String)
+end

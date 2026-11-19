@@ -263,12 +263,24 @@ module Literal
 		end
 	end
 
+	# A union is a subtype of anything all its members are subtypes of.
 	private_class_method def self.resolved_subtype?(subtype, supertype, context)
-		if subtype == Types::NeverType::Instance
-			true
-		elsif supertype == subtype
-			true
-		elsif supertype == nil
+		return true if subtype == Types::NeverType::Instance || supertype == subtype
+
+		case subtype
+		in Types::UnionType
+			subtype.all? { |member| subtype?(member, supertype, context:) }
+		in Types::NilableType
+			subtype?(nil, supertype, context:) && subtype?(subtype.type, supertype, context:)
+		in Types::TaggedUnionType
+			subtype.members.each_value.all? { |member| subtype?(member, supertype, context:) }
+		else
+			member_subtype?(subtype, supertype, context)
+		end
+	end
+
+	private_class_method def self.member_subtype?(subtype, supertype, context)
+		if supertype == nil
 			subtype == NilClass
 		elsif supertype == true
 			subtype == TrueClass
@@ -292,6 +304,8 @@ module Literal
 					supertype >= String
 				when Symbol
 					supertype >= Symbol
+				when nil, true, false
+					supertype >= subtype.class
 				when ::Array
 					supertype >= ::Array
 				when ::Hash

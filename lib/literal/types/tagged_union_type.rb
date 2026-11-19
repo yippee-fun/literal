@@ -50,10 +50,6 @@ class Literal::Types::TaggedUnionType
 		"_TaggedUnion(#{pairs.join(', ')})"
 	end
 
-	def literal_upper_bound
-		Literal::Types._Union(*@members.values)
-	end
-
 	def ===(value)
 		if @guarded
 			Literal.with_match_guard(self, value) { member_match?(value) }
@@ -115,17 +111,7 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def >=(other, context: nil)
-		types = @members.values
-
-		case other
-		when Literal::Types::TaggedUnionType
-			other.members.values.all? { |t| types.any? { |t2| Literal.subtype?(t, t2, context:) } }
-		when Literal::Types::UnionType
-			other.types.all? { |t| types.any? { |t2| Literal.subtype?(t, t2, context:) } } &&
-				other.primitives.all? { |p| types.any? { |t| Literal.subtype?(p, t, context:) } }
-		else
-			types.any? { |t| Literal.subtype?(other, t, context:) }
-		end
+		@members.each_value.any? { |type| Literal.subtype?(other, type, context:) }
 	end
 
 	freeze

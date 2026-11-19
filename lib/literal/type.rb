@@ -8,7 +8,7 @@ module Literal::Type
 	def <=(other, context: nil)
 		case other
 		when Literal::Type
-			other.>=(self, context:)
+			Literal.subtype?(self, other, context:)
 		else
 			bound = literal_upper_bound
 			!bound.nil? && Literal.subtype?(bound, other, context:)

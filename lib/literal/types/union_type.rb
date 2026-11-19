@@ -226,13 +226,6 @@ class Literal::Types::UnionType
 
 	def >=(other, context: nil)
 		case other
-		when Literal::Types::UnionType
-			other.types.all? { |type| covers?(type, context:) } &&
-				other.primitives.all? { |primitive| covers?(primitive, context:) }
-		when Literal::Types::TaggedUnionType
-			other.members.values.all? { |type| covers?(type, context:) }
-		when Literal::Types::NilableType
-			covers?(nil, context:) && covers?(other.type, context:)
 		when Literal::Types::FalsyType
 			covers?(nil, context:) && covers?(false, context:)
 		else
@@ -273,11 +266,6 @@ class Literal::Types::UnionType
 		end
 
 		nil
-	end
-
-	def <=(other, context: nil)
-		@primitives.all? { |primitive| Literal.subtype?(primitive, other, context:) } &&
-			@types.all? { |type| Literal.subtype?(type, other, context:) }
 	end
 
 	freeze

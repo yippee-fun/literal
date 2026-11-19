@@ -86,8 +86,6 @@ class Literal::Types::ConstraintType
 			# The only property _Frozen can vouch for is frozen?.
 			@property_constraints.all? { |property, type| :frozen? == property && Literal.subtype?(true, type, context:) } &&
 				@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
-		when Literal::Types::UnionType
-			other.<=(self, context:)
 		# A numeric literal admits every value == to it (10 == 10.0), so it can't
 		# stand in for them as a single value.
 		when Module, Numeric

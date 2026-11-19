@@ -60,8 +60,10 @@ class Literal::SerializationContext
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 
 		@type = Literal::Serializer::SerializableType.new(self, _Union(*@serializers.map(&:type)))
-		@kind = _Kind(@type)
-		@property_kind = _Kind(_Union(@type, Literal::Undefined))
+		# Not _Kind(@type): a type whose values are each serializable — like an
+		# ambiguous union of serializable members — may still not be.
+		@kind = _Predicate("serializable type") { |type| serializable_type?(type) }
+		@property_kind = _Predicate("serializable property type") { |type| serializable_property_type?(type) }
 
 		@cache_mutex = Mutex.new
 		@serializer_cache = new_type_cache
@@ -80,6 +82,19 @@ class Literal::SerializationContext
 	# It accepts everything kind accepts, plus unions permitting
 	# Literal::Undefined, which are judged by their remaining members.
 	attr_reader :property_kind
+
+	def serializable_property_type?(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		case type
+		in Literal::Undefined
+			true
+		in Literal::Types::UnionType if type.optional?
+			serializable_type?(type.reject { |member| Literal::Undefined.equal?(member) })
+		else
+			serializable_type?(type)
+		end
+	end
 
 	def json_schema(type)
 		Literal::JSONSchema::Generator.new(self).generate(type)
