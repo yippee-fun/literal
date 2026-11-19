@@ -84,6 +84,13 @@ test "Generic#== compares both types" do
 	refute_equal Literal::Hash(Symbol, Integer), Literal::Hash(String, Integer)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Hash(Symbol, Integer).eql?(Literal::Hash(Symbol, Integer))
+	refute Literal::Hash(Symbol, Integer).eql?(Literal::Hash(Symbol, String))
+	assert_equal({ Literal::Hash(Symbol, Integer) => 1 }[Literal::Hash(Symbol, Integer)], 1)
+	assert_equal [Literal::Hash(Symbol, Integer), Literal::Hash(Symbol, Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant" do
 	assert Literal.subtype?(Literal::Hash(Symbol, Integer), Literal::Hash(Symbol, Numeric))
 	refute Literal.subtype?(Literal::Hash(Symbol, Numeric), Literal::Hash(Symbol, Integer))

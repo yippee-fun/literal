@@ -48,6 +48,14 @@ class Literal::Tuple
 			Generic === other && @types == other.types
 		end
 
+		def eql?(other)
+			Generic === other && @types.eql?(other.types)
+		end
+
+		def hash
+			[Generic, @types].hash
+		end
+
 		def ===(value)
 			return false unless Literal::Tuple === value
 

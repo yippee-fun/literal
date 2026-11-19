@@ -56,6 +56,14 @@ class Literal::Hash
 			Generic === other && @key_type == other.key_type && @value_type == other.value_type
 		end
 
+		def eql?(other)
+			Generic === other && @key_type.eql?(other.key_type) && @value_type.eql?(other.value_type)
+		end
+
+		def hash
+			[Generic, @key_type, @value_type].hash
+		end
+
 		def ===(value)
 			Literal::Hash === value &&
 				Literal.subtype?(value.__key_type__, @key_type) &&

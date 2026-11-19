@@ -85,6 +85,13 @@ test "Generic#== compares the types" do
 	refute_equal Literal::Tuple(String, Integer), Literal::Tuple(String)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Tuple(String, Integer).eql?(Literal::Tuple(String, Integer))
+	refute Literal::Tuple(String, Integer).eql?(Literal::Tuple(Integer, String))
+	assert_equal({ Literal::Tuple(String, Integer) => 1 }[Literal::Tuple(String, Integer)], 1)
+	assert_equal [Literal::Tuple(String, Integer), Literal::Tuple(String, Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant per position" do
 	assert Literal.subtype?(Literal::Tuple(Integer, Float), Literal::Tuple(Numeric, Numeric))
 	refute Literal.subtype?(Literal::Tuple(Numeric, Numeric), Literal::Tuple(Integer, Float))

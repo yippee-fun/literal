@@ -50,6 +50,14 @@ class Literal::Set
 			Generic === other && @type == other.type
 		end
 
+		def eql?(other)
+			Generic === other && @type.eql?(other.type)
+		end
+
+		def hash
+			[Generic, @type].hash
+		end
+
 		def ===(value)
 			Literal::Set === value && Literal.subtype?(value.__type__, @type)
 		end

@@ -68,6 +68,13 @@ test "Generic#== compares member types" do
 	refute_equal Literal::Set(Integer), Literal::Set(String)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Set(Integer).eql?(Literal::Set(Integer))
+	refute Literal::Set(Integer).eql?(Literal::Set(String))
+	assert_equal({ Literal::Set(Integer) => 1 }[Literal::Set(Integer)], 1)
+	assert_equal [Literal::Set(Integer), Literal::Set(Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant" do
 	assert Literal.subtype?(Literal::Set(Integer), Literal::Set(Numeric))
 	refute Literal.subtype?(Literal::Set(Numeric), Literal::Set(Integer))

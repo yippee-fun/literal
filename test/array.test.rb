@@ -97,6 +97,13 @@ test "Generic#== compares element types" do
 	refute_equal Literal::Array(Integer), Literal::Array(String)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Array(Literal::Array(Integer)).eql?(Literal::Array(Literal::Array(Integer)))
+	refute Literal::Array(Integer).eql?(Literal::Array(String))
+	assert_equal({ Literal::Array(Integer) => 1 }[Literal::Array(Integer)], 1)
+	assert_equal [Literal::Array(Integer), Literal::Array(Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant" do
 	assert Literal.subtype?(Literal::Array(Integer), Literal::Array(Numeric))
 	refute Literal.subtype?(Literal::Array(Numeric), Literal::Array(Integer))
