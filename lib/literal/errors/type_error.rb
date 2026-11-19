@@ -21,6 +21,7 @@ class Literal::TypeError < TypeError
 			@label = label
 			@expected = expected
 			@actual = actual
+			@parent = parent
 			@children = []
 		end
 
@@ -36,10 +37,20 @@ class Literal::TypeError < TypeError
 			@label = label
 		end
 
-		def add_child(expected: nil, **)
-			child = self.class.new(expected:, **)
-			expected.record_literal_type_errors(child) if expected.respond_to?(:record_literal_type_errors)
+		def add_child(expected: nil, actual: nil, **)
+			child = self.class.new(expected:, actual:, parent: self, **)
+
+			# A self-referential value would otherwise be diagnosed forever.
+			if expected.respond_to?(:record_literal_type_errors) && !diagnosing?(expected, actual)
+				expected.record_literal_type_errors(child)
+			end
+
 			@children << child
+		end
+
+		protected def diagnosing?(expected, actual)
+			(Literal::EQUAL.bind_call(@expected, expected) && Literal::EQUAL.bind_call(@actual, actual)) ||
+				!!@parent&.diagnosing?(expected, actual)
 		end
 
 		def to_h
