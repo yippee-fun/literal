@@ -173,7 +173,8 @@ test "a prop typed by a bare deferred type is required, and declaring it materia
 	assert_equal materialized, 0
 
 	error = assert_raises(ArgumentError) { keyword.new }
-	assert_equal error.message, "missing keyword: :a"
+	# JRuby writes the keyword without its colon.
+	assert(/\Amissing keyword: :?a\z/.match?(error.message))
 	assert_raises(ArgumentError) { positional.new }
 
 	error = assert_raises(Literal::ArgumentError) { keyword.from_props({}) }
