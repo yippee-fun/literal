@@ -20,6 +20,7 @@ class Literal::Types::TaggedUnionType
 		end
 
 		@members = flattened.freeze
+		@pairs = flattened.map(&:freeze).freeze
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(flattened.each_value)
 		freeze
 	end
@@ -58,18 +59,47 @@ class Literal::Types::TaggedUnionType
 	end
 
 	def tag_for(value)
-		@members.each { |tag, type| return tag if type === value }
-		raise Literal::ArgumentError.new("No tag found for #{value.inspect} in #{inspect}.")
+		tag, _type = member_for(value) || raise(Literal::ArgumentError.new("No tag found for #{value.inspect} in #{inspect}."))
+		tag
 	end
 
 	def type_of(value)
-		@members.each_value { |type| return type if type === value }
-		raise Literal::ArgumentError.new("No type found for #{value.inspect} in #{inspect}.")
+		_tag, type = member_for(value) || raise(Literal::ArgumentError.new("No type found for #{value.inspect} in #{inspect}."))
+		type
 	end
 
+	# The tag and type of a most specific matching member.
 	def resolve(value)
-		@members.each { |tag, type| return tag, type if type === value }
-		raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.")
+		member_for(value) || raise(Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}."))
+	end
+
+	private def member_for(value)
+		pairs = @pairs
+
+		i, len = 0, pairs.size
+		while i < len
+			pair = pairs[i]
+
+			if pair[1] === value
+				j = i + 1
+				while j < len
+					return most_specific_pair(i, j, value) if pairs[j][1] === value
+					j += 1
+				end
+
+				return pair
+			end
+
+			i += 1
+		end
+
+		nil
+	end
+
+	# Pairs `first` and `second` both match; no pair between them does.
+	private def most_specific_pair(first, second, value)
+		matches = [@pairs[first], @pairs[second], *@pairs[(second + 1)..].select { |(_tag, type)| type === value }]
+		Literal::Types::UnionType.most_specific(matches) { |(_tag, type)| type }
 	end
 
 	def >=(other, context: nil)

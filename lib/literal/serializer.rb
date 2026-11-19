@@ -240,19 +240,6 @@ class Literal::Serializer
 		type.reject { |member_type| member_type == Literal::Undefined }
 	end
 
-	# The most specific member type matching the value — one no other matching
-	# member is a strict subtype of — so that, whatever the member order, a
-	# subclass instance serializes with everything its own member holds.
-	private def most_specific_match(members, value)
-		matches = members.select { |member| member === value }
-		# Checked up front because a member can itself be falsy, like the type nil.
-		raise Literal::ArgumentError, "No member of #{members.inspect} matches #{value.inspect}" if matches.empty?
-
-		matches.find do |member|
-			matches.none? { |other| Literal.subtype?(other, member) && !Literal.subtype?(member, other) }
-		end
-	end
-
 	private def apply_length_constraints(schema, property_constraints, min_key:, max_key:)
 		property_constraints.each do |property, constraint|
 			case [property, constraint]

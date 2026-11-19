@@ -13,8 +13,9 @@ class Literal::Types::UnionType
 		while queue.length > 0
 			type = queue.shift
 			# Flattened members are queued at the front so that they take the
-			# position of the member they came from — order decides which member
-			# `resolve` tries first and how JSON schemas list them.
+			# position of the member they came from — order decides how JSON
+			# schemas list them and which of two incomparable members `resolve`
+			# picks.
 			case type
 			when Literal::Types::UnionType
 				queue.unshift(*type.types, *type.primitives)
@@ -40,6 +41,16 @@ class Literal::Types::UnionType
 
 	attr_reader :types, :primitives
 
+	# The earliest of the matching members, in declaration order, that no other
+	# is a strict subtype of. Only matches are compared, so a deferred member
+	# is never materialized unless the value matched it.
+	def self.most_specific(matches)
+		matches.find do |match|
+			type = yield match
+			matches.none? { |other| strict_subtype?(yield(other), type) }
+		end or raise Literal::ArgumentError.new("No most specific member of #{matches.inspect}: they are strict subtypes of one another in a cycle.")
+	end
+
 	# Whether matching any of these types can run opaque code — a proc, or an
 	# object or module with its own `===` — without first passing a deferred
 	# type's guard. Opaque code can re-enter the match, so a union that reaches
@@ -63,6 +74,10 @@ class Literal::Types::UnionType
 				Kernel != Literal::METHOD.bind_call(type, :===).owner
 			end
 		end
+	end
+
+	private_class_method def self.strict_subtype?(type, supertype)
+		!type.equal?(supertype) && Literal.subtype?(type, supertype) && !Literal.subtype?(supertype, type)
 	end
 
 	def __relax__(&relax)
@@ -109,6 +124,8 @@ class Literal::Types::UnionType
 		false
 	end
 
+	# The member a value belongs to: a primitive it equals, or else a most
+	# specific matching type.
 	def resolve(value)
 		if @primitives.include?(value)
 			value
@@ -118,7 +135,17 @@ class Literal::Types::UnionType
 			i, len = 0, types.size
 			while i < len
 				type = types[i]
-				return type if type === value
+
+				if type === value
+					j = i + 1
+					while j < len
+						return most_specific_type(i, j, value) if types[j] === value
+						j += 1
+					end
+
+					return type
+				end
+
 				i += 1
 			end
 
@@ -142,8 +169,8 @@ class Literal::Types::UnionType
 		to_a
 	end
 
-	# Member order is behaviourally meaningful — `resolve` takes the first match
-	# and JSON schemas list members in order — but it does not distinguish one
+	# Member order is behaviourally meaningful — `resolve` breaks ties by it and
+	# JSON schemas list members in order — but it does not distinguish one
 	# type from another, so equality compares members as a set. `@primitives`
 	# already does; `@types` is uniqued by the constructor, so for equal sizes a
 	# subset is an equal set.
@@ -204,6 +231,12 @@ class Literal::Types::UnionType
 	private def covers?(type, context:)
 		@primitives.any? { |primitive| Literal.subtype?(type, primitive, context:) } ||
 			@types.any? { |member| Literal.subtype?(type, member, context:) }
+	end
+
+	# Members `first` and `second` both match; no member between them does.
+	private def most_specific_type(first, second, value)
+		matches = [@types[first], @types[second], *@types[(second + 1)..].select { |type| type === value }]
+		Literal::Types::UnionType.most_specific(matches, &:itself)
 	end
 
 	private def primitive_match?(value)

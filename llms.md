@@ -16,7 +16,7 @@ Runtime type system for Ruby. A type = **any object responding to `===`** (`Stri
 - `_Optional(T)` = `_Union(T, Literal::Undefined)` — omittable, ≠ nilable
 - `_DraftState(T)` — what a draft slot typed T accepts: `_Frozen` relaxed, Properties classes also admit their drafts
 
-Unions simplify at construction (`_Never` dropped, single member unwrapped, nil folded in). `Literal::Undefined`: truthy frozen sentinel = "absent", ≠ `nil`. `require "literal/kernel"` → bare `undefined`/`never`/`void`.
+Unions simplify at construction (`_Never` dropped, single member unwrapped, nil folded in). `_Union#resolve(v)` → the member `v` belongs to: an equal primitive, else the most specific matching type (the earliest-declared match no other match is a strict subtype of); `_TaggedUnion#resolve(v)` → `[tag, type]` by the same rule, as do `tag_for`/`type_of`. `Literal::Undefined`: truthy frozen sentinel = "absent", ≠ `nil`. `require "literal/kernel"` → bare `undefined`/`never`/`void`.
 
 ## Properties — `extend Literal::Properties`
 

@@ -115,6 +115,60 @@ test "error message" do
 	ERROR
 end
 
+test "resolution picks the most specific matching member" do
+	parent = Class.new
+	child = Class.new(parent)
+
+	[
+		_TaggedUnion(parent:, child:),
+		_TaggedUnion(child:, parent:),
+	].each do |type|
+		assert_equal type.tag_for(child.new), :child
+		assert_equal type.type_of(child.new), child
+		assert_equal type.resolve(child.new), [:child, child]
+		assert_equal type.resolve(parent.new), [:parent, parent]
+	end
+end
+
+test "resolution breaks ties between incomparable members by declaration order" do
+	both = Class.new { include Comparable, Enumerable }.new
+
+	assert_equal _TaggedUnion(comparable: Comparable, enumerable: Enumerable).tag_for(both), :comparable
+	assert_equal _TaggedUnion(enumerable: Enumerable, comparable: Comparable).tag_for(both), :enumerable
+	assert_equal _TaggedUnion(first: String, second: String).tag_for("a"), :first
+end
+
+test "constructing a tagged union does not materialize deferred members" do
+	materialized = false
+	deferred = _Deferred do
+		materialized = true
+		Integer
+	end
+	type = _TaggedUnion(string: String, integer: deferred)
+
+	assert type === "a"
+	refute materialized
+
+	assert_equal type.tag_for(1), :integer
+	assert materialized
+end
+
+test "resolution does not materialize deferred members a value doesn't match" do
+	deferred = _Deferred { raise "materialized" }
+	type = _TaggedUnion(string: String, integers: _Array(Integer), later: _Array(deferred))
+
+	assert_equal type.tag_for("a"), :string
+end
+
+if defined?(Ractor)
+	test "a tagged union is Ractor-shareable and resolves once shared" do
+		type = Ractor.make_shareable(_TaggedUnion(string: String, integer: Integer))
+
+		assert Ractor.shareable?(type)
+		assert_equal type.resolve(1), [:integer, Integer]
+	end
+end
+
 test "a cyclic value re-entering a tagged union through a proc member does not match" do
 	tagged = _TaggedUnion(leaf: Integer, branch: _Array(-> (value) { tagged === value }))
 	array = [1]

@@ -176,8 +176,7 @@ class Literal::UnionSerializer < Literal::Serializer
 
 	def serialize(value, type:)
 		type = constrained_union(type) || type
-		member_type = type.primitives.include?(value) ? value : most_specific_match(type.types, value)
-		serialize_contents(value, type: member_type)
+		serialize_contents(value, type: type.resolve(value))
 	end
 
 	def deserialize(raw_value, type:)
