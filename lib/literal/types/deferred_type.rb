@@ -27,6 +27,23 @@ class Literal::Types::DeferredType
 		"_Deferred"
 	end
 
+	# The type a chain of deferred types ends in. A chain that cycles never
+	# ends, so it resolves to a deferred type on the cycle.
+	def resolve
+		type = materialize
+		seen = nil
+
+		while Literal::Types::DeferredType === type
+			seen ||= { self => true }.compare_by_identity
+			return type if seen.key?(type)
+
+			seen[type] = true
+			type = type.materialize
+		end
+
+		type
+	end
+
 	# A thread re-entering its own materialization — a deferred type that refers
 	# to itself — gets the deferred type back. Other threads run the block
 	# themselves rather than wait, since the block can wait on locks they hold

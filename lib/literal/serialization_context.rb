@@ -84,7 +84,7 @@ class Literal::SerializationContext
 	attr_reader :property_kind
 
 	def serializable_property_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		case type
 		in Literal::Undefined
@@ -101,7 +101,7 @@ class Literal::SerializationContext
 	end
 
 	def serialize(value, type:, strict: true)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		if aggregate_type?(type)
 			serializer, type = serializer_for_value(value)
@@ -128,7 +128,7 @@ class Literal::SerializationContext
 	end
 
 	def deserialize(value, type:, strict: true)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		serializer = serializer_for_type(type)
 		value = serializer.coerce(value)
@@ -172,7 +172,7 @@ class Literal::SerializationContext
 	# referenceable type, since values of such types are still finite and the
 	# JSON Schema generator can express the cycle as a "$ref".
 	def serializable_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		cached(@serializable_cache, type) do |generation|
 			serializable_type_within?(type, {}.compare_by_identity, generation)
@@ -209,20 +209,20 @@ class Literal::SerializationContext
 	# Whether any serializer in this context matches the type, without the
 	# recursive serializability walk.
 	def serializer_for?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		!serializer_matching_type(type).nil?
 	end
 
 	def referenceable_type?(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		serializer = serializer_matching_type(type)
 		serializer ? serializer.referenceable?(type) : false
 	end
 
 	def json_type(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		serializer_matching_type(type)&.json_type(type)
 	end
@@ -230,7 +230,7 @@ class Literal::SerializationContext
 	# Cached, unlike json_type: building a shape allocates and serializes
 	# constant values, and union member dispatch consults shapes per value.
 	def object_shape(type)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		cached(@object_shape_cache, type) do
 			serializer_matching_type(type)&.object_shape(type) || false
@@ -260,7 +260,7 @@ class Literal::SerializationContext
 	end
 
 	private def serializable_type_within?(type, stack, generation)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		# Only this context's own aggregate type is trivially serializable;
 		# another context's aggregate proves nothing about this one.
@@ -284,7 +284,7 @@ class Literal::SerializationContext
 	end
 
 	private def unserializable_type_path(type, stack)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		if Literal::Serializer::SerializableType === type
 			return type.equal?(@type) ? nil : [type]

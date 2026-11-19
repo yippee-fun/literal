@@ -93,7 +93,7 @@ class Literal::FrozenSerializer < Literal::Serializer
 
 	private def thawed(type)
 		thawed = unfrozen(type)
-		thawed = thawed.materialize if Literal::Types::DeferredType === thawed
+		thawed = thawed.resolve if Literal::Types::DeferredType === thawed
 
 		thaws_to_nothing?(thawed) ? Literal::Types::NeverType::Instance : thawed
 	end

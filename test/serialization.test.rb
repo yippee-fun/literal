@@ -4532,6 +4532,14 @@ test "types requiring frozen shapes freeze them whatever their props are named" 
 	assert_equal loaded[:freeze], "x"
 end
 
+test "deferred chains serialize as the type they end in" do
+	type = _Deferred { _Deferred { _String(size: 3) } }
+
+	assert_equal(Example.json_schema(type), Example.json_schema(_String(size: 3)))
+	assert_equal(Example.json_schema(_Frozen(type)), Example.json_schema(_String(size: 3)))
+	assert_equal(Example.deserialize("abc", type:), "abc")
+end
+
 test "types requiring frozen values see through deferred types" do
 	type = _Frozen(_Deferred { SerializationValueObject })
 
