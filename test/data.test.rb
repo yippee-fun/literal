@@ -863,6 +863,25 @@ test "with reports errors from its caller" do
 	assert check_error.backtrace.first.include?("data.test.rb")
 end
 
+test "with keeps the backtrace of a type error raised by after_initialize" do
+	inner = Class.new(Literal::Data) { prop :n, Integer }
+	inner.new(n: 1)
+	line = nil
+
+	outer = Class.new(Literal::Data) do
+		prop :n, Integer
+
+		define_method(:after_initialize) do
+			line = __LINE__ + 1
+			inner.new(n: "bad") if @n == 2
+		end
+	end
+
+	error = assert_raises(Literal::TypeError) { outer.new(n: 1).with(n: 2) }
+
+	assert error.backtrace.first.include?("data.test.rb:#{line}:")
+end
+
 test "with is generated where Object has no with" do
 	assert system(
 		RbConfig.ruby, "-I", File.expand_path("../lib", __dir__), "-r", "literal",

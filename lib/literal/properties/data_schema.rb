@@ -21,6 +21,7 @@ class Literal::Properties::DataSchema < Literal::Properties::Schema
 			"  changes.each_key do |name|\n" \
 			"    PROPERTIES[name] || ::Kernel.raise(::NameError.new(\"unknown attribute: \#{name.inspect} for \#{shape}\"))\n" \
 			"  end\n" \
+			"  assigned = false\n" \
 			"  shape.__send__(:__literal_constructing__) do\n" \
 			"    copy = shape.allocate\n" \
 			"    ::Literal::INSTANCE_EXEC.bind_call(copy"
@@ -73,6 +74,9 @@ class Literal::Properties::DataSchema < Literal::Properties::Schema
 			i += 1
 		end
 
+		# Like the initializer's `else`, so a type error raised by an
+		# after_initialize or a check keeps its own backtrace.
+		buffer << "  assigned = true\n"
 		generate_after_initializer(buffer)
 		buffer << "  __literal_run_checks__\n" if checked
 
@@ -80,6 +84,7 @@ class Literal::Properties::DataSchema < Literal::Properties::Schema
 			"    copy\n" \
 			"  end\n" \
 			"rescue ::Literal::TypeError => error\n" \
+			"  ::Kernel.raise if assigned\n" \
 			"  error.set_backtrace(::Kernel.caller(1))\n" \
 			"  ::Kernel.raise\n" \
 			"end\n"
