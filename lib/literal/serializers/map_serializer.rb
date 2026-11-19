@@ -95,6 +95,8 @@ class Literal::MapSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Hash === raw
+
 		type.shape.to_h do |key, value_type|
 			name = json_key(key)
 

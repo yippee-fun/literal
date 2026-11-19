@@ -67,14 +67,24 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		tag = raw.fetch("$type")
-		member_type = type[tag.to_sym]
+		raise malformed_raw_error(raw, type) unless Hash === raw
 
-		if object_member?(member_type)
+		tag, member_type = type.members.find { |candidate, _| candidate.name == raw["$type"] }
+		raise malformed_raw_error(raw, type) unless tag
+
+		value = if object_member?(member_type)
 			deserialize_contents(raw.except("$type"), type: member_type)
+		elsif raw.key?("value")
+			deserialize_contents(raw["value"], type: member_type)
 		else
-			deserialize_contents(raw.fetch("value"), type: member_type)
+			raise malformed_raw_error(raw, type)
 		end
+
+		# The context's final check only sees the union, which another member
+		# could satisfy, so the tag's own member is checked here.
+		raise malformed_raw_error(raw, type) unless member_type === value
+
+		value
 	end
 
 	private def tagged_json_schema(tag, member_type, generator:)

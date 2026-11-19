@@ -34,7 +34,7 @@ class Literal::EnumSerializer < Literal::Serializer
 	end
 
 	def deserialize(data, type:)
-		enum_class(type).coerce(deserialize_contents(data, type: backing_type(type)))
+		enum_class(type)[deserialize_contents(data, type: backing_type(type))] || raise(malformed_raw_error(data, type))
 	end
 
 	private def backing_values(type)

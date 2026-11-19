@@ -218,6 +218,12 @@ class Literal::Serializer
 		@context.json_type(type)
 	end
 
+	# Deserializers check the JSON shape they read on entry, so malformed input
+	# raises this rather than whatever the reading code happens to raise.
+	private def malformed_raw_error(raw, type)
+		Literal::ArgumentError.new("Value #{raw.inspect} cannot be deserialized as #{type.inspect}")
+	end
+
 	# Whether the type is a union containing Literal::Undefined, marking a
 	# property or shape key that is omitted when serializing an undefined value
 	# and restored to Literal::Undefined when its key is missing.

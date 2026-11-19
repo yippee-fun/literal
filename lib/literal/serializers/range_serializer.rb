@@ -62,11 +62,13 @@ class Literal::RangeSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Hash === raw && raw.key?("from") && raw.key?("to") && raw.key?("inclusive")
+
 		bound = bound_type(type)
 		from = deserialize_contents(raw["from"], type: bound)
 		to = deserialize_contents(raw["to"], type: bound)
 
-		case raw.fetch("inclusive")
+		case raw["inclusive"]
 		when true
 			from..to
 		when false

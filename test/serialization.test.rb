@@ -1793,8 +1793,33 @@ test "range json schema" do
 end
 
 test "range deserialization requires the inclusive key" do
-	assert_raises(KeyError) do
+	assert_raises(Literal::ArgumentError) do
 		Example.deserialize({ "from" => 1, "to" => 5 }, type: _Range(Integer))
+	end
+end
+
+test "malformed input raises Literal errors" do
+	[
+		["str", SerializationPerson],
+		[1, Symbol],
+		[[1, 2], _Range(Integer)],
+		[{ "to" => 5, "inclusive" => true }, _Range(Integer)],
+		[{ "$type" => "unknown" }, _TaggedUnion(person: SerializationPerson, note: String)],
+		[{ "$type" => "note" }, _TaggedUnion(person: SerializationPerson, note: String)],
+		[{ "$type" => "off", "value" => true }, _TaggedUnion(off: false, on: true)],
+		["str", _TaggedUnion(person: SerializationPerson, note: String)],
+		[[1], _Tuple(Integer, Integer)],
+		["str", _Array(Integer)],
+		[{ "a" => 1 }, _Set(Integer)],
+		["str", _Map(name: String)],
+		["str", _Hash(String, Integer)],
+		[[[1, 2, 3]], _Hash(Integer, Integer)],
+		["5", Date],
+		["abc", _BigDecimal(finite?: _Truthy)],
+		[5, SerializationSuit],
+		["Hearts", SerializationSuit],
+	].each do |raw, type|
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type:) }
 	end
 end
 

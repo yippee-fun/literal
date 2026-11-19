@@ -37,7 +37,7 @@ class Literal::BigDecimalSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		BigDecimal(raw)
+		(String === raw && BigDecimal(raw, exception: false)) || raise(malformed_raw_error(raw, type))
 	end
 
 	def coerce(raw)

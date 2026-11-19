@@ -100,6 +100,8 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Hash === raw
+
 		type.from_props(
 			type.literal_properties.filter_map do |property|
 				if raw.key?(property.name.name)
