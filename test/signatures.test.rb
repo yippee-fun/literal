@@ -223,6 +223,19 @@ test "types a keyword named after a reserved word" do
 	assert_raises(Literal::TypeError) { SignedShapes.new.flip(if: 1) }
 end
 
+test "reads a reserved-word keyword past a method named binding" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		def binding = raise("shadowed")
+
+		sig(if: _Boolean) >> _Boolean
+		def flip(if:) = !::Kernel.binding.local_variable_get(:if)
+	end
+
+	assert_equal klass.new.flip(if: true), false
+end
+
 test "types operator and predicate methods" do
 	assert_equal SignedShapes.new[2], 4
 	assert_raises(Literal::TypeError) { SignedShapes.new["2"] }

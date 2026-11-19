@@ -107,7 +107,7 @@ module Literal::Signatures
 		keywords = parameters.filter_map { |kind, param| param if :keyreq == kind }
 		options = parameters.filter_map { |kind, param| param if :key == kind }
 
-		read = -> (key) { Literal::Property::RUBY_KEYWORDS.key?(key) ? "binding.local_variable_get(:#{key})" : key.to_s }
+		read = -> (key) { Literal::Property::RUBY_KEYWORDS.key?(key) ? "::Kernel.binding.local_variable_get(:#{key})" : key.to_s }
 		check = lambda do |value, index, label|
 			"::Literal.check(#{value}, TYPES[#{index}]) { |c| c.fill_receiver(receiver: #{receiver}, method: #{method.inspect}, label: #{label.inspect}) }"
 		end
@@ -191,7 +191,7 @@ module Literal::Signatures
 		owner = self
 		signature = @__literal_signature__
 		@__literal_signature_watch__ = TracePoint.new(:end) do |tp|
-			next unless tp.self.equal?(owner)
+			next unless Literal::EQUAL.bind_call(tp.self, owner)
 
 			tp.disable
 			raise Literal::ArgumentError, "#{owner}: the sig at #{signature.site} has no method after it"
