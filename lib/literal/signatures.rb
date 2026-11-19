@@ -79,12 +79,24 @@ module Literal::Signatures
 		@__literal_signature_watch__&.disable
 
 		singleton = !owner.equal?(self)
-		parameters = owner.instance_method(name).parameters
+		original = owner.instance_method(name)
+		prepended = !Literal::EQUAL.bind_call(original.owner, owner)
+		original = original.super_method until Literal::EQUAL.bind_call(original.owner, owner)
+		parameters = original.parameters
 		__literal_refuse_mismatch__(signature, parameters, "#{self}#{singleton ? '.' : '#'}#{name}")
 
 		visibility = __literal_visibility__(owner, name)
 		unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
-		owner.alias_method(unsigned, name)
+
+		# alias_method resolves through prepended modules, so past one, copy the
+		# class's own definition. JRuby names a copy's frames and super calls
+		# after the copy, so alias where we can.
+		if prepended
+			owner.define_method(unsigned, original)
+		else
+			owner.alias_method(unsigned, name)
+		end
+
 		owner.__send__(:private, unsigned)
 
 		checker = Module.new

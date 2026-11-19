@@ -98,6 +98,23 @@ test "checks an override that calls a signed super" do
 	assert_raises(Literal::TypeError) { child.new.double("2") }
 end
 
+test "wraps the method under a prepended override" do
+	decorator = Module.new do
+		def double(number) = super + 1
+	end
+
+	klass = Class.new do
+		extend Literal::Signatures
+		prepend decorator
+
+		sig(Integer) >> Integer
+		def double(number) = number * 2
+	end
+
+	assert_equal klass.new.double(2), 5
+	assert_raises(Literal::TypeError) { klass.new.double("2") }
+end
+
 test "lets Ruby refuse a missing argument" do
 	assert_raises(::ArgumentError) { SignedGreeter.new.greet }
 end
