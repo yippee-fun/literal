@@ -406,7 +406,9 @@ module Literal
 		else
 			case supertype
 			when Literal::Type
-				supertype.literal_supertype_of?(subtype, context:) || bounded_subtype?(subtype, supertype, context)
+				supertype.literal_supertype_of?(subtype, context:) ||
+					(Literal::Type === subtype && subtype.literal_subtype_of?(supertype, context:)) ||
+					bounded_subtype?(subtype, supertype, context)
 			when Module
 				case subtype
 				when Module

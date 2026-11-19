@@ -244,6 +244,57 @@ test "a type is a subtype of an intersection of types it is a subtype of" do
 	refute_subtype _Array(String), _Constraint(Array, size: 1)
 end
 
+test "a type's own rule answers against literal types" do
+	assert_subtype _Constraint(_Tuple(String), size: 1), _Tuple(String)
+	assert_subtype _Constraint(_Boolean, frozen?: true), _Boolean
+	assert_subtype _Constraint(_Union(String, Symbol), frozen?: true), _Union(String, Symbol, Integer)
+	assert_subtype _Constraint(Integer, integer?: _Truthy), _Union(Integer, String)
+
+	refute_subtype _Constraint(_Tuple(String), size: 1), _Tuple(Symbol)
+	refute_subtype _Constraint(_Boolean, frozen?: true), _Union(true, nil)
+
+	assert _Constraint(_Boolean, frozen?: true) <= _Boolean
+	assert _Boolean >= _Constraint(_Boolean, frozen?: true)
+end
+
+test "a singleton is a subtype of literal types only through their own rules" do
+	string = +"abc"
+
+	assert_subtype _SameObject(string), String
+	assert_subtype _SameObject(:foo), _Union(_SameObject(:foo), String)
+	refute_subtype _SameObject(string), _String(size: 3)
+	refute_subtype _SameObject(string), _Union("abc", Integer)
+	refute_subtype _SameObject((1..).each), _Enumerable(Integer)
+
+	three_characters = Class.new do
+		extend Literal::Type
+
+		def self.===(value) = String === value && value.size == 3
+	end
+
+	refute_subtype _SameObject(string), three_characters
+end
+
+test "a value that is also a type keeps its literal bound" do
+	value = Class.new(String) { include Literal::Type }.new("x")
+
+	assert_subtype value, _JSONData
+end
+
+test "a type overriding <= isn't asked it against literal types" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_upper_bound = Integer
+		def <=(other, context: nil) = super(other)
+	end.new
+
+	assert_subtype integers, Numeric
+	refute_subtype integers, _Array(String)
+	refute integers <= _Array(String)
+end
+
 test "a union's own comparison operators distribute it" do
 	union = _Union(String, _Array(Integer), 1)
 	nilable = _Nilable(String)

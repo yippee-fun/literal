@@ -27,7 +27,7 @@ class Literal::JSONSchema::NumberType < Literal::Data
 	end
 
 	def literal_subtype_of?(other, context:)
-		return true if other == Literal::JSONSchema::NumberType
+		return true if Literal::JSONSchema::NumberType == other
 
 		Literal.subtype?(::Numeric, other, context:)
 	end

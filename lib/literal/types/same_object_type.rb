@@ -37,10 +37,18 @@ class Literal::Types::SameObjectType
 		end
 	end
 
-	# The only value is @object itself, so this is a subtype of any type that
-	# admits it — including e.g. Integer for _SameObject(10), where bare 10 is not.
+	# The only value is @object itself, so this is a subtype of any module or
+	# range that admits it — including Integer for _SameObject(10), where bare
+	# 10 is not. Literal types can admit it for state that later changes.
 	def literal_subtype_of?(other, context:)
-		!!(other === @object)
+		case other
+		when Literal::Type
+			false
+		when Module, Range
+			!!(other === @object)
+		else
+			false
+		end
 	end
 
 	freeze

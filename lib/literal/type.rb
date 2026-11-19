@@ -27,11 +27,14 @@ module Literal::Type
 		literal_overrides?(:>=) && self.>=(other, context:)
 	end
 
-	# This type's own rule for being a subtype of a module or range, which
-	# defaults to its upper bound being one. Answers with a type's own <=
-	# while it still overrides that rather than this.
+	# This type's own rule for Literal.subtype?, asked after the supertype's
+	# rule fails. Against a module or range it defaults to the upper bound
+	# being a subtype, or a type's own <= while it still overrides that rather
+	# than this.
 	def literal_subtype_of?(other, context:)
-		if literal_overrides?(:<=)
+		if Literal::Type === other
+			false
+		elsif literal_overrides?(:<=)
 			self.<=(other, context:)
 		else
 			literal_bounded_by?(other, context:)
