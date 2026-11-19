@@ -93,6 +93,8 @@ assert_allocations(_TaggedUnion(string: String, integer: Integer), :symbol) => 0
 assert_allocations(_Union(String, "Hello", "World"), "World") => 0
 assert_allocations(_Union(String, Integer, nil), 1) => 0
 assert_allocations(_Union(String, Integer, nil), :symbol) => 0
+assert_allocations(_Union(1, "a", nil), 1.0) => 0
+assert_allocations(_Union(1, "a", nil), :symbol) => 0
 
 def assert_resolve_allocations(type, thing)
 	count_warm_allocations do
@@ -104,6 +106,7 @@ end
 
 assert_resolve_allocations(_Union(String, Integer, nil), 1) => 0
 assert_resolve_allocations(_Union(String, Integer, nil), nil) => 0
+assert_resolve_allocations(_Union(1, "a", String), 1.0) => 0
 assert_resolve_allocations(_TaggedUnion(string: String, integer: Integer), 1) => 0
 
 recursive_union = _Union(nil, _Array(_Deferred { recursive_union }))

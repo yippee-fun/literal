@@ -34,6 +34,7 @@ class Literal::Types::UnionType
 		types.uniq!
 		@types = types.freeze
 		@primitives = primitives.freeze
+		@primitive_list = primitives.to_a.freeze
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
 
 		freeze
@@ -124,33 +125,35 @@ class Literal::Types::UnionType
 		false
 	end
 
-	# The member a value belongs to: a primitive it equals, or else a most
-	# specific matching type.
+	# The member a value belongs to: a primitive it is, or else a most specific
+	# matching type, or else a primitive it is merely == to — so
+	# BigDecimal("1") resolves to a BigDecimal member before the literal 1.
 	def resolve(value)
-		if @primitives.include?(value)
-			value
-		else
-			types = @types
+		return value if primitive_member?(value)
 
-			i, len = 0, types.size
-			while i < len
-				type = types[i]
+		types = @types
 
-				if type === value
-					j = i + 1
-					while j < len
-						return most_specific_type(i, j, value) if types[j] === value
-						j += 1
-					end
+		i, len = 0, types.size
+		while i < len
+			type = types[i]
 
-					return type
+			if type === value
+				j = i + 1
+				while j < len
+					return most_specific_type(i, j, value) if types[j] === value
+					j += 1
 				end
 
-				i += 1
+				return type
 			end
 
-			raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.")
+			i += 1
 		end
+
+		index = equal_primitive_index(value)
+		raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.") unless index
+
+		@primitive_list[index]
 	end
 
 	def each(&)
@@ -240,9 +243,27 @@ class Literal::Types::UnionType
 	end
 
 	private def primitive_match?(value)
+		primitive_member?(value) || !equal_primitive_index(value).nil?
+	end
+
+	private def primitive_member?(value)
 		@primitives.include?(value)
 	rescue
-		@primitives.any? { |primitive| primitive == value }
+		false
+	end
+
+	# Primitives match with ==, like bare literals (1 === 1.0), so a value
+	# that isn't eql? to one may still equal one.
+	private def equal_primitive_index(value)
+		primitives = @primitive_list
+
+		i, len = 0, primitives.size
+		while i < len
+			return i if primitives[i] == value
+			i += 1
+		end
+
+		nil
 	end
 
 	def <=(other, context: nil)

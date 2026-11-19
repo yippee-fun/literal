@@ -331,3 +331,32 @@ test "building a union over shared subtrees visits each once" do
 
 	refute _Union(nil, tuple) === 1
 end
+
+test "literal members match with ==, like bare literals" do
+	union = _Union(1, "a", [1])
+
+	assert 1 === 1.0
+	assert union === 1.0
+	assert union === 1r
+	assert union === [1.0]
+	assert union === +"a"
+
+	refute union === 2.0
+	refute union === "b"
+end
+
+test "#resolve finds the literal member a value equals" do
+	union = _Union(1, "a", String)
+
+	assert_same union.resolve(1.0), 1
+	assert_equal union.resolve(1), 1
+	assert_equal union.resolve("a"), "a"
+	assert_equal union.resolve("b"), String
+end
+
+test "#resolve prefers a matching type to a literal the value is merely == to" do
+	union = _Union(1, Float)
+
+	assert_equal union.resolve(1.0), Float
+	assert_equal union.resolve(1r), 1
+end
