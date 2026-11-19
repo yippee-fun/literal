@@ -487,3 +487,12 @@ test "eql? compares values with eql?, agreeing with hash" do
 	assert_equal klass.new(n: 1).eql?(klass.new(n: 1)), true
 	assert_equal({ klass.new(n: 1) => true }.key?(klass.new(n: 1.0)), false)
 end
+
+test "copies stay frozen" do
+	person = Person.new(name: "John")
+
+	assert person.dup.frozen?
+	assert person.clone.frozen?
+	assert person.clone(freeze: false).frozen?
+	assert_equal person.dup, person
+end

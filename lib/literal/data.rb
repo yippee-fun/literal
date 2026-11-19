@@ -44,4 +44,10 @@ class Literal::Data < Literal::DataStructure
 			end
 		end
 	end
+
+	# Copies stay frozen, like Ruby's Data.
+	private def initialize_copy(source)
+		super
+		freeze
+	end
 end
