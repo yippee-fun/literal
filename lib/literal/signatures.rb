@@ -66,7 +66,7 @@ module Literal::Signatures
 	def sig(*positional, **keywords)
 		if (pending = @__literal_signature__)
 			@__literal_signature__ = nil
-			@__literal_signature_watch__&.disable
+			__literal_stop_watching__
 			raise Literal::ArgumentError, "#{self}: the sig at #{pending.site} has no method after it"
 		end
 
@@ -88,7 +88,7 @@ module Literal::Signatures
 	private def __literal_bind_signature__(owner, name)
 		signature = @__literal_signature__ or return
 		@__literal_signature__ = nil
-		@__literal_signature_watch__&.disable
+		__literal_stop_watching__
 
 		singleton = !owner.equal?(self)
 		original = owner.instance_method(name)
@@ -274,9 +274,16 @@ module Literal::Signatures
 
 				tp.disable
 				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
+				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature_watch__, nil)
 				raise Literal::ArgumentError, "#{owner}: the sig at #{signature.site} has no method after it" if unwinding.empty?
 			end
 		end
 		@__literal_signature_watch__.enable
+	end
+
+	# The watch holds the thread the class was defined on.
+	private def __literal_stop_watching__
+		@__literal_signature_watch__&.disable
+		@__literal_signature_watch__ = nil
 	end
 end

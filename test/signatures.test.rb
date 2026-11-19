@@ -320,6 +320,42 @@ unless RUBY_ENGINE == "truffleruby"
 		assert error.message.include?("Dangling: the sig at")
 		assert error.message.include?("has no method after it")
 	end
+
+	test "lets go of the watch once it is done" do
+		namespace = Module.new
+		namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+			class Bound
+				extend Literal::Signatures
+
+				sig(String) >> String
+				def greet(name) = name
+			end
+
+			class Refused
+				extend Literal::Signatures
+
+				begin
+					sig(String) >> String
+					sig(String) >> String
+				rescue Literal::ArgumentError
+				end
+			end
+		RUBY
+
+		assert_raises(Literal::ArgumentError) do
+			namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				class Dangling
+					extend Literal::Signatures
+
+					sig(String) >> String
+				end
+			RUBY
+		end
+
+		[namespace::Bound, namespace::Refused, namespace::Dangling].each do |klass|
+			assert_equal klass.instance_variable_get(:@__literal_signature_watch__), nil
+		end
+	end
 end
 
 test "stops watching for an end once it refuses a second sig" do
