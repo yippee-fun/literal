@@ -478,3 +478,12 @@ test "indexed access reads the stored value when a reader shadows instance_varia
 
 	assert_equal klass.new(instance_variable_get: "a")[:instance_variable_get], "a"
 end
+
+test "eql? compares values with eql?, agreeing with hash" do
+	klass = Class.new(Literal::Data) { prop :n, Numeric }
+
+	assert_equal klass.new(n: 1), klass.new(n: 1.0)
+	assert_equal klass.new(n: 1).eql?(klass.new(n: 1.0)), false
+	assert_equal klass.new(n: 1).eql?(klass.new(n: 1)), true
+	assert_equal({ klass.new(n: 1) => true }.key?(klass.new(n: 1.0)), false)
+end

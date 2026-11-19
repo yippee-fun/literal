@@ -124,22 +124,27 @@ class Literal::Properties::Schema
 		buffer << "  ].hash\n" << "end\n"
 	end
 
+	# eql? compares values with eql?, as hash hashes them.
 	def generate_eq(buffer = +"")
-		buffer << "alias == ==\n" \
-			"def ==(other)\n"
+		generate_comparison(buffer, "==")
+		generate_comparison(buffer, "eql?")
+	end
+
+	private def generate_comparison(buffer, operator)
+		buffer << "alias " << operator << " " << operator << "\n" \
+			"def " << operator << "(other)\n"
 		buffer << "  return false unless self.class == other.class\n"
 
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
 		while i < n
 			property = sorted_properties[i]
-			buffer << "  @#{property.name.name} == other.instance_variable_get(:@#{property.name.name})"
+			buffer << "  @#{property.name.name}.#{operator}(other.instance_variable_get(:@#{property.name.name}))"
 			buffer << " &&\n  " if i < n - 1
 			i += 1
 		end
 		buffer << "  true" if n.zero?
 		buffer << "\nend\n"
-		buffer << "alias eql? ==\n"
 	end
 
 	# Refuse what Ruby can't compile as the initializer's parameters: a second
