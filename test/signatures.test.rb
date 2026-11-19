@@ -177,6 +177,17 @@ test "refuses to load a sig with no return type" do
 	assert error.message.include?("has no return type")
 end
 
+test "takes Literal::Undefined as a return type" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig >> Literal::Undefined
+		def nothing = Literal::Undefined
+	end
+
+	assert_equal klass.new.nothing, Literal::Undefined
+end
+
 test "refuses to load a sig whose positional types do not match" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new do

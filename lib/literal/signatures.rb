@@ -32,11 +32,14 @@ module Literal::Signatures
 
 	# @api private
 	class Signature
+		NO_RETURN_TYPE = Object.new.freeze
+		private_constant :NO_RETURN_TYPE
+
 		def initialize(positional, keywords, site)
 			@positional = positional
 			@keywords = keywords
 			@site = site
-			@returns = Literal::Undefined
+			@returns = NO_RETURN_TYPE
 		end
 
 		attr_reader :positional, :keywords, :site, :returns
@@ -46,7 +49,7 @@ module Literal::Signatures
 			self
 		end
 
-		def returns? = !(Literal::Undefined === @returns)
+		def returns? = !NO_RETURN_TYPE.equal?(@returns)
 	end
 
 	POSITIONAL = [:req, :opt].freeze
