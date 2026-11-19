@@ -598,6 +598,13 @@ test "json schema scalar type serialization" do
 	)
 end
 
+test "json schema number keeps integers integers" do
+	type = Literal::JSONSchema::Number(maximum: 10)
+
+	assert_same(Example.deserialize(Example.serialize(3, type:), type:), 3)
+	assert_equal(Example.deserialize(2.5, type:), 2.5)
+end
+
 test "json data json schema" do
 	assert_equal(
 		Example.json_schema(_JSONData),
