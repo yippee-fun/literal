@@ -24,8 +24,9 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 	end
 
 	def cast(value)
+		# Not case/in, which on JRuby raises when no pattern matches a UTF-16 string.
 		case value
-		in ^@enum | Symbol
+		when @enum, Symbol
 			@enum.coerce(value)
 		else
 			member_for(@subtype.cast(value))
