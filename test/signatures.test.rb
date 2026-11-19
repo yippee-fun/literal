@@ -216,6 +216,17 @@ test "refuses to load a sig on a method that takes a splat" do
 	assert error.message.include?("takes names as a splat")
 end
 
+test "does not watch for an end a block will never reach" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+	end
+
+	assert_equal klass.instance_variable_get(:@__literal_signature_watch__), nil
+	assert_raises(Literal::ArgumentError) { klass.sig(String) }
+end
+
 test "refuses a sig with no method after it before the next" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new do

@@ -240,14 +240,17 @@ module Literal::Signatures
 	# leaves one in flight to propagate.
 	WATCHED = ((RUBY_ENGINE == "ruby") ? [:end, :raise, :rescue] : [:end]).freeze
 
-	# Watches this module's own `end`, and only until the next method is
-	# defined. A `Class.new` block has no `end` event, and TruffleRuby has no
-	# TracePoint, so there a sig with nothing after it is caught by the next sig.
+	# Watches the end of the class or module body the sig is written in, and
+	# only until the next method is defined. A block, such as one passed to
+	# `Class.new`, has no `end` event, and TruffleRuby has no TracePoint, so
+	# there a sig with nothing after it is caught by the next sig.
 	private def __literal_await_method__
 		return if RUBY_ENGINE == "truffleruby"
 
-		owner = self
 		signature = @__literal_signature__
+		return unless signature.site.label in /\A<(?:class|module):/ | "singleton class"
+
+		owner = self
 		thread = Thread.current
 		unwinding = []
 		@__literal_signature_watch__ = TracePoint.new(*WATCHED) do |tp|
