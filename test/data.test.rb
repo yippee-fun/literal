@@ -156,6 +156,22 @@ test "== comparison with readerless properties" do
 	refute_equal(a, c)
 end
 
+test "private and protected readers leave equality and hash public" do
+	[:private, :protected].each do |visibility|
+		data = Class.new(Literal::Data) { prop :x, Integer, reader: visibility }
+		struct = Class.new(Literal::Struct) do
+			prop :x, Integer, reader: visibility
+			check(:x, "must be positive") { |x:| x > 0 }
+		end
+
+		[data, struct].each do |shape|
+			assert_equal(shape.new(x: 1), shape.new(x: 1))
+			assert_equal(shape.new(x: 1).eql?(shape.new(x: 1)), true)
+			assert_equal(shape.new(x: 1).hash, shape.new(x: 1).hash)
+		end
+	end
+end
+
 test "properties have readers by default" do
 	person = Person.new(name: "John")
 	assert_equal(person.name, "John")
