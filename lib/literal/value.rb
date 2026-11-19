@@ -50,12 +50,12 @@ class Literal::Value
 		return false unless self.class == Literal::CLASS.bind_call(other)
 
 		mine, theirs = value, other.value
-		Literal::EQUAL.bind_call(mine, theirs) || (Literal.implements?(mine, :eql?) && mine.__send__(:eql?, theirs))
+		Literal::EQUAL.bind_call(mine, theirs) || (Literal.implements?(mine, :eql?) && Literal::SEND.bind_call(mine, :eql?, theirs))
 	end
 
 	def hash
 		mine = value
-		value_hash = Literal.implements?(mine, :hash) ? mine.__send__(:hash) : Literal::HASH.bind_call(mine)
+		value_hash = Literal.implements?(mine, :hash) ? Literal::SEND.bind_call(mine, :hash) : Literal::HASH.bind_call(mine)
 		[self.class, value_hash].hash
 	end
 

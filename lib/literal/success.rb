@@ -87,11 +87,11 @@ class Literal::Success < Literal::Result
 		return false unless Literal::Success === other
 
 		value = other.value!
-		Literal::EQUAL.bind_call(@value, value) || (Literal.implements?(@value, :eql?) && @value.__send__(:eql?, value))
+		Literal::EQUAL.bind_call(@value, value) || (Literal.implements?(@value, :eql?) && Literal::SEND.bind_call(@value, :eql?, value))
 	end
 
 	def hash
-		value_hash = Literal.implements?(@value, :hash) ? @value.__send__(:hash) : Literal::HASH.bind_call(@value)
+		value_hash = Literal.implements?(@value, :hash) ? Literal::SEND.bind_call(@value, :hash) : Literal::HASH.bind_call(@value)
 		[Literal::Success, value_hash].hash
 	end
 

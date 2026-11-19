@@ -69,6 +69,15 @@ test "values holding a BasicObject compare and hash by identity" do
 	assert_equal({ value_class.new(object) => true }[value_class.new(object)], true)
 end
 
+test "values compare and hash a payload with a __send__ property" do
+	payload = Class.new(Literal::Data) { prop :__send__, String }
+	value_class = Literal::Value(payload)
+
+	assert value_class.new(payload.new(__send__: "x")).eql?(value_class.new(payload.new(__send__: "x")))
+	refute value_class.new(payload.new(__send__: "x")).eql?(value_class.new(payload.new(__send__: "y")))
+	assert_equal value_class.new(payload.new(__send__: "x")).hash, value_class.new(payload.new(__send__: "x")).hash
+end
+
 test "eql? and hash agree when a subclass overrides the reader" do
 	shouting = Class.new(Literal::Value(String)) do
 		def value = super.upcase

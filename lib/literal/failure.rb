@@ -103,11 +103,11 @@ class Literal::Failure < Literal::Result
 		return false unless Literal::Failure === other
 
 		error = other.error!
-		Literal::EQUAL.bind_call(@error, error) || (Literal.implements?(@error, :eql?) && @error.__send__(:eql?, error))
+		Literal::EQUAL.bind_call(@error, error) || (Literal.implements?(@error, :eql?) && Literal::SEND.bind_call(@error, :eql?, error))
 	end
 
 	def hash
-		error_hash = Literal.implements?(@error, :hash) ? @error.__send__(:hash) : Literal::HASH.bind_call(@error)
+		error_hash = Literal.implements?(@error, :hash) ? Literal::SEND.bind_call(@error, :hash) : Literal::HASH.bind_call(@error)
 		[Literal::Failure, error_hash].hash
 	end
 

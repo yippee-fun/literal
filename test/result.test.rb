@@ -308,6 +308,16 @@ test "results use a BasicObject payload's singleton eql? and hash" do
 	assert_equal type.success(payloads[0]).hash, type.success(payloads[1]).hash
 end
 
+test "results compare and hash a payload with a __send__ property" do
+	payload = Class.new(Literal::Data) { prop :__send__, String }
+	type = Literal::Result(payload, payload)
+
+	assert type.success(payload.new(__send__: "x")).eql?(type.success(payload.new(__send__: "x")))
+	assert_equal type.success(payload.new(__send__: "x")).hash, type.success(payload.new(__send__: "x")).hash
+	assert type.failure(payload.new(__send__: "x")).eql?(type.failure(payload.new(__send__: "x")))
+	assert_equal type.failure(payload.new(__send__: "x")).hash, type.failure(payload.new(__send__: "x")).hash
+end
+
 test "results hash their payload with its own hash, even a private one" do
 	payload = Class.new do
 		def initialize(id) = @id = id
