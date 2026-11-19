@@ -78,22 +78,18 @@ class Literal::Types::ConstraintType
 			end
 
 			true
-		when Literal::Types::InterfaceType
-			return false unless @property_constraints.empty?
-
-			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		when Literal::Types::FrozenType
 			# The only property _Frozen can vouch for is frozen?.
 			@property_constraints.all? { |property, type| :frozen? == property && Literal.subtype?(true, type, context:) } &&
 				@object_constraints.all? { |constraint| Literal.subtype?(other.type, constraint, context:) }
-		# A numeric literal admits every value == to it (10 == 10.0), so it can't
-		# stand in for them as a single value.
-		when Module, Numeric
-			return false unless @property_constraints.empty?
-
-			@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
+		when Symbol, true, false, nil
+			# These literals are == only to themselves, so each is its only value.
+			self === other
 		else
-			literal_value?(other) && self === other
+			# Property constraints can't be proven of types, nor of other literals,
+			# which admit every value == to them ("a" == +"a", 1 == 1.0).
+			@property_constraints.empty? &&
+				@object_constraints.all? { |constraint| Literal.subtype?(other, constraint, context:) }
 		end
 	end
 
@@ -182,10 +178,6 @@ class Literal::Types::ConstraintType
 	private def finite_range?(range)
 		Numeric === range.begin && range.begin.finite? &&
 			Numeric === range.end && range.end.finite?
-	end
-
-	private def literal_value?(value)
-		value in Array | Hash | String | Symbol | true | false | nil
 	end
 
 	freeze

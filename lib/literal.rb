@@ -279,6 +279,37 @@ module Literal
 		end
 	end
 
+	# The tightest type closed under a literal's ==, which bounds every value
+	# the literal admits as a type. Numeric equality crosses classes
+	# (10 == 10.0 == 10r == Complex(10)), so a numeric literal is bounded by
+	# the core numerics and its own class — use _Integer(10) for an
+	# Integer-anchored one — and a Date equals any DateTime or number (its
+	# astronomical Julian day) on the same instant. Like the rest of subtype?,
+	# this is sound against honest core types: String#== and friends defer to
+	# an operand that merely converts, like one responding to to_str.
+	def self.literal_bound(literal)
+		case literal
+		in Numeric then numerics_or(literal.class)
+		in String then String
+		in Symbol then Symbol
+		in ::Array then ::Array
+		in ::Hash then ::Hash
+		in nil | true | false then literal.class
+		else
+			numerics_or(::Date) if defined?(::Date) && ::Date === literal
+		end
+	end
+
+	private_class_method def self.numerics_or(type)
+		Types._Union(Integer, Float, Rational, Complex, *(::BigDecimal if defined?(::BigDecimal)), type)
+	end
+
+	# A literal is a subtype of whatever its bound is a subtype of.
+	private_class_method def self.bounded_subtype?(literal, supertype, context)
+		bound = literal_bound(literal)
+		!bound.nil? && subtype?(bound, supertype, context:)
+	end
+
 	private_class_method def self.member_subtype?(subtype, supertype, context)
 		if supertype == nil
 			subtype == NilClass
@@ -289,35 +320,15 @@ module Literal
 		else
 			case supertype
 			when Literal::Type
-				supertype.>=(subtype, context:)
+				supertype.>=(subtype, context:) || bounded_subtype?(subtype, supertype, context)
 			when Module
 				case subtype
 				when Module
 					supertype >= subtype
-				when Numeric
-					# A numeric literal admits every value it is == to, and Ruby's numeric
-					# equality crosses classes (10 == 10.0 == 10r), so the tightest honest
-					# nominal bound is Numeric, not the literal's own class. Use
-					# _Integer(10) for an Integer-anchored literal.
-					supertype >= Numeric
-				when String
-					supertype >= String
-				when Symbol
-					supertype >= Symbol
-				when nil, true, false
-					supertype >= subtype.class
-				when ::Array
-					supertype >= ::Array
-				when ::Hash
-					supertype >= ::Hash
 				when Literal::Type
 					subtype.<=(supertype, context:)
 				else
-					if defined?(::Date) && ::Date === subtype
-						supertype >= ::Date
-					else
-						false
-					end
+					bounded_subtype?(subtype, supertype, context)
 				end
 			when Range
 				case subtype

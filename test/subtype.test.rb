@@ -18,7 +18,10 @@ test "literal values are subtypes of their module supertypes" do
 
 	date = Date.new(2025, 1, 13)
 
-	assert_subtype date, Date
+	# A date is == to its astronomical Julian day number.
+	assert date == date.ajd
+	refute_subtype date, Date
+	assert_subtype date, Comparable
 	assert_subtype date, Object
 end
 
@@ -153,4 +156,38 @@ test "<= on a type agrees with subtype?" do
 	assert _Union(true, false) <= _Boolean
 	assert _TaggedUnion(a: String, b: Integer) <= _JSONData
 	refute _Nilable(String) <= _JSONData(String)
+end
+
+test "a literal's properties hold only when its bound entails them" do
+	# Literals admit every value == to them: +"x" == "x" but isn't frozen, and
+	# [1.0] == [1] but its first element isn't an Integer.
+	refute_subtype "x", _Constraint(String, frozen?: true)
+	refute_subtype "x", _Frozen(String)
+	refute_subtype [1], _Constraint(Array, first: Integer)
+	refute_subtype({ a: 1 }, _Constraint(Hash, size: 1..))
+	refute_subtype 1, _Interface(:<)
+
+	assert_subtype "x", _Constraint(String, Comparable)
+	assert_subtype [1], _Constraint(Array, Enumerable)
+
+	# Symbols, true, false and nil are == only to themselves.
+	assert_subtype :a, _Constraint(Symbol, size: 1)
+	assert_subtype nil, _Constraint(NilClass, nil?: true)
+	assert_subtype :a, _Frozen(_Interface(:to_proc))
+end
+
+test "a literal is a subtype of whatever its bound is a subtype of" do
+	assert_subtype "x", _JSONData
+	assert_subtype ["x"], _Constraint(Array, Enumerable)
+	assert_subtype :a, _Interface(:to_proc)
+	assert_subtype Date.new(2025, 1, 1), _Interface(:<=>)
+	refute_subtype Date.new(2025, 1, 1), _Interface(:jd)
+
+	refute_subtype 1, _JSONData
+	refute_subtype "x", _Interface(:foo)
+end
+
+test "a type is a subtype of an intersection of types it is a subtype of" do
+	assert_subtype _Array(String), _Constraint(Array, Enumerable)
+	refute_subtype _Array(String), _Constraint(Array, size: 1)
 end
