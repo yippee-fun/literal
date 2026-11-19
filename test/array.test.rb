@@ -875,6 +875,14 @@ test "#insert checks values and padding" do
 	assert_equal array.to_a, [1, 2, 3, 4]
 end
 
+test "#insert without values is a no-op, even past the end" do
+	array = Literal::Array(Integer).new(1)
+
+	assert_same array.insert(5), array
+	assert_equal array.to_a, [1]
+	assert_raises(FrozenError) { array.freeze.insert(5) }
+end
+
 test "#concat checks compatibility" do
 	array = Literal::Array(Numeric).new(1)
 

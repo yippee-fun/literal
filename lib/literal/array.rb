@@ -345,7 +345,7 @@ class Literal::Array
 			end
 		end
 
-		__check_padding__(index)
+		__check_padding__(index) unless values.empty?
 
 		@__value__.insert(index, *values)
 		self
