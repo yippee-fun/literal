@@ -112,10 +112,11 @@ class Literal::Serializer::UnionType
 	private def numeric_ambiguity(members_by_json_type)
 		return unless members_by_json_type.key?("integer") && members_by_json_type.key?("number")
 
-		number_member = members_by_json_type.fetch("number").find { |member| !finite_float_type?(member) }
-		return unless number_member
+		integer_member = members_by_json_type.fetch("integer").first
+		number_member = members_by_json_type.fetch("number").first
+		return if integer_member == Integer && finite_float_type?(number_member)
 
-		"Integer and #{number_member.inspect} both serialize to JSON number values, so raw values cannot be resolved to a member; only exactly _Float(finite?: _Truthy) can pair with Integer, collapsing the pair to a plain number"
+		"#{integer_member.inspect} and #{number_member.inspect} both serialize to JSON number values, so raw values cannot be resolved to a member; only exactly Integer and _Float(finite?: _Truthy) can pair, collapsing the pair to a plain number"
 	end
 
 	private def natural_constraint?(type)

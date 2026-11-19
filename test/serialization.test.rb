@@ -2438,6 +2438,21 @@ test "integer and constrained float union is not collapsed to number" do
 	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
 end
 
+test "constrained integer and finite float union is not natural" do
+	# JSON Schema cannot tell 5 from 5.0, so these would match both members.
+	[
+		_Union(_Integer(0..), _Float(finite?: _Truthy)),
+		_Union(1, _Float(finite?: _Truthy)),
+		_Union(1, 2, _Float(finite?: _Truthy)),
+		_Union(Literal::JSONSchema::Integer(minimum: 0), _Float(finite?: _Truthy)),
+	].each do |type|
+		refute Example.serializable_type?(type)
+
+		error = assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+		assert error.message.include?("both serialize to JSON number values")
+	end
+end
+
 test "same-kind union serialization roundtrip" do
 	type = _Union(String, _String(length: 1..))
 	original = "Joel"
