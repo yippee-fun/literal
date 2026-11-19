@@ -1423,6 +1423,14 @@ test "date deserialization accepts only RFC 3339 dates" do
 	end
 end
 
+test "a date type refuses to serialize a datetime rather than drop its time" do
+	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(2024, 1, 1, 10), type: Date) }
+
+	assert_raises(Literal::ArgumentError) do
+		Example.serialize({ Date.new(2024, 1, 1) => 1, DateTime.new(2024, 1, 1, 10) => 2 }, type: _Hash(Date, Integer))
+	end
+end
+
 test "time deserialization accepts only RFC 3339 date-times" do
 	[
 		"2024-01-05T10:00:00",
