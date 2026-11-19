@@ -340,6 +340,35 @@ test "types a method whose name def cannot spell, without evaluating it" do
 	assert_equal klass.new.public_send(:"run(text); end; raise 'injected'; def other", "a"), "a"
 end
 
+test "lets Ruby refuse too many arguments or an unknown keyword before checking" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(_Nilable(Integer)) >> _Nilable(Integer)
+		def first(value = nil) = value
+
+		sig(greeting: _Nilable(String)) >> _Nilable(String)
+		def greet(greeting: nil) = greeting
+	end
+
+	assert_raises(::ArgumentError) { klass.new.first("1", 2) }
+	assert_raises(::ArgumentError) { klass.new.greet(greeting: 1, other: 1) }
+end
+
+test "passes on only the optional keywords given" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(Integer, _Nilable(Integer), if: String, a: Integer, b: Integer) >> Array
+		def collect(x, y = 2, if:, a: 3, b: 4) = [x, y, binding.local_variable_get(:if), a, b]
+	end
+
+	assert_equal klass.new.collect(1, if: "i"), [1, 2, "i", 3, 4]
+	assert_equal klass.new.collect(1, 5, if: "i", b: 6), [1, 5, "i", 3, 6]
+	assert_equal klass.new.collect(1, nil, if: "i", a: 7, b: 8), [1, nil, "i", 7, 8]
+	assert_raises(Literal::TypeError) { klass.new.collect(1, if: "i", b: "6") }
+end
+
 test "keeps its own locals apart from the method's parameters" do
 	klass = Class.new do
 		extend Literal::Signatures

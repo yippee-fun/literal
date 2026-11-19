@@ -121,10 +121,21 @@ class SignedAllocations
 
 	sig(String, count: Integer) >> String
 	def repeat(text, count:) = text
+
+	sig(String, _Nilable(Integer), fill: _Nilable(String)) >> String
+	def pad(text, width = nil, fill: nil) = text
 end
 
 signed = SignedAllocations.new
 
 count_warm_allocations { signed.repeat("a", count: 2) }.tap do |n|
 	puts "#{n} allocations for a signed method with required parameters"
+end => 0
+
+count_warm_allocations { signed.pad("a", fill: " ") }.tap do |n|
+	puts "#{n} allocations for a signed method with an omitted optional positional"
+end => 0
+
+count_warm_allocations { signed.pad("a", 1, fill: " ") { nil } }.tap do |n|
+	puts "#{n} allocations for a signed method given every optional argument"
 end => 0

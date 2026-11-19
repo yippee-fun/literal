@@ -22,10 +22,10 @@
 # does not match that method's parameters fails when the class loads, as does
 # a `sig` with no `>>`, two in a row, or one the class body ends on.
 #
-# The checking method is compiled to the method's own parameter list, so one
-# that takes only required parameters allocates nothing to be checked; any
-# optional positional or keyword parameters may cost the Array or Hash that
-# carries them through, depending on the Ruby.
+# The checking method is compiled to the method's own parameter list, so Ruby
+# refuses a wrong number of arguments or an unknown keyword before anything is
+# checked, and checking allocates nothing, save a Hash to pass on the given
+# keywords when an optional one is omitted.
 module Literal::Signatures
 	include Literal::Types
 
@@ -55,6 +55,9 @@ module Literal::Signatures
 	# own name; it is compiled under a stand-in for any other.
 	IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*[?!=]?\z/
 	OPERATORS = [:[], :[]=, :+, :-, :*, :/, :%, :**, :==, :!=, :===, :=~, :!~, :<, :>, :<=, :>=, :<=>, :<<, :>>, :&, :|, :^, :~, :!, :+@, :-@, :`].freeze
+
+	OMITTED = Object.new.freeze
+	private_constant :OMITTED
 
 	def sig(*positional, **keywords)
 		if (pending = @__literal_signature__)
@@ -107,6 +110,7 @@ module Literal::Signatures
 		checker = Module.new
 		keywords = signature.keywords.values_at(*__literal_keywords__(parameters))
 		checker.const_set(:TYPES, [*signature.positional, *keywords, signature.returns].freeze)
+		checker.const_set(:OMITTED, OMITTED)
 		compiled = (IDENTIFIER.match?(name) || OPERATORS.include?(name)) ? name : :__literal_checker__
 		code = __literal_checker_code__(compiled, unsigned, parameters, singleton ? "#{self}.#{name}" : "##{name}", singleton)
 		# An explicit path, so every engine attributes these frames to Literal.
@@ -116,18 +120,13 @@ module Literal::Signatures
 		owner.__send__(visibility, name)
 	end
 
-	# The checking method, taking the parameters the method takes. Positional
-	# arguments get names of their own, since a positional's name is not part
-	# of the call; a keyword named after a reserved word is read off the binding.
+	# The checking method, taking the parameters the method takes. An optional
+	# parameter defaults to OMITTED, so an omitted argument is left out of the
+	# call and the method's own default applies. Positional arguments get names
+	# of their own, since a positional's name is not part of the call; a keyword
+	# named after a reserved word is read off the binding.
 	private def __literal_checker_code__(name, unsigned, parameters, method, singleton)
 		receiver = singleton ? "nil" : "self"
-		positional = parameters.filter_map { |kind, param| param if POSITIONAL.include?(kind) }
-		required = parameters.count { |kind, _| :req == kind }
-		keyword_order = __literal_keywords__(parameters)
-		keywords = parameters.filter_map { |kind, param| param if :keyreq == kind }
-		options = parameters.filter_map { |kind, param| param if :key == kind }
-
-		read = -> (key) { Literal::Property::RUBY_KEYWORDS.key?(key) ? "::Kernel.binding.local_variable_get(:#{key})" : key.to_s }
 		check = lambda do |value, index, label|
 			"::Literal.check(#{value}, TYPES[#{index}]) { |c| c.fill_receiver(receiver: #{receiver}, method: #{method.inspect}, label: #{label.inspect}) }"
 		end
@@ -139,39 +138,56 @@ module Literal::Signatures
 			local
 		end
 
-		required_locals = Array.new(required) { |index| fresh.(:"__literal_arg_#{index}__") }
-		optional = fresh.(:__literal_optional__)
-		options_local = fresh.(:__literal_options__)
+		positional = parameters.select { |kind, _| POSITIONAL.include?(kind) }
+		keywords = parameters.select { |kind, _| KEYWORD.include?(kind) }
+		locals = Array.new(positional.size) { |index| fresh.(:"__literal_arg_#{index}__") }
+		values = keywords.to_h { |_, key| [key, Literal::Property::RUBY_KEYWORDS.key?(key) ? fresh.(:"__literal_#{key}__") : key] }
+		options = fresh.(:__literal_options__)
 		returned = fresh.(:__literal_returned__)
+		block = fresh.(:block)
 
-		arguments = required_locals.map(&:name)
-		arguments << "*#{optional}" if positional.size > required
-		arguments.concat(keywords.map { |key| "#{key}:" })
-		arguments << "**#{options_local}" if options.any?
+		arguments = positional.zip(locals).map { |(kind, _), local| (:opt == kind) ? "#{local} = OMITTED" : local.name }
+		arguments.concat(keywords.map { |kind, key| (:key == kind) ? "#{key}: OMITTED" : "#{key}:" })
 		arguments << "**nil" if parameters.any? { |kind, _| :nokey == kind }
-		arguments << "&"
+		arguments << "&#{block}"
 
-		checks = required_locals.each_with_index.map { |local, index| check.(local, index, positional[index].to_s) }
-		(required...(positional.size)).each_with_index do |index, offset|
-			checks << "#{check.("#{optional}[#{offset}]", index, positional[index].to_s)} if #{optional}.size > #{offset}"
+		lines = values.filter_map { |key, value| "#{value} = ::Kernel.binding.local_variable_get(:#{key})" unless key == value }
+		positional.zip(locals).each_with_index do |((kind, param), local), index|
+			checked = check.(local, index, param.to_s)
+			lines << ((:opt == kind) ? "#{checked} unless OMITTED.equal?(#{local})" : checked)
 		end
-		keywords.each { |key| checks << check.(read.(key), positional.size + keyword_order.index(key), "#{key}:") }
-		options.each do |key|
-			checks << "#{check.("#{options_local}[:#{key}]", positional.size + keyword_order.index(key), "#{key}:")} if #{options_local}.key?(:#{key})"
+		keywords.each_with_index do |(kind, key), index|
+			checked = check.(values[key], positional.size + index, "#{key}:")
+			lines << ((:key == kind) ? "#{checked} unless OMITTED.equal?(#{values[key]})" : checked)
 		end
 
-		call = required_locals.map(&:name)
-		call << "*#{optional}" if positional.size > required
-		call.concat(keywords.map { |key| "#{key}: #{read.(key)}" })
-		call << "**#{options_local}" if options.any?
-		call << "&"
+		required = locals.first(positional.count { |kind, _| :req == kind })
+		optional = locals.drop(required.size)
+		dispatch = lambda do |keyword_arguments|
+			calls = (0..(optional.size)).map { |count| "#{unsigned}(#{[*required, *optional.first(count), *keyword_arguments, "&#{block}"].join(', ')})" }
+			branches = optional.zip(calls).map { |local, call| "OMITTED.equal?(#{local}) then #{call}" }
+			branches.empty? ? calls.last : "if #{branches.join("\nelsif ")}\nelse #{calls.last}\nend"
+		end
+
+		given = keywords.map { |_, key| "#{key}: #{values[key]}" }
+		omittable = keywords.filter_map { |kind, key| key if :key == kind }
+		if omittable.empty?
+			lines << "#{returned} = #{dispatch.(given)}"
+		else
+			lines << "#{returned} = if #{omittable.map { |key| "OMITTED.equal?(#{values[key]})" }.join(' || ')}"
+			lines << "#{options} = {}"
+			omittable.each { |key| lines << "#{options}[:#{key}] = #{values[key]} unless OMITTED.equal?(#{values[key]})" }
+			lines << dispatch.([*keywords.filter_map { |kind, key| "#{key}: #{values[key]}" if :keyreq == kind }, "**#{options}"])
+			lines << "else"
+			lines << dispatch.(given)
+			lines << "end"
+		end
+		lines << check.(returned, positional.size + keywords.size, "return")
 
 		<<~RUBY
 			# frozen_string_literal: true
 			def #{name}(#{arguments.join(', ')})
-				#{checks.join("\n")}
-				#{returned} = #{unsigned}(#{call.join(', ')})
-				#{check.(returned, positional.size + keyword_order.size, 'return')}
+				#{lines.join("\n")}
 				#{returned}
 			end
 		RUBY
