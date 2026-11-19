@@ -231,7 +231,7 @@ class Literal::SerializationContext
 		when Literal::Types::UnionType
 			domains = type.each.map { |member| const_domain(member) }
 			domains.reduce(Set[], :|) if domains.all?
-		when String, Symbol, Integer, Float, true, false
+		when String, Symbol, Integer, Float, true, false, Literal::Enum
 			Set[serialize(type, type:)]
 		end
 	end

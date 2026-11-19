@@ -3262,6 +3262,22 @@ test "an enum member is serializable through the context's aggregate type" do
 	assert_equal(serialized, 2)
 end
 
+test "enum members as constant types serialization roundtrip" do
+	type = SerializationSuit::Hearts
+
+	assert_equal(Example.serialize(SerializationSuit::Hearts, type:), "hearts")
+	assert_equal(Example.deserialize("hearts", type:), SerializationSuit::Hearts)
+	assert_equal(Example.json_schema(type), { "type" => "string", "enum" => ["hearts"] })
+	assert_raises(Literal::ArgumentError) { Example.deserialize("spades", type:) }
+
+	union = _Union(SerializationPriority::Low, SerializationPriority::High, nil)
+
+	assert Example.serializable_type?(union)
+	assert_equal(Example.serialize(SerializationPriority::High, type: union), 3)
+	assert_equal(Example.deserialize(3, type: union), SerializationPriority::High)
+	assert_raises(Literal::ArgumentError) { Example.deserialize(2, type: union) }
+end
+
 test "enum in a union with a distinguishable type roundtrips" do
 	type = _Union(SerializationPriority, String)
 
