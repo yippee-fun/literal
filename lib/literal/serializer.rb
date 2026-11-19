@@ -218,6 +218,19 @@ class Literal::Serializer
 		type.reject { |member_type| member_type == Literal::Undefined }
 	end
 
+	# The most specific member type matching the value — one no other matching
+	# member is a strict subtype of — so that, whatever the member order, a
+	# subclass instance serializes with everything its own member holds.
+	private def most_specific_match(members, value)
+		matches = members.select { |member| member === value }
+		# Checked up front because a member can itself be falsy, like the type nil.
+		raise Literal::ArgumentError, "No member of #{members.inspect} matches #{value.inspect}" if matches.empty?
+
+		matches.find do |member|
+			matches.none? { |other| Literal.subtype?(other, member) && !Literal.subtype?(member, other) }
+		end
+	end
+
 	# The finite set of raw JSON values the given type can serialize to, or nil
 	# when the domain is unbounded or unknown. Constants have singleton domains;
 	# a union of constants has the union of theirs. Domains are compared as

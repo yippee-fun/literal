@@ -129,6 +129,14 @@ class SerializationSecret < Literal::Data
 	prop :secret, String
 end
 
+class SerializationParent < Literal::Data
+	prop :a, Integer
+end
+
+class SerializationChild < SerializationParent
+	prop :b, Integer
+end
+
 class SerializationRedactingSerializer < Literal::Serializer
 	def type
 		SerializationSecret
@@ -2883,6 +2891,25 @@ test "union of object members where one requires a key the other forbids" do
 	assert_equal(person_serialized, { "name" => "Joel", "age" => 42 })
 	assert_equal(Example.deserialize(named_serialized, type:), named_original)
 	assert_equal(Example.deserialize(person_serialized, type:), person_original)
+end
+
+test "unions serialize a value as its most specific matching member" do
+	child = SerializationChild.new(a: 1, b: 2)
+
+	[_Union(SerializationParent, SerializationChild), _Union(SerializationChild, SerializationParent)].each do |type|
+		serialized = Example.serialize(child, type:)
+
+		assert_equal(serialized, { "a" => 1, "b" => 2 })
+		assert_equal(Example.deserialize(serialized, type:), child)
+	end
+
+	type = _TaggedUnion(parent: SerializationParent, child: SerializationChild)
+	serialized = Example.serialize(child, type:)
+
+	assert_equal(serialized, { "$type" => "child", "a" => 1, "b" => 2 })
+	assert_equal(Example.deserialize(serialized, type:), child)
+
+	assert_equal(Example.serialize(nil, type: _TaggedUnion(none: nil, name: String)), { "$type" => "none", "value" => nil })
 end
 
 test "union of object members whose extra keys are all optional is not naturally discriminated" do

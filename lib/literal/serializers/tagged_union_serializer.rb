@@ -49,7 +49,8 @@ class Literal::TaggedUnionSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		tag, member_type = type.resolve(value)
+		member_type = most_specific_match(type.members.values, value)
+		tag = type.members.key(member_type)
 		serialized = serialize_contents(value, type: member_type)
 
 		if object_member?(member_type)
