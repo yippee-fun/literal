@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 require "ruby_lsp/addon"
+require "literal/version"
+require_relative "declaration"
+require_relative "document_symbol"
+
+# ruby-lsp 0.27 replaces RubyIndexer with Rubydex, which has no API for
+# indexing DSLs yet.
+require_relative "indexing_enhancement" if defined?(RubyIndexer::Enhancement)
 
 module RubyLsp
 	module Literal
@@ -16,82 +23,11 @@ module RubyLsp
 			end
 
 			def version
-				"0.1.0"
+				::Literal::VERSION
 			end
-		end
 
-		class IndexingEnhancement < RubyIndexer::Enhancement
-			# ruby-lsp 0.26.5 added a leading configuration argument to index entries.
-			ENTRIES_TAKE_CONFIGURATION = (RubyIndexer::Entry::InstanceVariable.instance_method(:initialize).parameters in [[:req, :configuration], *])
-
-			def on_call_node_enter(node)
-				name = node.name
-				owner = @listener.current_owner
-				location = node.location
-				arguments = node.arguments&.arguments
-
-				return unless owner
-				return unless :prop == name
-
-				args = []
-				kwargs = {}
-
-				arguments&.each do |argument|
-					case argument
-					when Prism::KeywordHashNode
-						argument.elements.each do |element|
-							case element
-							in Prism::AssocNode[key: Prism::SymbolNode[unescaped: String => key], value:]
-								kwargs[key] = value
-							in Prism::AssocSplatNode
-								# A splat may override any option given before it.
-								kwargs.clear
-							else
-								nil
-							end
-						end
-					else
-						args << argument
-					end
-				end
-
-				case args
-				in [Prism::SymbolNode[unescaped: String => prop_name], Prism::Node => prop_type, *]
-					prop_type_location = prop_type.location
-					prop_type_indentation = prop_type_location.source_lines[prop_type_location.start_line - 1][/\A\s*/]
-
-					prop_signature = prop_type_location.slice.lines.map { |line| line.delete_prefix(prop_type_indentation) }.join
-
-					@listener.instance_exec do
-						entry_arguments = [
-							"@#{prop_name}",
-							@uri,
-							RubyIndexer::Location.from_prism_location(node.location, @code_units_cache),
-							[collect_comments(node), "**Type:**\n```ruby\n#{prop_signature}\n```"].join("\n\n"),
-							owner,
-						]
-
-						entry_arguments.unshift(@index.configuration) if ENTRIES_TAKE_CONFIGURATION
-
-						@index.add(RubyIndexer::Entry::InstanceVariable.new(*entry_arguments))
-					end
-
-					if kwargs["reader"] in Prism::SymbolNode[unescaped: "private" | "protected" | "public" => visibility]
-						@listener.add_method(prop_name, location, [
-							RubyIndexer::Entry::Signature.new([]),
-						], visibility: visibility.to_sym)
-					end
-
-					if kwargs["writer"] in Prism::SymbolNode[unescaped: "private" | "protected" | "public" => visibility]
-						@listener.add_method("#{prop_name}=", location, [
-							RubyIndexer::Entry::Signature.new([
-								RubyIndexer::Entry::RequiredParameter.new(name: :value),
-							]),
-						], visibility: visibility.to_sym)
-					end
-				else
-					nil
-				end
+			def create_document_symbol_listener(response_builder, dispatcher)
+				DocumentSymbol.new(response_builder, dispatcher)
 			end
 		end
 	end
