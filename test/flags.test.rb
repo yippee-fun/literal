@@ -121,3 +121,19 @@ end
 test ".keys" do
 	assert_equal Example.keys, [:bold, :italic, :underlined]
 end
+
+class OtherExample < Literal::Flags8
+	define(bold: 0)
+end
+
+test "flags with the same value are equal" do
+	assert_equal Example.new(bold: true), Example.new(bold: true)
+	assert Example.new(bold: true).eql?(Example.from_int(1))
+	assert_equal Example.new(bold: true).hash, Example.from_int(1).hash
+	assert_equal({ Example.new(bold: true) => 1 }[Example.from_tokens([:bold])], 1)
+
+	refute_equal Example.new(bold: true), Example.new(italic: true)
+	refute_equal Example.new(bold: true), OtherExample.new(bold: true)
+	refute_equal Example.new(bold: true), 1
+	refute Example.new(bold: true) == BasicObject.new
+end

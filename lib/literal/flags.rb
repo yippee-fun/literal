@@ -187,6 +187,16 @@ class Literal::Flags
 		end
 	end
 
+	def ==(other)
+		Literal::Flags === other && other.class == self.class && @value == other.value
+	end
+
+	alias_method :eql?, :==
+
+	def hash
+		[self.class, @value].hash
+	end
+
 	def to_i
 		@value
 	end
