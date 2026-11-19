@@ -554,6 +554,14 @@ test "#flat_map splices literal arrays, plain arrays and single values" do
 	end
 end
 
+test "#flat_map splices anything that converts with to_ary, like tuples" do
+	array = Literal::Array(Integer).new(1, 2)
+
+	flattened = array.flat_map(Integer) { |i| Literal::Tuple(Integer, Integer).new(i, i) }
+
+	assert_literal_array flattened, type: Integer, values: [1, 1, 2, 2]
+end
+
 # Tuple-producing methods
 
 test "#zip produces typed tuples" do

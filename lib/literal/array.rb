@@ -305,22 +305,7 @@ class Literal::Array
 	def flat_map(type, &block)
 		raise ArgumentError.new("#flat_map requires a block.") unless block
 
-		result = []
-
-		@__value__.each do |element|
-			mapped = block.call(element)
-
-			case mapped
-			when Literal::Array
-				result.concat(mapped.__value__)
-			when ::Array
-				result.concat(mapped)
-			else
-				result << mapped
-			end
-		end
-
-		Literal::Array.new(result, type:)
+		Literal::Array.new(@__value__.flat_map(&block), type:)
 	end
 
 	def freeze
