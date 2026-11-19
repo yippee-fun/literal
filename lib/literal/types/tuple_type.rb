@@ -7,8 +7,8 @@ class Literal::Types::TupleType
 	def initialize(types)
 		raise Literal::ArgumentError.new("_Tuple type must have at least one type.") if types.size < 1
 
-		@types = types
-		@hash = literal_hash(Literal::Types::TupleType, types)
+		@types = types.dup.freeze
+		@hash = literal_hash(Literal::Types::TupleType, @types)
 		freeze
 	end
 

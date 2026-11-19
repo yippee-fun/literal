@@ -121,3 +121,35 @@ test "types can hold matchers without a hash method" do
 		assert type == type
 	end
 end
+
+test "types hold frozen copies of their members, so eql? and hash stay in agreement" do
+	objects, properties, types, shape, message = [String], { size: 1 }, [String], { a: String }, +"anything"
+
+	constraint = Literal::Types::ConstraintType.new(objects, properties)
+	tuple = Literal::Types::TupleType.new(types)
+	map = Literal::Types::MapType.new(shape)
+	predicate = _Predicate(message) { true }
+
+	[
+		constraint.object_constraints,
+		constraint.property_constraints,
+		tuple.types,
+		map.shape,
+		predicate.message,
+		_Pattern(/a/) { true }.message,
+		_Union(String, 1).types,
+		_TaggedUnion(a: String).members,
+		_Interface(:to_s).methods,
+	].each { |member| assert member.frozen? }
+
+	objects << Integer
+	properties[:length] = 2
+	types << Integer
+	shape[:b] = Integer
+	message << "!"
+
+	assert_value_equal constraint, _Constraint(String, size: 1)
+	assert_value_equal tuple, _Tuple(String)
+	assert_value_equal map, _Map(a: String)
+	assert_equal predicate.message, "anything"
+end

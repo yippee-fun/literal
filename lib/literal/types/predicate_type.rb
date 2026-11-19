@@ -13,10 +13,10 @@ class Literal::Types::PredicateType
 			raise ArgumentError, "Unknown recursion policy #{recursion.inspect}"
 		end
 
-		@message = message
+		@message = message.dup.freeze
 		@block = block
 		@recursion = recursion
-		@hash = [Literal::Types::PredicateType, message, block, recursion].hash
+		@hash = [Literal::Types::PredicateType, @message, block, recursion].hash
 
 		freeze
 	end
