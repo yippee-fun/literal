@@ -20,6 +20,7 @@ EXAMPLES = {
 	],
 	Range => [
 		(1..10),
+		("a".."z"),
 	],
 	Set => [
 		Set[],
@@ -56,5 +57,13 @@ Literal::Transforms.each do |type, transforms|
 				end
 			end
 		end
+	end
+end
+
+test "Range#size can be nil or Infinity, so mapping it to Integer is checked" do
+	assert Literal::Transforms[Range][:size.to_proc] === (1..).size
+
+	assert_raises(Literal::TypeError) do
+		Literal::Array(Range).new("a".."z", 1..).map(Integer, &:size)
 	end
 end
