@@ -13,6 +13,15 @@ module Literal::Rails
 end
 
 class Literal::Railtie < Rails::Railtie
+	# Active Job reads its custom serializers as soon as ActiveJob::Arguments
+	# loads, which may already have happened.
+	initializer "literal.active_job_serializers", before: "active_job.custom_serializers" do |app|
+		if defined?(::ActiveJob::Railtie)
+			require_relative "rails/enum_serializer"
+			app.config.active_job.custom_serializers << Literal::Rails::EnumSerializer
+		end
+	end
+
 	if defined?(::ActiveModel::Type)
 		require_relative "rails/enum_type"
 		require_relative "rails/flags_type"
