@@ -191,7 +191,11 @@ module Literal::Signatures
 			checker.const_set(:ORIGINAL, original)
 			callee = "ORIGINAL.bind_call(self, "
 		else
-			unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{name.object_id}__"
+			# Each signing aliases the method afresh, so a checker captured before a
+			# re-signing keeps calling the body it was signed with. The old alias
+			# stays, holding that body as the captured checker would.
+			@__literal_signings__ = (@__literal_signings__ || 0) + 1
+			unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{@__literal_signings__}__"
 			exported ? Literal::DEFINE_METHOD.bind_call(owner, unsigned, exported) : Literal::ALIAS_METHOD.bind_call(owner, unsigned, name)
 			Literal::PRIVATE.bind_call(owner, unsigned)
 			callee = "#{unsigned}("

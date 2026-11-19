@@ -282,6 +282,25 @@ test "names the method in a backtrace" do
 	assert_equal error.backtrace_locations.first.label.split("#").last, "fail"
 end
 
+test "keeps a method captured before re-signing on the body it was signed with" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def echo(text) = "old #{text}"
+	end
+
+	captured = klass.new.method(:echo)
+
+	klass.class_eval do
+		sig(String) >> String
+		def echo(text) = "new #{text}"
+	end
+
+	assert_equal captured.call("a"), "old a"
+	assert_equal klass.new.echo("a"), "new a"
+end
+
 test "refuses to load a sig with no return type" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new do
