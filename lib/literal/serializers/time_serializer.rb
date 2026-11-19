@@ -45,12 +45,7 @@ class Literal::TimeSerializer < Literal::Serializer
 	end
 
 	def handles_type?(type)
-		case type
-		when Time, DateTime
-			true
-		else
-			super
-		end
+		!bound_of(type).nil?
 	end
 
 	def json_type(type)
@@ -73,7 +68,7 @@ class Literal::TimeSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		date_time = DateTime === type || Literal.subtype?(type, DateTime)
+		date_time = DateTime == bound_of(type)
 
 		# DateTime switches to the Gregorian calendar in 1582, while Time is
 		# Gregorian throughout, so each validates dates in its own calendar.
@@ -85,6 +80,17 @@ class Literal::TimeSerializer < Literal::Serializer
 			DateTime.iso8601(raw)
 		else
 			Time.iso8601(raw)
+		end
+	end
+
+	# Time or DateTime, whichever bounds the type, including constants and
+	# unions of them. Both serialize alike, so a type holding both can't be
+	# told apart on the way back in, and has no bound.
+	private def bound_of(type)
+		[Time, DateTime].find do |bound|
+			bound === type ||
+				within_domain?(type, bound) ||
+				(Literal::Types::UnionType === type && type.all?(bound))
 		end
 	end
 

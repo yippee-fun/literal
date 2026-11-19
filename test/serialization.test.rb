@@ -1459,6 +1459,18 @@ test "date deserialization accepts only RFC 3339 dates" do
 	end
 end
 
+test "a union of time and datetime is not serializable" do
+	refute Example.serializable_type?(_Union(Time, DateTime))
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(Time, DateTime)) }
+	assert error.message.include?("both serialize to JSON string values")
+
+	refute Example.serializable_type?(_Union(Time.utc(2024, 1, 1), DateTime.new(2024, 1, 2)))
+
+	type = _Union(DateTime.new(2024, 1, 1), DateTime.new(2024, 1, 2))
+	assert_equal(Example.deserialize(Example.serialize(DateTime.new(2024, 1, 2), type:), type:), DateTime.new(2024, 1, 2))
+end
+
 test "a date type refuses to serialize a datetime rather than drop its time" do
 	assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(2024, 1, 1, 10), type: Date) }
 
