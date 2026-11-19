@@ -31,6 +31,8 @@ test "hierarchy" do
 	assert_subtype _Float(1..10), _Float(finite?: _Truthy)
 	refute_subtype _Float(1..), _Float(finite?: _Truthy)
 	refute_subtype _Float(..10), _Float(finite?: _Truthy)
+	refute_subtype _Float(1..Float::INFINITY), _Float(finite?: _Truthy)
+	refute_subtype _Constraint(String, "a".."z"), _Constraint(String, finite?: _Truthy)
 
 	# finite? is a known boolean predicate on Numeric, so the exact-true and
 	# truthy spellings denote the same floats. On an unbounded receiver,

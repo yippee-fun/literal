@@ -166,9 +166,8 @@ class Literal::Types::ConstraintType
 	end
 
 	private def finite_range?(range)
-		range.begin && range.end &&
-			(!Numeric === range.begin || range.begin.finite?) &&
-			(!Numeric === range.end || range.end.finite?)
+		Numeric === range.begin && range.begin.finite? &&
+			Numeric === range.end && range.end.finite?
 	end
 
 	private def literal_value?(value)
