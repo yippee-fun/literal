@@ -10,10 +10,14 @@ class Literal::Data < Literal::DataStructure
 			Literal::FREEZE.bind_call(super)
 		end
 
-		def define(**properties)
+		def define(**properties, &body)
 			Class.new(self) do
 				props do
 					properties.each { |name, type| prop(name, type) }
+				end
+
+				if block_given?
+					class_eval(&body)
 				end
 			end
 		end

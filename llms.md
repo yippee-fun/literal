@@ -67,7 +67,7 @@ Composable pipelines for `prop` blocks (`&x` via `to_proc`):
 
 ## Data structures
 
-`DataStructure` → `Struct` (mutable, public readers+writers, `[]=`) → `Draft`; `DataStructure` → `Data` (frozen instances, readers only, `Data.define(a: String)` shorthand); `Object` = bare Properties (no readers by default).
+`DataStructure` → `Struct` (mutable, public readers+writers, `[]=`) → `Draft`; `DataStructure` → `Data` (frozen instances, readers only, `Data.define(a: String) { … }` shorthand, the optional block running as the class body after the props); `Object` = bare Properties (no readers by default).
 
 All get structural `==`/`eql?`/`hash`, `to_h`, `[](key)` (reads the stored value of any prop, readerless or private included), `deconstruct`/`deconstruct_keys`, Marshal (`as_pack`/`from_pack`, restores frozen state), and:
 
