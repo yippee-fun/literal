@@ -4,6 +4,9 @@
 class Literal::Properties::Schema
 	include Enumerable
 
+	EQL_INTERFACE = Literal::Types::InterfaceType.new([:eql?])
+	HASH_INTERFACE = Literal::Types::InterfaceType.new([:hash])
+
 	def initialize(properties_index: {}, sorted_properties: [])
 		@properties_index = properties_index
 		@sorted_properties = sorted_properties
@@ -119,17 +122,33 @@ class Literal::Properties::Schema
 		i, n = 0, sorted_properties.size
 		while i < n
 			property = sorted_properties[i]
-			buffer << "  @" << property.name.name << ",\n"
+			value = "@#{property.name.name}"
+
+			if promises?(property, HASH_INTERFACE)
+				buffer << "  " << value << ",\n"
+			else
+				buffer << "  ((::Kernel === #{value} && #{value}.respond_to?(:hash)) ? #{value}.hash : ::Literal.payload_hash(#{value})),\n"
+			end
+
 			i += 1
 		end
 
 		buffer << "  ].hash\n" << "end\n"
 	end
 
-	# eql? compares values with eql?, as hash hashes them.
+	# eql? compares values with eql?, as hash hashes them. A value whose type
+	# doesn't promise a public eql? or hash, such as a BasicObject, is checked
+	# for one, and goes through the payload helpers without it.
 	def generate_eq(buffer = +"")
-		generate_comparison(buffer, "==")
-		generate_comparison(buffer, "eql?")
+		generate_comparison(buffer, "==") { |_property, value, other| "#{value} == #{other}" }
+
+		generate_comparison(buffer, "eql?") do |property, value, other|
+			if promises?(property, EQL_INTERFACE)
+				"#{value}.eql?(#{other})"
+			else
+				"((::Kernel === #{value} && #{value}.respond_to?(:eql?)) ? #{value}.eql?(#{other}) : ::Literal.payload_eql?(#{value}, #{other}))"
+			end
+		end
 	end
 
 	private def generate_comparison(buffer, operator)
@@ -141,12 +160,18 @@ class Literal::Properties::Schema
 		i, n = 0, sorted_properties.size
 		while i < n
 			property = sorted_properties[i]
-			buffer << "  @#{property.name.name}.#{operator}(::Literal::INSTANCE_VARIABLE_GET.bind_call(other, :@#{property.name.name}))"
+			buffer << "  " << yield(property, "@#{property.name.name}", "::Literal::INSTANCE_VARIABLE_GET.bind_call(other, :@#{property.name.name})")
 			buffer << " &&\n  " if i < n - 1
 			i += 1
 		end
 		buffer << "  true" if n.zero?
 		buffer << "\nend\n"
+	end
+
+	# Only a module is asked: asking a _Deferred would materialize it when the
+	# property is declared, before the constant it names may exist.
+	private def promises?(property, interface)
+		Module === property.type && Literal.subtype?(property.type, interface)
 	end
 
 	# Refuse what Ruby can't compile as the initializer's parameters: a second

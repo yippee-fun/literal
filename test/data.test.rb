@@ -496,3 +496,36 @@ test "copies stay frozen" do
 	assert person.clone(freeze: false).frozen?
 	assert_equal person.dup, person
 end
+
+class DataWithoutEql
+	undef_method :eql?
+end
+
+class DataPrivatelyComparable
+	def initialize(key) = @key = key
+
+	attr_reader :key
+
+	private def eql?(other) = DataPrivatelyComparable === other && @key == other.key
+	private def hash = @key.hash
+end
+
+test "eql? and hash reach values without a public eql? or hash" do
+	basic = BasicObject.new
+	without_eql = DataWithoutEql.new
+	any = Class.new(Literal::Data) { prop :value, BasicObject }
+	typed = Class.new(Literal::Data) { prop :value, DataWithoutEql }
+	private_eql = Class.new(Literal::Data) { prop :value, DataPrivatelyComparable }
+
+	assert_equal any.new(value: basic), any.new(value: basic)
+	assert_equal any.new(value: basic).eql?(any.new(value: basic)), true
+	assert_equal any.new(value: basic).eql?(any.new(value: BasicObject.new)), false
+	assert_equal any.new(value: basic).hash, any.new(value: basic).hash
+	assert_equal any.new(value: without_eql).eql?(any.new(value: without_eql)), true
+	assert_equal typed.new(value: without_eql).eql?(typed.new(value: without_eql)), true
+	assert_equal typed.new(value: without_eql).eql?(typed.new(value: DataWithoutEql.new)), false
+	assert_equal private_eql.new(value: DataPrivatelyComparable.new(1)).eql?(private_eql.new(value: DataPrivatelyComparable.new(1))), true
+	assert_equal private_eql.new(value: DataPrivatelyComparable.new(1)).hash, private_eql.new(value: DataPrivatelyComparable.new(1)).hash
+	assert_equal any.new(value: DataPrivatelyComparable.new(1)).eql?(any.new(value: DataPrivatelyComparable.new(1))), true
+	assert_equal any.new(value: DataPrivatelyComparable.new(1)).hash, any.new(value: DataPrivatelyComparable.new(1)).hash
+end
