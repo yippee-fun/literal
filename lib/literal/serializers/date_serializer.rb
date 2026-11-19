@@ -2,6 +2,7 @@
 
 class Literal::DateSerializer < Literal::Serializer
 	Type = Date
+	Format = /\A(\d{4})-(\d{2})-(\d{2})\z/
 
 	def type
 		Type
@@ -27,7 +28,12 @@ class Literal::DateSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		Date.parse(raw)
+		if String === raw && (match = Format.match(raw))
+			year, month, day = match.captures.map(&:to_i)
+			return Date.new(year, month, day) if Date.valid_date?(year, month, day)
+		end
+
+		raise Literal::ArgumentError, "Value #{raw.inspect} is not an RFC 3339 date and cannot be deserialized as #{type.inspect}"
 	end
 
 	private def constraint_json_schema(type)

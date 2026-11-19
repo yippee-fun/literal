@@ -1417,6 +1417,33 @@ test "datetime serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "date deserialization accepts only RFC 3339 dates" do
+	["tomorrow 2024-01-05", "Jan 5 2024", "2024-01-05T23:59:59-10:00", "20240105", "2024-02-30", "5", 5].each do |raw|
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: Date) }
+	end
+end
+
+test "time deserialization accepts only RFC 3339 date-times" do
+	[
+		"2024-01-05T10:00:00",
+		"2024-01-05",
+		"2024-01-05 10:00:00Z",
+		"2024-02-30T10:00:00Z",
+		"2024-01-05T24:00:00Z",
+		"2024-01-05T10:00:00+25:00",
+		1,
+	].each do |raw|
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: Time) }
+		assert_raises(Literal::ArgumentError) { Example.deserialize(raw, type: DateTime) }
+	end
+
+	assert_equal(Example.deserialize("2024-01-05t10:00:00z", type: Time), Time.utc(2024, 1, 5, 10))
+
+	# Time is Gregorian throughout, so 1500 has no leap day and 1582-10-10 exists.
+	assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29T00:00:00Z", type: Time) }
+	assert_equal(Example.deserialize(Example.serialize(Time.utc(1582, 10, 10), type: Time), type: Time), Time.utc(1582, 10, 10))
+end
+
 test "float serialization roundtrip" do
 	original = 3.14
 
