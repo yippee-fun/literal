@@ -12,6 +12,7 @@ module Literal
 	RESPOND_TO = Kernel.instance_method(:respond_to?)
 	HASH = Kernel.instance_method(:hash)
 	CLASS = Kernel.instance_method(:class)
+	INSPECT = Kernel.instance_method(:inspect)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")

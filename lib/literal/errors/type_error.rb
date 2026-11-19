@@ -80,7 +80,7 @@ class Literal::TypeError < TypeError
 			idt = INDENT * level
 			if c.receiver || c.method
 				message << idt
-				message << c.receiver.class.inspect if c.receiver
+				message << Literal::CLASS.bind_call(c.receiver).inspect if c.receiver
 				message << c.method if c.method
 				message << " (from #{backtrace[1]})" if level.zero? && backtrace
 				message << "\n"
@@ -90,8 +90,8 @@ class Literal::TypeError < TypeError
 				message << idt << c.label << "\n"
 			end
 			if c.children.empty?
-				message << idt << "  Expected: #{c.expected.inspect}\n"
-				message << idt << "  Actual (#{c.actual.class}): #{c.actual.inspect}\n"
+				message << idt << "  Expected: #{inspect_object(c.expected)}\n"
+				message << idt << "  Actual (#{Literal::CLASS.bind_call(c.actual)}): #{inspect_object(c.actual)}\n"
 			end
 		end
 		message
@@ -107,5 +107,9 @@ class Literal::TypeError < TypeError
 
 	def to_h
 		@context.to_h
+	end
+
+	private def inspect_object(object)
+		Literal.implements?(object, :inspect) ? object.__send__(:inspect) : Literal::INSPECT.bind_call(object)
 	end
 end

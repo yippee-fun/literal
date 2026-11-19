@@ -54,3 +54,17 @@ test "has a message before it's raised" do
 
 	assert_equal error.message, "Type mismatch\n\nObject#foo\n  Expected: Integer\n  Actual (String): \"x\"\n"
 end
+
+test "renders a BasicObject" do
+	error = assert_raises(Literal::TypeError) { Literal.check(BasicObject.new, String) }
+
+	assert_equal error.to_s, error.message
+	assert(/Actual \(BasicObject\): #<BasicObject:0x\h+>\n/.match?(error.message))
+end
+
+test "renders a BasicObject's own inspect" do
+	object = Class.new(BasicObject) { def inspect = "custom" }.new
+	error = assert_raises(Literal::TypeError) { Literal.check(object, String) }
+
+	assert error.message.include?("): custom\n")
+end
