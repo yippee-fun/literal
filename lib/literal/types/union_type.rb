@@ -50,11 +50,12 @@ class Literal::Types::UnionType
 		@primitive_list = primitives.to_a.freeze
 		@hash = literal_hash(Literal::Types::UnionType, @types, @primitive_list)
 		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
-		# A value can only equal a primitive of its own class, of String, Array or Hash when it is
-		# an instance of a subclass (no other primitive class can be subclassed and instantiated),
-		# or when it is a delegator, which forwards eql? and hash to the object it wraps
-		@primitive_classes = primitives.to_h { |primitive| [primitive.class, true] }.freeze
-		@open_primitive_classes = [*(@primitive_classes.keys & [String, Array, Hash]), Delegator].freeze
+		# Only an instance of a primitive's class can be eql? to it — any String,
+		# Array or Hash to one of those, whatever their subclasses — or else a
+		# delegator, which forwards eql? and hash to the object it wraps.
+		member_classes = primitives.map { |primitive| [String, Array, Hash].find { |base| base === primitive } || primitive.class }.uniq
+		member_classes << Delegator if member_classes.any?
+		@member_classes = member_classes.freeze
 
 		freeze
 	end
@@ -272,13 +273,10 @@ class Literal::Types::UnionType
 		primitive_member?(value) || !equal_primitive_index(value).nil?
 	end
 
-	# Values that cannot equal a primitive skip the Set lookup, which hashes the value - on Ruby 4
-	# even when the set is empty - and hashing a struct or an array hashes everything inside it.
+	# The Set lookup hashes the value, which walks everything inside a struct
+	# or an array, so it's skipped for values that can't be eql? to a primitive.
 	private def primitive_member?(value)
-		return false if @primitive_classes.empty?
-		return @primitives.include?(value) if @primitive_classes[value.class]
-
-		classes = @open_primitive_classes
+		classes = @member_classes
 		i, len = 0, classes.size
 		while i < len
 			return @primitives.include?(value) if classes[i] === value
