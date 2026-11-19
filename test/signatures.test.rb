@@ -313,6 +313,59 @@ test "binds past a class's own method hooks that do not call super" do
 	assert_raises(Literal::TypeError) { klass.shout(1) }
 end
 
+test "binds past a subclass's own method hooks that do not call super" do
+	parent = Class.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+	end
+
+	child = Class.new(parent) do
+		def self.method_added(name) = nil
+		def self.singleton_method_added(name) = nil
+
+		sig(String) >> String
+		def hello(name) = name
+
+		sig(String) >> String
+		def self.shout(text) = text
+	end
+
+	assert_raises(Literal::TypeError) { child.new.hello(1) }
+	assert_raises(Literal::TypeError) { child.shout(1) }
+end
+
+test "signs a subclass's method once under both classes' hooks" do
+	seen = []
+
+	parent = Class.new do
+		define_singleton_method(:method_added) do |name|
+			seen << [:parent, name]
+			super(name)
+		end
+
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+	end
+
+	child = Class.new(parent) do
+		define_singleton_method(:method_added) do |name|
+			seen << [:child, name]
+			super(name)
+		end
+
+		sig(String) >> String
+		def hello(name) = name
+	end
+
+	assert_equal seen, [[:parent, :greet], [:child, :hello], [:parent, :hello]]
+	assert_equal child.private_instance_methods(false).grep(/unsigned/).size, 1
+	assert_raises(Literal::TypeError) { child.new.hello(1) }
+end
+
 test "lets a class's own method hooks see each method once it is signed" do
 	klass = Class.new do
 		def self.seen = (@seen ||= [])

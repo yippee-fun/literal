@@ -74,7 +74,7 @@ module Literal::Signatures
 		end
 
 		@__literal_signature__ = Signature.new(positional.freeze, keywords.freeze, caller_locations(1, 1).first)
-		singleton_class.prepend(MethodHooks) unless singleton_class.include?(MethodHooks)
+		__literal_hook_methods__
 		__literal_await_method__
 		@__literal_signature__
 	end
@@ -83,32 +83,47 @@ module Literal::Signatures
 	# calling super. They see the method once it is signed, so one defining a
 	# method of its own cannot take the sig, and do not see the methods signing
 	# defines.
-	module MethodHooks
-		private def method_added(name)
-			return if @__literal_signing__
-
-			if @__literal_signature__
-				__literal_bind_signature__(self, name)
-			elsif @__literal_signed__&.key?(name)
-				@__literal_signed__ = @__literal_signed__.except(name)
-			end
-
+	class MethodHooks < Module
+		def initialize
 			super
-		end
 
-		private def singleton_method_added(name)
-			return if @__literal_signing__
+			module_eval do
+				private def method_added(name)
+					return if @__literal_signing__
 
-			if @__literal_signature__
-				__literal_bind_signature__(singleton_class, name)
-			else
-				__literal_sign_module_function__(name)
+					if @__literal_signature__
+						__literal_bind_signature__(self, name)
+					elsif @__literal_signed__&.key?(name)
+						@__literal_signed__ = @__literal_signed__.except(name)
+					end
+
+					super
+				end
+
+				private def singleton_method_added(name)
+					return if @__literal_signing__
+
+					if @__literal_signature__
+						__literal_bind_signature__(singleton_class, name)
+					else
+						__literal_sign_module_function__(name)
+					end
+
+					super
+				end
 			end
-
-			super
 		end
 	end
 	private_constant :MethodHooks
+
+	# A subclass inherits its parent's hooks behind its own singleton class,
+	# where hooks of its own could hide a method from them, so each class gets
+	# hooks of its own. TruffleRuby leaves out a module an ancestor already has.
+	private def __literal_hook_methods__
+		singleton = singleton_class
+		prepended = singleton.ancestors.take_while { |mod| !mod.equal?(singleton) }
+		singleton.prepend(MethodHooks.new) unless prepended.any?(MethodHooks)
+	end
 
 	private def __literal_bind_signature__(owner, name)
 		signature = @__literal_signature__ or return
