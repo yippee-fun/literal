@@ -22,7 +22,7 @@ class Literal::Types::ClassType
 	end
 
 	def ===(value)
-		Class === value && (value == @type || value < @type)
+		Class === value && (value == @type || !!(value < @type))
 	end
 
 	def >=(other, context: nil)

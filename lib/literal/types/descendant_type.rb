@@ -21,7 +21,7 @@ class Literal::Types::DescendantType
 	end
 
 	def ===(value)
-		Module === value && value < @type
+		Module === value && !!(value < @type)
 	end
 
 	def >=(other, context: nil)

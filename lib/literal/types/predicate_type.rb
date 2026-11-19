@@ -21,7 +21,7 @@ class Literal::Types::PredicateType
 	end
 
 	def inspect
-		%(_Predicate("#{@message}"))
+		"_Predicate(#{@message.inspect})"
 	end
 
 	def ===(other)
@@ -31,7 +31,7 @@ class Literal::Types::PredicateType
 		return @recursion == RECURSION_ACCEPT if state[key]
 
 		state[key] = true
-		@block === other
+		!!(@block === other)
 	ensure
 		state&.delete(key)
 		Thread.current[THREAD_KEY] = nil if state && state.empty?

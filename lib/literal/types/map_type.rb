@@ -18,13 +18,17 @@ class Literal::Types::MapType
 	end
 
 	def inspect
-		"_Map(#{@shape.inspect})"
+		"_Map(#{@shape.map { |key, type| "#{key.name}: #{type.inspect}" }.join(', ')})"
 	end
 
 	def ===(other)
-		Hash === other && @shape.each do |k, v|
+		return false unless Hash === other
+
+		@shape.each do |k, v|
 			return false unless v === other[k]
 		end
+
+		true
 	end
 
 	def record_literal_type_errors(context)
@@ -57,4 +61,6 @@ class Literal::Types::MapType
 			false
 		end
 	end
+
+	freeze
 end

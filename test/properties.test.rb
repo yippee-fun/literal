@@ -719,7 +719,7 @@ test "nested properties raise in initializer" do
 		#{Family}#initialize (from #{error.backtrace[1]})
 		  members
 		    [0]
-		      Expected: _Map(#{{ person: Person, role: Symbol }})
+		      Expected: _Map(person: #{Person}, role: Symbol)
 		      Actual (Integer): 1
 ERROR
 

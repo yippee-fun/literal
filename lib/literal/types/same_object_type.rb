@@ -13,6 +13,10 @@ class Literal::Types::SameObjectType
 
 	attr_reader :object
 
+	def inspect
+		"_SameObject(#{@object.inspect})"
+	end
+
 	def ===(value)
 		EQUAL_METHOD.bind_call(@object, value)
 	end

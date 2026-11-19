@@ -37,3 +37,12 @@ test "error message" do
 		      Actual (String): "42"
 	MSG
 end
+
+test "=== returns a boolean" do
+	assert_equal true, _Map(a: String) === { a: "x" }
+	assert_equal false, _Map(a: String) === { a: 1 }
+end
+
+test "inspect" do
+	assert_equal "_Map(a: String, b: _Nilable(Integer))", _Map(a: String, b: _Nilable(Integer)).inspect
+end

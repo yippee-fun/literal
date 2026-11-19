@@ -2806,7 +2806,7 @@ test "codecs reject encoded types that are not serializable" do
 	error = assert_raises(Literal::ArgumentError) { context.json_schema(SerializationOpaque) }
 
 	assert error.message.include?("there is no serializer for Object")
-	assert error.message.include?("SerializationOpaque → _Map(#{{ value: Object }.inspect}) → Object")
+	assert error.message.include?("SerializationOpaque → _Map(value: Object) → Object")
 end
 
 test "coerced properties deserialize without re-running the coercion" do
