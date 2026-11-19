@@ -452,6 +452,22 @@ test "keeps the method's parameters" do
 	assert_raises(Literal::TypeError) { klass.new.ignored(1, "2") }
 end
 
+test "keeps a repeated underscore name's arguments apart" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(Integer, _x: String) >> Symbol
+		def keyword(_x, _x:) = :keyword
+
+		sig(Integer) >> Symbol
+		def block(_x, &_x) = :block
+	end
+
+	assert_equal klass.new.keyword(1, _x: "a"), :keyword
+	assert_raises(Literal::TypeError) { klass.new.keyword(1, _x: 2) }
+	assert_equal klass.new.block(1) { nil }, :block
+end
+
 test "keeps its own locals apart from the method's parameters" do
 	klass = Class.new do
 		extend Literal::Signatures

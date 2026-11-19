@@ -125,9 +125,10 @@ module Literal::Signatures
 	# The checking method, taking the parameters the method takes under the same
 	# names, so Method#parameters reads the same, save a block parameter. An
 	# optional parameter defaults to OMITTED, so an omitted argument is left out
-	# of the call and the method's own default applies. A repeated underscore
-	# name gets a name of its own; a keyword named after a reserved word is read
-	# off the binding.
+	# of the call and the method's own default applies. A keyword keeps its name,
+	# since it is part of the call, and any other parameter repeating an
+	# underscore name gets one of its own; a keyword named after a reserved word
+	# is read off the binding.
 	private def __literal_checker_code__(name, callee, parameters, method, singleton)
 		receiver = singleton ? "nil" : "self"
 		check = lambda do |value, index, label|
@@ -143,12 +144,16 @@ module Literal::Signatures
 
 		positional = parameters.select { |kind, _| POSITIONAL.include?(kind) }
 		keywords = parameters.select { |kind, _| KEYWORD.include?(kind) }
-		locals = []
-		positional.each { |_, param| locals << (locals.include?(param) ? fresh.(param) : param) }
+		claimed = keywords.map { |_, key| key }
+		locals = positional.map do |_, param|
+			local = claimed.include?(param) ? fresh.(param) : param
+			claimed << local
+			local
+		end
 		values = keywords.to_h { |_, key| [key, Literal::Property::RUBY_KEYWORDS.key?(key) ? fresh.(:"__literal_#{key}__") : key] }
 		options = fresh.(:__literal_options__)
 		returned = fresh.(:__literal_returned__)
-		block = parameters.find { |kind, param| :block == kind && :& != param }&.last || fresh.(:block)
+		block = parameters.find { |kind, param| :block == kind && :& != param && !claimed.include?(param) }&.last || fresh.(:block)
 
 		arguments = positional.zip(locals).map { |(kind, _), local| (:opt == kind) ? "#{local} = OMITTED" : local.name }
 		arguments.concat(keywords.map { |kind, key| (:key == kind) ? "#{key}: OMITTED" : "#{key}:" })
