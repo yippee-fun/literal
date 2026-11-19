@@ -302,10 +302,10 @@ class Literal::Draft < Literal::Struct
 		end
 
 		# For Literal's own calls, which no subclass method may intercept.
-		FINALIZE = instance_method(:finalize)
-		FINALIZE_UNCHECKED = instance_method(:__finalize_unchecked__)
-		STORE = instance_method(:__store__)
-		CONTEXT = instance_method(:__context__)
+		FINALIZE = Literal.method_handle(self, :finalize)
+		FINALIZE_UNCHECKED = Literal.method_handle(self, :__finalize_unchecked__)
+		STORE = Literal.method_handle(self, :__store__)
+		CONTEXT = Literal.method_handle(self, :__context__)
 	end
 
 	include API

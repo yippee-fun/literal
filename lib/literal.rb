@@ -4,38 +4,33 @@ require "zeitwerk"
 require_relative "literal/version"
 
 module Literal
-	OBJECT_ID = BasicObject.instance_method(:__id__)
-	EQUAL = BasicObject.instance_method(:equal?)
-	FROZEN = Kernel.instance_method(:frozen?)
-	FREEZE = Kernel.instance_method(:freeze)
-	CLASS = Kernel.instance_method(:class)
-	SEND = BasicObject.instance_method(:__send__)
-	PUBLIC_SEND = Kernel.instance_method(:public_send)
-	INSTANCE_EXEC = BasicObject.instance_method(:instance_exec)
-	RESPOND_TO = Kernel.instance_method(:respond_to?)
-	DUP = Kernel.instance_method(:dup)
-	INSTANCE_VARIABLE_GET = Kernel.instance_method(:instance_variable_get)
-	INSTANCE_VARIABLE_SET = Kernel.instance_method(:instance_variable_set)
-	INSTANCE_VARIABLE_DEFINED = Kernel.instance_method(:instance_variable_defined?)
-	REMOVE_INSTANCE_VARIABLE = Kernel.instance_method(:remove_instance_variable)
-	METHOD = Kernel.instance_method(:method)
-	HASH = Kernel.instance_method(:hash)
-	INSPECT = Kernel.instance_method(:inspect)
-
-	# So shareable types can be checked and compared in any Ractor, on Rubies
-	# that can share method objects (4.0+).
-	if defined?(Ractor)
-		begin
-			constants.each do |name|
-				next if autoload?(name)
-
-				handle = const_get(name)
-				Ractor.make_shareable(handle) if UnboundMethod === handle
-			end
-		rescue Ractor::Error
-			nil
-		end
+	# An instance method held for calling with bind_call, shareable so any
+	# Ractor can use it on Rubies that can share method objects (4.0+).
+	def self.method_handle(owner, name)
+		handle = owner.instance_method(name)
+		Ractor.make_shareable(handle) if defined?(Ractor)
+		handle
+	rescue Ractor::Error
+		handle
 	end
+
+	OBJECT_ID = method_handle(BasicObject, :__id__)
+	EQUAL = method_handle(BasicObject, :equal?)
+	FROZEN = method_handle(Kernel, :frozen?)
+	FREEZE = method_handle(Kernel, :freeze)
+	CLASS = method_handle(Kernel, :class)
+	SEND = method_handle(BasicObject, :__send__)
+	PUBLIC_SEND = method_handle(Kernel, :public_send)
+	INSTANCE_EXEC = method_handle(BasicObject, :instance_exec)
+	RESPOND_TO = method_handle(Kernel, :respond_to?)
+	DUP = method_handle(Kernel, :dup)
+	INSTANCE_VARIABLE_GET = method_handle(Kernel, :instance_variable_get)
+	INSTANCE_VARIABLE_SET = method_handle(Kernel, :instance_variable_set)
+	INSTANCE_VARIABLE_DEFINED = method_handle(Kernel, :instance_variable_defined?)
+	REMOVE_INSTANCE_VARIABLE = method_handle(Kernel, :remove_instance_variable)
+	METHOD = method_handle(Kernel, :method)
+	HASH = method_handle(Kernel, :hash)
+	INSPECT = method_handle(Kernel, :inspect)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")
@@ -59,7 +54,7 @@ module Literal
 
 	Immediate = Types._Union(Integer, Float, Symbol, nil, Types._Boolean)
 
-	SINGLETON_METHODS = Kernel.instance_method(:singleton_methods)
+	SINGLETON_METHODS = method_handle(Kernel, :singleton_methods)
 
 	# Kernel#respond_to? needs respond_to_missing?, which BasicObject lacks on JRuby.
 	def self.implements?(object, method_name)

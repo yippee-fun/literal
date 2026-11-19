@@ -27,15 +27,37 @@ end
 
 if defined?(Ractor) && Ractor.shareable?(Literal::OBJECT_ID)
 	test "shareable types can be compared in another Ractor" do
-		types = Ractor.make_shareable([_Boolean, _Array(_Union(String, Symbol)), _Array(String)])
+		types = Ractor.make_shareable([_Boolean, _Array(_Union(String, Symbol)), _Array(String), _SameObject(:a)])
 
-		ractor = Ractor.new(types) do |(boolean, wide, narrow)|
-			[Literal.subtype?(true, boolean), wide >= narrow, narrow <= wide, narrow >= wide]
+		ractor = Ractor.new(types) do |(boolean, wide, narrow, same)|
+			[Literal.subtype?(true, boolean), wide >= narrow, narrow <= wide, narrow >= wide, same >= same, same === :a]
 		end
 
 		results = ractor.respond_to?(:value) ? ractor.value : ractor.take
 
-		assert_equal results, [true, true, true, false]
+		assert_equal results, [true, true, true, false, true, true]
+	end
+
+	test "every method handle is shareable" do
+		handles = []
+		namespaces = [Literal]
+
+		while (namespace = namespaces.pop)
+			namespace.constants(false).each do |name|
+				next if namespace.autoload?(name)
+
+				case namespace.const_get(name, false)
+				in UnboundMethod => handle
+					handles << "#{namespace}::#{name}" unless Ractor.shareable?(handle)
+				in Module => nested if nested.name&.start_with?("#{namespace}::")
+					namespaces << nested
+				else
+					nil
+				end
+			end
+		end
+
+		assert_equal handles, []
 	end
 end
 

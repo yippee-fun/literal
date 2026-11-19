@@ -4,7 +4,7 @@
 class Literal::Types::SameObjectType
 	include Literal::Type
 
-	EQUAL_METHOD = BasicObject.instance_method(:equal?)
+	EQUAL_METHOD = Literal.method_handle(BasicObject, :equal?)
 
 	def initialize(object)
 		@object = object
