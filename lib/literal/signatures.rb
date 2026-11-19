@@ -130,6 +130,7 @@ module Literal::Signatures
 		arguments << "*__literal_optional__" if positional.size > required
 		arguments.concat(keywords.map { |key| "#{key}:" })
 		arguments << "**__literal_options__" if options.any?
+		arguments << "**nil" if parameters.any? { |kind, _| :nokey == kind }
 		arguments << "&"
 
 		checks = Array.new(required) { |index| check.("__literal_arg_#{index}__", index, positional[index].to_s) }

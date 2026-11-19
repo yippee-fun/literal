@@ -115,6 +115,18 @@ test "wraps the method under a prepended override" do
 	assert_raises(Literal::TypeError) { klass.new.double("2") }
 end
 
+test "keeps refusing keywords a method refuses" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(Hash) >> Hash
+		def echo(options, **nil) = options
+	end
+
+	assert_equal klass.new.echo({ flag: true }), { flag: true }
+	assert_raises(::ArgumentError) { klass.new.echo(flag: true) }
+end
+
 test "lets Ruby refuse a missing argument" do
 	assert_raises(::ArgumentError) { SignedGreeter.new.greet }
 end
