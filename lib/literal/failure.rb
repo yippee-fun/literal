@@ -12,7 +12,7 @@ class Literal::Failure < Literal::Result
 		attr_reader :type
 
 		def ===(object)
-			Literal::Failure === object && @type === object.error!
+			Literal::Failure === object && !!(@type === object.error!)
 		end
 
 		def ==(other)

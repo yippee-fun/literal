@@ -15,9 +15,9 @@ class Literal::Result::Generic
 	def ===(object)
 		case object
 		when Literal::Success
-			@success_type === object.value!
+			!!(@success_type === object.value!)
 		when Literal::Failure
-			@failure_type === object.error!
+			!!(@failure_type === object.error!)
 		else
 			false
 		end

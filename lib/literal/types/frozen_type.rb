@@ -38,7 +38,7 @@ class Literal::Types::FrozenType
 	end
 
 	def ===(value)
-		value.frozen? && @type === value
+		!!(value.frozen? && @type === value)
 	end
 
 	def >=(other, context: nil)

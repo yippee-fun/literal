@@ -12,7 +12,7 @@ class Literal::Success < Literal::Result
 		attr_reader :type
 
 		def ===(object)
-			Literal::Success === object && @type === object.value!
+			Literal::Success === object && !!(@type === object.value!)
 		end
 
 		def ==(other)

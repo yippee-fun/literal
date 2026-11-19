@@ -31,7 +31,7 @@ class Literal::Types::NilableType
 	end
 
 	def ===(value)
-		nil === value || @type === value
+		nil === value || !!(@type === value)
 	end
 
 	def record_literal_type_errors(ctx)

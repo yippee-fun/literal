@@ -61,7 +61,7 @@ class Literal::Types::DeferredType
 	# through a deferred type. Guarding here alone stops a cyclic value from
 	# recursing forever: re-entry with the same value answers false.
 	def ===(other)
-		Literal.with_match_guard(self, other) { materialize === other }
+		Literal.with_match_guard(self, other) { !!(materialize === other) }
 	end
 
 	def >=(other, context: nil)

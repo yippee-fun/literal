@@ -215,7 +215,7 @@ module Literal
 	end
 
 	def self.subtype?(type, supertype, context: nil)
-		return supertype >= type if Module === type && Module === supertype && !(Literal::Type === supertype)
+		return !!(supertype >= type) if Module === type && Module === supertype && !(Literal::Type === supertype)
 
 		context ||= SubtypeContext.new
 		raw_key = [type.object_id, supertype.object_id]
@@ -251,7 +251,20 @@ module Literal
 			resolved_acquired = true
 		end
 
-		result = if subtype == Types::NeverType::Instance
+		result = !!resolved_subtype?(subtype, supertype, context)
+
+		context.store(resolved_key, result)
+		context.store(raw_key, result)
+		result
+	ensure
+		if context
+			context.release(resolved_key) if resolved_acquired
+			context.release(raw_key) if raw_acquired
+		end
+	end
+
+	private_class_method def self.resolved_subtype?(subtype, supertype, context)
+		if subtype == Types::NeverType::Instance
 			true
 		elsif supertype == subtype
 			true
@@ -304,15 +317,6 @@ module Literal
 			else
 				false
 			end
-		end
-
-		context.store(resolved_key, result)
-		context.store(raw_key, result)
-		result
-	ensure
-		if context
-			context.release(resolved_key) if resolved_acquired
-			context.release(raw_key) if raw_acquired
 		end
 	end
 

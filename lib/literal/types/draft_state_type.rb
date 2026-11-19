@@ -33,7 +33,7 @@ class Literal::Types::DraftStateType
 	end
 
 	def ===(value)
-		@relaxed === value
+		!!(@relaxed === value)
 	end
 
 	def record_literal_type_errors(ctx)

@@ -26,7 +26,7 @@ class Literal::Types::RangeType
 	end
 
 	def ===(value)
-		Range === value && (
+		Range === value && !!(
 			(
 				@type === value.begin && (nil === value.end || @type === value.end)
 			) || (
