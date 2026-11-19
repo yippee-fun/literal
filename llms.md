@@ -245,6 +245,8 @@ Refused **when the class loads**, as `Literal::ArgumentError`: types that don't 
 
 The checking method is compiled to the method's own parameter list and calls the original through a private alias, so stack traces still read `Greeter#greet` and one taking only required parameters allocates nothing; optional parameters may cost the Array or Hash that carries them, depending on the Ruby.
 
+Inside a signed method, `__method__` reports the method's own name, but `__callee__` reports the private alias the checker calls (or the method's own name under a prepended override), so call back through `__method__`.
+
 ## Rails
 
 Auto-loads with Rails. AM/AR attribute types `:literal_enum`/`:literal_flags` (`attribute :color, :literal_enum, type: Color`), equal only for the same enum/flags class (and format, or wrapped subtype); the Railtie also registers the Active Job enum serializer; `ActiveRecord.Relation(Model)` relation type.
