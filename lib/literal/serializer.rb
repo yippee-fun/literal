@@ -135,11 +135,14 @@ class Literal::Serializer
 
 	# A key under which raw JSON values compare the way JSON Schema compares
 	# them: numbers by value at any depth, so 1 and 1.0 are the same value, and
-	# so are [1] and [1.0].
+	# so are [1] and [1.0]. A Float is written as its shortest decimal, so it
+	# means that decimal's exact value: 1e24 is 10**24, though the Float
+	# itself is a little less.
 	def self.json_equality_key(value)
 		case value
-		in Float if value.finite? && value == value.floor
-			value.to_i
+		in Float if value.finite?
+			number = Rational(value.to_s)
+			(number.denominator == 1) ? number.numerator : number
 		in Array
 			value.map { |item| json_equality_key(item) }
 		in Hash

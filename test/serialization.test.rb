@@ -3330,6 +3330,17 @@ test "const discriminants compare numbers as JSON numbers inside arrays and obje
 	refute Example.serializable_type?(_Union(_Map(kind: integers::One, payload: String), _Map(kind: floats::One, payload: Integer)))
 end
 
+test "const discriminants compare floats by the decimal JSON writes for them" do
+	assert_equal Literal::Serializer.json_equality_key([1e24]), Literal::Serializer.json_equality_key([10 ** 24])
+	assert_equal Literal::Serializer.json_equality_key({ "a" => 0.1 }), { "a" => 1/10r }
+	refute_equal Literal::Serializer.json_equality_key(0.1), Literal::Serializer.json_equality_key(0.1000000000000001)
+
+	refute Example.serializable_type?(_Union(_Map(kind: 1e24, payload: String), _Map(kind: 10 ** 24, payload: Integer)))
+
+	type = _Union(_Map(kind: 0.1, payload: String), _Map(kind: 0.2, payload: String))
+	assert_equal(Example.deserialize({ "kind" => 0.2, "payload" => "b" }, type:), { kind: 0.2, payload: "b" })
+end
+
 test "consts with disjoint values can share a JSON type in a union" do
 	[
 		[_Nilable(_Union(:draft, :published)), [:draft, :published, nil]],
