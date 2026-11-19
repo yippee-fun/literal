@@ -366,6 +366,58 @@ test "signs a subclass's method once under both classes' hooks" do
 	assert_raises(Literal::TypeError) { child.new.hello(1) }
 end
 
+test "signs past method hooks a class prepends after signing, without calling super" do
+	klass = Class.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def greet(name) = name
+
+		singleton_class.prepend(Module.new do
+			private def method_added(name) = nil
+			private def singleton_method_added(name) = nil
+		end)
+
+		sig(String) >> String
+		def hello(name) = name
+
+		sig(String) >> String
+		def self.shout(text) = text
+	end
+
+	assert_equal klass.private_instance_methods(false).grep(/unsigned/).size, 2
+	assert_raises(Literal::TypeError) { klass.new.hello(1) }
+	assert_raises(Literal::TypeError) { klass.shout(1) }
+end
+
+test "handles each method once under a module's older hooks" do
+	seen = []
+
+	mod = Module.new do
+		extend Literal::Signatures
+
+		sig(String) >> String
+		def echo(text) = text
+
+		singleton_class.prepend(Module.new do
+			define_method(:method_added) do |name|
+				seen << name
+				super(name)
+			end
+		end)
+
+		sig(String) >> String
+		def shout(text) = text.upcase
+		module_function :echo, :shout
+	end
+
+	assert_equal seen, [:shout]
+	assert_equal mod.private_instance_methods(false).grep(/unsigned/).size, 2
+	assert_equal mod.shout("a"), "A"
+	assert_raises(Literal::TypeError) { mod.echo(1) }
+	assert_raises(Literal::TypeError) { mod.shout(1) }
+end
+
 test "signs past a class's own reflection methods" do
 	reflection = [
 		:instance_method,

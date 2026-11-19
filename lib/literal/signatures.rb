@@ -82,47 +82,57 @@ module Literal::Signatures
 	# Prepended, so a class's own hooks cannot hide a method from its sig by not
 	# calling super. They see the method once it is signed, so one defining a
 	# method of its own cannot take the sig, and do not see the methods signing
-	# defines.
+	# defines. Only the class's newest hooks act, so older ones further down
+	# its chain do not handle a method twice.
 	class MethodHooks < Module
 		def initialize
 			super
 
-			module_eval do
-				private def method_added(name)
-					return if @__literal_signing__
+			hooks = self
 
+			define_method(:method_added) do |name|
+				return if @__literal_signing__
+
+				if Literal::EQUAL.bind_call(hooks, @__literal_method_hooks__)
 					if @__literal_signature__
 						__literal_bind_signature__(self, name)
 					elsif @__literal_signed__&.key?(name)
 						@__literal_signed__ = @__literal_signed__.except(name)
 					end
-
-					super
 				end
 
-				private def singleton_method_added(name)
-					return if @__literal_signing__
+				super(name)
+			end
 
+			define_method(:singleton_method_added) do |name|
+				return if @__literal_signing__
+
+				if Literal::EQUAL.bind_call(hooks, @__literal_method_hooks__)
 					if @__literal_signature__
 						__literal_bind_signature__(Literal::SINGLETON_CLASS.bind_call(self), name)
 					else
 						__literal_sign_module_function__(name)
 					end
-
-					super
 				end
+
+				super(name)
 			end
+
+			private(:method_added, :singleton_method_added)
 		end
 	end
 	private_constant :MethodHooks
 
-	# A subclass inherits its parent's hooks behind its own singleton class,
-	# where hooks of its own could hide a method from them, so each class gets
-	# hooks of its own. TruffleRuby leaves out a module an ancestor already has.
+	# A subclass inherits its parent's hooks behind its own singleton class, and
+	# a module prepended after them sits ahead of them, where hooks of its own
+	# could hide a method from them, so the class takes new hooks unless its
+	# newest are first.
 	private def __literal_hook_methods__
 		singleton = Literal::SINGLETON_CLASS.bind_call(self)
-		prepended = Literal::ANCESTORS.bind_call(singleton).take_while { |mod| !Literal::EQUAL.bind_call(mod, singleton) }
-		Literal::PREPEND.bind_call(singleton, MethodHooks.new) unless prepended.any?(MethodHooks)
+		return if Literal::EQUAL.bind_call(Literal::ANCESTORS.bind_call(singleton).first, @__literal_method_hooks__)
+
+		@__literal_method_hooks__ = MethodHooks.new
+		Literal::PREPEND.bind_call(singleton, @__literal_method_hooks__)
 	end
 
 	private def __literal_bind_signature__(owner, name)
