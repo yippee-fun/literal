@@ -21,5 +21,13 @@ class Literal::Delegator < SimpleDelegator
 
 	alias_method :==, :===
 
+	def eql?(other)
+		self.class == other.class && __getobj__.eql?(other.__getobj__)
+	end
+
+	def hash
+		[self.class, __getobj__].hash
+	end
+
 	freeze
 end
