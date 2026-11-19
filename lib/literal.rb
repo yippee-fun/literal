@@ -274,6 +274,8 @@ module Literal
 				case subtype
 				when Literal::Type
 					subtype.<=(supertype, context:)
+				when Range
+					range_contains?(supertype, subtype)
 				else
 					supertype.cover?(subtype)
 				end
@@ -290,6 +292,29 @@ module Literal
 			context.release(resolved_key) if resolved_acquired
 			context.release(raw_key) if raw_acquired
 		end
+	end
+
+	# Range#cover?(range) treats integer ranges as discrete, so (1..4) covers
+	# (1...5) even though 4.5 is in the latter. Compare the endpoints instead.
+	private_class_method def self.range_contains?(range, other)
+		begin_contained = case [range.begin, other.begin]
+		in [nil, _] then true
+		in [_, nil] then false
+		in [lower, other_lower] then (lower <=> other_lower) in -1 | 0
+		end
+
+		end_contained = case [range.end, other.end]
+		in [nil, _] then true
+		in [_, nil] then false
+		in [upper, other_upper]
+			case upper <=> other_upper
+			in 1 then true
+			in 0 then !range.exclude_end? || other.exclude_end?
+			else false
+			end
+		end
+
+		begin_contained && end_contained
 	end
 end
 

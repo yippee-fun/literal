@@ -75,3 +75,21 @@ test "results resting on a failed coinductive assumption are not memoized" do
 	refute_subtype left, other
 	refute_subtype left, _Union(right, other)
 end
+
+test "range literals compare as continuous intervals" do
+	assert_subtype (1..4), (1..4)
+	assert_subtype (1...4), (1..4)
+	assert_subtype (2..3), (1..4)
+	assert_subtype (2..3), (1..)
+	assert_subtype (2..3), (..4)
+	assert_subtype (1..4), (nil..nil)
+	assert_subtype (1.0..4.0), (1..4)
+
+	refute_subtype (1...5), (1..4)
+	refute_subtype (1..4), (1...4)
+	refute_subtype (0..4), (1..4)
+	refute_subtype (1..), (1..4)
+	refute_subtype (..4), (1..4)
+	refute_subtype ("a".."z"), (1..4)
+	refute_subtype _Float(1...5), _Constraint(Numeric, 1..4)
+end
