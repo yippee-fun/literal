@@ -253,6 +253,37 @@ unless RUBY_ENGINE == "truffleruby"
 		assert_equal namespace::Reopened.new.pair(1, 2), [1, 2]
 	end
 
+	test "lets an error raised after a sig end the class body" do
+		assert_raises(NameError) do
+			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				class Typo
+					extend Literal::Signatures
+
+					sig(String) >> Strng
+					def greet(name) = name
+				end
+			RUBY
+		end
+	end
+
+	test "refuses a dangling sig after an error rescued in the class body" do
+		error = assert_raises(Literal::ArgumentError) do
+			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+				class Rescued
+					extend Literal::Signatures
+
+					sig(String) >> String
+					begin
+						raise "rescued"
+					rescue RuntimeError
+					end
+				end
+			RUBY
+		end
+
+		assert error.message.include?("has no method after it")
+	end
+
 	test "refuses to load a class body that ends on a sig" do
 		error = assert_raises(Literal::ArgumentError) do
 			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)

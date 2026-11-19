@@ -235,6 +235,11 @@ module Literal::Signatures
 		end
 	end
 
+	# MRI also ends a class body that an exception is unwinding, so there the
+	# watch tracks the exceptions raised since the sig and not rescued, and
+	# leaves one in flight to propagate.
+	WATCHED = ((RUBY_ENGINE == "ruby") ? [:end, :raise, :rescue] : [:end]).freeze
+
 	# Watches this module's own `end`, and only until the next method is
 	# defined. A `Class.new` block has no `end` event, and TruffleRuby has no
 	# TracePoint, so there a sig with nothing after it is caught by the next sig.
@@ -243,12 +248,23 @@ module Literal::Signatures
 
 		owner = self
 		signature = @__literal_signature__
-		@__literal_signature_watch__ = TracePoint.new(:end) do |tp|
-			next unless Literal::EQUAL.bind_call(tp.self, owner)
+		thread = Thread.current
+		unwinding = []
+		@__literal_signature_watch__ = TracePoint.new(*WATCHED) do |tp|
+			next unless thread.equal?(Thread.current)
 
-			tp.disable
-			Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
-			raise Literal::ArgumentError, "#{owner}: the sig at #{signature.site} has no method after it"
+			case tp.event
+			in :raise
+				unwinding << tp.raised_exception
+			in :rescue
+				unwinding.reject! { |error| error.equal?(tp.raised_exception) }
+			in :end
+				next unless Literal::EQUAL.bind_call(tp.self, owner)
+
+				tp.disable
+				Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
+				raise Literal::ArgumentError, "#{owner}: the sig at #{signature.site} has no method after it" if unwinding.empty?
+			end
 		end
 		@__literal_signature_watch__.enable
 	end
