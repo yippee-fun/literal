@@ -875,7 +875,7 @@ test "with reports errors from its caller" do
 	check_error = assert_raises(Literal::CheckError) { original.with(label: "") }
 
 	assert type_error.message.include?("#with (from #{type_error.backtrace[1]})")
-	assert type_error.backtrace.first(2).any? { |frame| frame.include?("data.test.rb") }
+	assert type_error.backtrace.first.include?("data.test.rb")
 	assert check_error.backtrace.first.include?("data.test.rb")
 end
 

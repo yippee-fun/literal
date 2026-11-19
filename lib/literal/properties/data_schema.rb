@@ -85,7 +85,7 @@ class Literal::Properties::DataSchema < Literal::Properties::Schema
 			"  end\n" \
 			"rescue ::Literal::TypeError => error\n" \
 			"  ::Kernel.raise if assigned\n" \
-			"  error.set_backtrace(::Kernel.caller(1))\n" \
+			"  error.set_backtrace(::Literal::Error.trim(::Kernel.caller_locations(1)))\n" \
 			"  ::Kernel.raise\n" \
 			"end\n"
 	end
