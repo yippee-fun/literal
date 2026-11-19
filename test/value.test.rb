@@ -182,16 +182,41 @@ end
 test "from_pack keeps a value shared where the type requires it frozen" do
 	shared = "x"
 	value_class = Literal::Value(Literal::Types._Array(Literal::Types._Frozen(String)))
-	loaded = value_class.from_pack(value_class.new([shared, shared]).as_pack)
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new([shared, shared]).as_pack)))
 
 	assert loaded.value.all?(&:frozen?)
 	assert loaded.value[0].equal?(loaded.value[1])
 
-	inner = ["x"].freeze
-	value_class = Literal::Value(Literal::Types._Array(Literal::Types._Frozen(Literal::Types._Array(String))))
-	loaded = value_class.from_pack(value_class.new([inner, [inner[0]].freeze]).as_pack)
+	shared = ["x"].freeze
+	value_class = Literal::Value(Literal::Types._Hash(Symbol, Literal::Types._Frozen(Literal::Types._Array(String))))
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new({ a: shared, b: shared }).as_pack)))
 
-	assert loaded.value[0][0].equal?(loaded.value[1][0])
+	assert loaded.value[:a].frozen?
+	assert loaded.value[:a].equal?(loaded.value[:b])
+end
+
+test "from_pack restores a value shared between types that freeze it differently" do
+	ranges = [("a".."b")].freeze
+	value_class = Literal::Value(
+		Literal::Types._Tuple(
+			Literal::Types._Frozen(Array),
+			Literal::Types._Frozen(Literal::Types._Array(Literal::Types._Range(Literal::Types._Frozen(String)))),
+		),
+	)
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new([ranges, ranges]).as_pack)))
+
+	assert_equal loaded.value, [ranges, ranges]
+	assert loaded.value[1].first.begin.frozen?
+end
+
+test "from_pack restores through matchers that only implement ===" do
+	matcher = BasicObject.new
+	def matcher.===(value) = ::String === value
+
+	value_class = Literal::Value(Literal::Types._Array(matcher))
+	loaded = value_class.from_pack(Marshal.load(Marshal.dump(value_class.new(["a", "a"]).as_pack)))
+
+	assert_equal loaded.value, ["a", "a"]
 end
 
 test "from_pack restores frozen values that contain themselves" do

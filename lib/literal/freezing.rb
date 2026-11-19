@@ -9,10 +9,10 @@ module Literal::Freezing
 	# copying anything not already frozen, so the raw input it may share is
 	# never mutated. Any other object is frozen by its own #freeze, and left as
 	# it is when nested in plain data. A shape's own #freeze may be a reader.
-	def deep_frozen(value, copies = {}.compare_by_identity)
+	def deep_frozen(value)
 		case value
 		in String | Array | Hash | Set
-			frozen_data(value, copies)
+			frozen_data(value, {}.compare_by_identity)
 		in _ if Literal::Properties === Literal::CLASS.bind_call(value)
 			Literal::FREEZE.bind_call(value)
 		else
@@ -26,18 +26,18 @@ module Literal::Freezing
 	# deserialization would load it. The containers holding those values are
 	# updated in place.
 	def restore_frozen(value, type)
-		restore(value, type, Restoration.new(active: {}.compare_by_identity, restored: {}.compare_by_identity, copies: {}.compare_by_identity))
+		restore(value, type, Restoration.new(active: {}.compare_by_identity, restored: {}.compare_by_identity))
 	end
 
-	# The values being restored, each one's replacement by type, and the frozen
-	# copies made, all by identity, so a value appearing more than once is
-	# replaced by the same object each time, as Marshal shares it.
-	Restoration = Data.define(:active, :restored, :copies)
+	# The values being restored, and each one's replacement by type, all by
+	# identity, so a value appearing more than once as a type is replaced by
+	# the same object each time, as Marshal shares it.
+	Restoration = Data.define(:active, :restored)
 
 	# A value can contain itself, so a value already being restored as a type
 	# is left as it is rather than walked again.
 	private def restore(value, type, state)
-		replacements = (state.restored[value] ||= {})
+		replacements = (state.restored[value] ||= {}.compare_by_identity)
 		return replacements[type] if replacements.key?(type)
 
 		types = (state.active[value] ||= {}.compare_by_identity)
@@ -58,12 +58,12 @@ module Literal::Freezing
 			restore(value, type.materialize, state)
 		when Literal::Types::FrozenType
 			value = restore(value, type.type, state)
-			(type.type === value) ? deep_frozen(value, state.copies) : value
+			(type.type === value) ? deep_frozen(value) : value
 		when Literal::Types::ConstraintType
 			value = type.object_constraints.reduce(value) { |item, constraint| restore(item, constraint, state) }
 
 			if Literal.subtype?(type.property_constraints[:frozen?], true) && type.object_constraints.all? { |constraint| constraint === value }
-				deep_frozen(value, state.copies)
+				deep_frozen(value)
 			else
 				value
 			end
