@@ -178,3 +178,19 @@ test "serializes to the backing value" do
 	assert_equal level.serialize("2"), 2
 	assert_equal level.serialize(nil), nil
 end
+
+test "types are equal only with the same enum and subtype" do
+	assert_equal level, Literal::Rails::EnumType.new(TypedLevel)
+	assert level.eql?(Literal::Rails::EnumType.new(TypedLevel))
+	assert_equal level.hash, Literal::Rails::EnumType.new(TypedLevel).hash
+
+	refute_equal level, status
+	refute level.eql?(status)
+	refute_equal level.hash, status.hash
+
+	integer_column = Literal::Rails::EnumType.new(TypedLevel, ActiveModel::Type::Integer.new)
+	assert_equal integer_column, Literal::Rails::EnumType.new(TypedLevel, ActiveModel::Type::Integer.new)
+	refute_equal level, integer_column
+	refute level.eql?(integer_column)
+	refute_equal level.hash, integer_column.hash
+end

@@ -7,7 +7,17 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 		super()
 	end
 
-	attr_reader :subtype
+	attr_reader :enum, :subtype
+
+	def ==(other)
+		super && @enum == other.enum && @subtype == other.subtype
+	end
+
+	alias_method :eql?, :==
+
+	def hash
+		[super, @enum, @subtype].hash
+	end
 
 	def type
 		:literal_enum
