@@ -101,11 +101,13 @@ class Literal::HashSerializer < Literal::Serializer
 		if string_keyed?(hash_type)
 			serialized_entries.to_h
 		else
-			serialized_entries
+			sort_canonically(serialized_entries)
 		end
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless raw_entries?(raw)
+
 		hash_type = hash_type_for(type)
 		key_type = hash_type.key_type
 		value_type = hash_type.value_type
@@ -115,6 +117,18 @@ class Literal::HashSerializer < Literal::Serializer
 				deserialize_contents(key, type: key_type),
 				deserialize_contents(item, type: value_type),
 			]
+		end
+	end
+
+	# A JSON object, or an array of [key, value] pairs.
+	private def raw_entries?(raw)
+		case raw
+		when Hash
+			true
+		when Array
+			raw.all? { |entry| Array === entry && entry.size == 2 }
+		else
+			false
 		end
 	end
 

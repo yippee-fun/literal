@@ -20,6 +20,7 @@ EXAMPLES = {
 	],
 	Range => [
 		(1..10),
+		("a".."z"),
 	],
 	Set => [
 		Set[],
@@ -56,5 +57,16 @@ Literal::Transforms.each do |type, transforms|
 				end
 			end
 		end
+	end
+end
+
+test "Range#size can be nil or Infinity, so mapping it to Integer is checked" do
+	# TruffleRuby makes a new Proc for each Symbol#to_proc, so finds no transform.
+	if (transform = Literal::Transforms[Range][:size.to_proc])
+		assert transform === (1..).size
+	end
+
+	assert_raises(Literal::TypeError) do
+		Literal::Array(Range).new("a".."z", 1..).map(Integer, &:size)
 	end
 end

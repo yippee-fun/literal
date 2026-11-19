@@ -24,7 +24,8 @@ class Literal::Serializer::ObjectShape
 	attr_reader :allowed
 
 	# For keys whose value type has a finite serialized domain (such as a
-	# constant), the set of raw values the key accepts.
+	# constant), the set of raw values the key accepts, keyed by
+	# Literal::Serializer.json_equality_key.
 	attr_reader :const_domains
 
 	# Whether no raw object can satisfy both shapes: one requires a key the
@@ -42,7 +43,7 @@ class Literal::Serializer::ObjectShape
 	def accepts?(raw)
 		@required.all? { |key| raw.key?(key) } &&
 			raw.each_key.all? { |key| @allowed.include?(key) } &&
-			@const_domains.all? { |key, domain| !raw.key?(key) || domain.include?(raw[key]) }
+			@const_domains.all? { |key, domain| !raw.key?(key) || domain.include?(Literal::Serializer.json_equality_key(raw[key])) }
 	end
 
 	protected def requires_key_excluded_by?(other)

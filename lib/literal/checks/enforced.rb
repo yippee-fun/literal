@@ -10,18 +10,19 @@ module Literal::Checks::Enforced
 	# at all.
 	private def __literal_run_checks__(only = nil, written = nil)
 		errors = Literal::Checks::Collector.new
-		properties = self.class.literal_properties
+		shape = Literal::CLASS.bind_call(self)
+		properties = shape.literal_properties
 
-		Literal::Checks::Checker.run_checks(self.class, errors, only:) do |name|
+		Literal::Checks::Checker.run_checks(shape, errors, only:) do |name|
 			if name == only
 				written
 			else
-				instance_variable_get(properties[name].__ivar__)
+				Literal::INSTANCE_VARIABLE_GET.bind_call(self, properties[name].__ivar__)
 			end
 		end
 
 		return unless errors.any?
 
-		Literal::CheckError.raise_trimmed(shape: self.class, errors: errors.to_errors)
+		Literal::CheckError.raise_trimmed(shape:, errors: errors.to_errors)
 	end
 end

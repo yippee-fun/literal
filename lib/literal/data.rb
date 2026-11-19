@@ -7,29 +7,19 @@ class Literal::Data < Literal::DataStructure
 		# Frozen before its checks see it, so a check judges a finished value
 		# exactly as it does on the initializer path.
 		private def __literal_from_props__(props, seal: true)
-			super.freeze
+			Literal::FREEZE.bind_call(super)
 		end
 
 		def define(**properties)
 			Class.new(self) do
-				properties.each { |name, type| prop(name, type) }
+				props do
+					properties.each { |name, type| prop(name, type) }
+				end
 			end
 		end
 
 		def prop(name, type, kind = :keyword, reader: :public, predicate: false, default: nil, description: nil, &coercion)
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:, &coercion)
-		end
-
-		def prop?(name, type, kind = :keyword, reader: :public, predicate: false, description: nil, &coercion)
-			prop(
-				name,
-				Literal::Types._Union(type, Literal::Undefined),
-				kind,
-				reader:,
-				predicate:,
-				description:,
-				&coercion
-			)
 		end
 
 		private def __generate_literal_methods__(new_property, buffer = +"")
@@ -52,6 +42,12 @@ class Literal::Data < Literal::DataStructure
 				@literal_properties = Literal::Properties::DataSchema.new
 			end
 		end
+	end
+
+	# Copies stay frozen, like Ruby's Data.
+	private def initialize_copy(source)
+		super
+		Literal::FREEZE.bind_call(self)
 	end
 
 	# Generated per class once it has properties; see DataSchema#generate_with.

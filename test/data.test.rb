@@ -156,6 +156,22 @@ test "== comparison with readerless properties" do
 	refute_equal(a, c)
 end
 
+test "private and protected readers leave equality and hash public" do
+	[:private, :protected].each do |visibility|
+		data = Class.new(Literal::Data) { prop :x, Integer, reader: visibility }
+		struct = Class.new(Literal::Struct) do
+			prop :x, Integer, reader: visibility
+			check(:x, "must be positive") { |x:| x > 0 }
+		end
+
+		[data, struct].each do |shape|
+			assert_equal(shape.new(x: 1), shape.new(x: 1))
+			assert_equal(shape.new(x: 1).eql?(shape.new(x: 1)), true)
+			assert_equal(shape.new(x: 1).hash, shape.new(x: 1).hash)
+		end
+	end
+end
+
 test "properties have readers by default" do
 	person = Person.new(name: "John")
 	assert_equal(person.name, "John")
@@ -435,6 +451,83 @@ end
 test "indexed access raises for invalid key types" do
 	person = Person.new(name: "John")
 	assert_raises(TypeError) { person[0] }
+end
+
+test "indexed access names the invalid key's class" do
+	error = assert_raises(TypeError) { Person.new(name: "John")[0] }
+
+	assert_equal error.message, "expected a string or symbol, got Integer"
+end
+
+test "indexed access reads the stored value whatever methods the object has" do
+	klass = Class.new(Literal::Data) do
+		prop :hash, Integer, reader: false
+		prop :class, String, reader: false
+		prop :y, Integer, reader: false
+	end
+
+	instance = klass.new(hash: 1, class: "c", y: 2)
+
+	assert_equal [instance[:hash], instance[:class], instance[:y]], [1, "c", 2]
+end
+
+test "indexed access reads the stored value when a reader shadows instance_variable_get" do
+	klass = Class.new(Literal::Data) do
+		prop :instance_variable_get, String
+	end
+
+	assert_equal klass.new(instance_variable_get: "a")[:instance_variable_get], "a"
+end
+
+test "eql? compares values with eql?, agreeing with hash" do
+	klass = Class.new(Literal::Data) { prop :n, Numeric }
+
+	assert_equal klass.new(n: 1), klass.new(n: 1.0)
+	assert_equal klass.new(n: 1).eql?(klass.new(n: 1.0)), false
+	assert_equal klass.new(n: 1).eql?(klass.new(n: 1)), true
+	assert_equal({ klass.new(n: 1) => true }.key?(klass.new(n: 1.0)), false)
+end
+
+test "copies stay frozen" do
+	person = Person.new(name: "John")
+
+	assert person.dup.frozen?
+	assert person.clone.frozen?
+	assert person.clone(freeze: false).frozen?
+	assert_equal person.dup, person
+end
+
+class DataWithoutEql
+	undef_method :eql?
+end
+
+class DataPrivatelyComparable
+	def initialize(key) = @key = key
+
+	attr_reader :key
+
+	private def eql?(other) = DataPrivatelyComparable === other && @key == other.key
+	private def hash = @key.hash
+end
+
+test "eql? and hash reach values without a public eql? or hash" do
+	basic = BasicObject.new
+	without_eql = DataWithoutEql.new
+	any = Class.new(Literal::Data) { prop :value, BasicObject }
+	typed = Class.new(Literal::Data) { prop :value, DataWithoutEql }
+	private_eql = Class.new(Literal::Data) { prop :value, DataPrivatelyComparable }
+
+	assert_equal any.new(value: basic), any.new(value: basic)
+	assert_equal any.new(value: basic).eql?(any.new(value: basic)), true
+	assert_equal any.new(value: basic).eql?(any.new(value: BasicObject.new)), false
+	assert_equal any.new(value: basic).hash, any.new(value: basic).hash
+	assert_equal any.new(value: without_eql).eql?(any.new(value: without_eql)), true
+	assert_equal typed.new(value: without_eql).eql?(typed.new(value: without_eql)), true
+	assert_equal typed.new(value: without_eql).eql?(typed.new(value: DataWithoutEql.new)), false
+	assert_equal private_eql.new(value: DataPrivatelyComparable.new(1)).eql?(private_eql.new(value: DataPrivatelyComparable.new(1))), true
+	assert_equal private_eql.new(value: DataPrivatelyComparable.new(1)).hash, private_eql.new(value: DataPrivatelyComparable.new(1)).hash
+	assert_equal any.new(value: DataPrivatelyComparable.new(1)).eql?(any.new(value: DataPrivatelyComparable.new(1))), true
+	assert_equal any.new(value: DataPrivatelyComparable.new(1)).hash, any.new(value: DataPrivatelyComparable.new(1)).hash
 end
 
 class WithExample < Literal::Data

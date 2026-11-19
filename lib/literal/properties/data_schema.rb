@@ -3,7 +3,7 @@
 class Literal::Properties::DataSchema < Literal::Properties::Schema
 	def generate_after_initializer(buffer = +"")
 		super
-		buffer << "  freeze\n"
+		buffer << "  ::Literal::FREEZE.bind_call(self)\n"
 	end
 
 	# Follows the initializer's lifecycle on a fresh copy, in property order, so

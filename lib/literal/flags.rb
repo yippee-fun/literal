@@ -3,16 +3,23 @@
 class Literal::Flags
 	include Enumerable
 
-	def initialize(value = 0, **new_flags)
-		if new_flags.length > 0
+	def initialize(value = Literal::Undefined, **new_flags)
+		if new_flags.empty?
+			value = 0 if Literal::Undefined == value
+		elsif Literal::Undefined == value
 			value = self.class.calculate_from_hash(new_flags)
+		else
+			raise Literal::ArgumentError.new("Pass either a value or flags to #{self.class.inspect}.new, not both.")
 		end
 
-		@value = value
-		freeze
+		__initialize_from_value__(value)
 	end
 
 	def __initialize_from_value__(value)
+		Literal.check(value, Literal::Types._Integer(0...(1 << self.class::BITS))) do |c|
+			c.fill_receiver(receiver: self, method: "#initialize")
+		end
+
 		@value = value
 		freeze
 	end
@@ -27,6 +34,10 @@ class Literal::Flags
 		if unique_values.length != flags.length
 			raise Literal::ArgumentError.new("Flags must be unique.")
 		end
+
+		bit_type = Literal::Types._Integer(0...self::BITS)
+
+		flags.each_value { |bit| Literal.check(bit, bit_type) }
 
 		const_set(:FLAGS, flags.dup.freeze)
 
@@ -95,11 +106,15 @@ class Literal::Flags
 
 	# () -> Array(Symbol)
 	def self.keys
-		@flags.keys
+		self::FLAGS.keys
 	end
 
 	# (String) -> Literal::Flags
 	def self.from_bit_string(bit_string)
+		unless String === bit_string && /\A[01]+\z/.match?(bit_string)
+			raise Literal::ArgumentError.new("#{bit_string.inspect} isn't a bit string.")
+		end
+
 		from_int(bit_string.to_i(2))
 	end
 
@@ -157,6 +172,8 @@ class Literal::Flags
 	end
 
 	def each
+		return enum_for(__method__) { self.class::FLAGS.size } unless block_given?
+
 		self.class::FLAGS.each do |key, bit|
 			yield key, @value & (2 ** bit) > 0
 		end
@@ -168,21 +185,21 @@ class Literal::Flags
 	end
 
 	def |(other)
-		case other
-		when Literal::Flags
-			self.class.new(@value | other.value)
-		when Integer
-			self.class.new(@value | other)
-		end
+		self.class.new(@value | bits_of(other))
 	end
 
 	def &(other)
-		case other
-		when Literal::Flags
-			self.class.new(@value & other.value)
-		when Integer
-			self.class.new(@value & other)
-		end
+		self.class.new(@value & bits_of(other))
+	end
+
+	def ==(other)
+		Literal::Flags === other && other.class == self.class && @value == other.value
+	end
+
+	alias_method :eql?, :==
+
+	def hash
+		[self.class, @value].hash
 	end
 
 	def to_i
@@ -204,12 +221,17 @@ class Literal::Flags
 	alias_method :deconstruct, :to_a
 
 	def deconstruct_keys(keys = nil)
-		if keys
-			keys.to_h do |key|
-				[key, @value & (bitmap(key)) > 0]
-			end
+		keys ? to_h.slice(*keys) : to_h
+	end
+
+	private def bits_of(other)
+		case other
+		in Integer
+			other
+		in Literal::Flags if other.class == self.class
+			other.value
 		else
-			to_h
+			raise Literal::ArgumentError.new("Can't combine #{self.class.inspect} with #{other.inspect}.")
 		end
 	end
 

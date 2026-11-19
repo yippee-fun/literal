@@ -10,6 +10,10 @@ class Literal::Types::BooleanType
 		"_Boolean"
 	end
 
+	def literal_upper_bound
+		Literal::Types._Union(TrueClass, FalseClass)
+	end
+
 	def ===(value)
 		true == value || false == value
 	end

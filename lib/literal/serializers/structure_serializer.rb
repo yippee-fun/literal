@@ -15,7 +15,7 @@ class Literal::Serializer::StructureType
 	# Values only match if their whole structure type is serializable, so that
 	# matching context.type agrees with what serialization will accept.
 	def ===(object)
-		Literal::DataStructure === object && @context.serializable_type?(object.class)
+		Literal::DataStructure === object && @context.serializable_type?(Literal::CLASS.bind_call(object))
 	end
 
 	def matches?(other)
@@ -49,7 +49,7 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	def value_type(value)
-		value.class if type === value
+		Literal::CLASS.bind_call(value) if type === value
 	end
 
 	def object_shape(type)
@@ -62,7 +62,7 @@ class Literal::StructureSerializer < Literal::Serializer
 			allowed << name
 			required << name if property.required?
 
-			if (domain = const_domain(without_undefined(property.type)))
+			if (domain = @context.const_domain(without_undefined(property.type)))
 				const_domains[name] = domain
 			end
 		end
@@ -89,7 +89,7 @@ class Literal::StructureSerializer < Literal::Serializer
 
 	def serialize(value, type:)
 		type.literal_properties.filter_map do |property|
-			property_value = value.__send__(property.name)
+			property_value = Literal::INSTANCE_VARIABLE_GET.bind_call(value, property.__ivar__)
 			next if property_value == Literal::Undefined
 
 			[
@@ -100,6 +100,8 @@ class Literal::StructureSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Hash === raw
+
 		type.from_props(
 			type.literal_properties.filter_map do |property|
 				if raw.key?(property.name.name)

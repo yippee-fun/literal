@@ -14,6 +14,7 @@ class Literal::SerializationContext
 	DefaultSerializers = [
 		Literal::NeverSerializer,
 		Literal::VoidSerializer,
+		Literal::FrozenSerializer,
 		Literal::StringSerializer,
 		Literal::SymbolSerializer,
 		Literal::IntegerSerializer,
@@ -59,8 +60,10 @@ class Literal::SerializationContext
 		@serializers = serializers.map { |it| it.new(self) }.freeze
 
 		@type = Literal::Serializer::SerializableType.new(self, _Union(*@serializers.map(&:type)))
-		@kind = _Kind(@type)
-		@property_kind = _Kind(_Union(@type, Literal::Undefined))
+		# Not _Kind(@type): a type whose values are each serializable — like an
+		# ambiguous union of serializable members — may still not be.
+		@kind = _Predicate("serializable type") { |type| serializable_type?(type) }
+		@property_kind = _Predicate("serializable property type") { |type| serializable_property_type?(type) }
 
 		@cache_mutex = Mutex.new
 		@serializer_cache = new_type_cache
@@ -79,6 +82,19 @@ class Literal::SerializationContext
 	# It accepts everything kind accepts, plus unions permitting
 	# Literal::Undefined, which are judged by their remaining members.
 	attr_reader :property_kind
+
+	def serializable_property_type?(type)
+		type = type.materialize if type in Literal::Types::DeferredType
+
+		case type
+		in Literal::Undefined
+			true
+		in Literal::Types::UnionType if type.optional?
+			serializable_type?(type.reject { |member| Literal::Undefined.equal?(member) })
+		else
+			serializable_type?(type)
+		end
+	end
 
 	def json_schema(type)
 		Literal::JSONSchema::Generator.new(self).generate(type)
@@ -103,7 +119,12 @@ class Literal::SerializationContext
 			raise Literal::ArgumentError, "Value #{value.inspect} was not serialized correctly"
 		end
 
-		serialized
+		# Strict serialization is the entry point — serializers recurse with
+		# strict: false — so the finished payload is sorted here in one pass:
+		# object keys at every depth, including any nested objects custom
+		# serializers return. Deserialization reads objects by key, so it
+		# accepts payloads in any order.
+		strict ? Literal::Serializer.sort_keys(serialized) : serialized
 	end
 
 	def deserialize(value, type:, strict: true)
@@ -214,6 +235,24 @@ class Literal::SerializationContext
 		cached(@object_shape_cache, type) do
 			serializer_matching_type(type)&.object_shape(type) || false
 		end || nil
+	end
+
+	# The finite set of raw JSON values the given type can serialize to, or nil
+	# when the domain is unbounded or unknown. Constants have singleton domains;
+	# a union of constants has the union of theirs. Domains are compared as
+	# serialized values, so a Symbol and a String constant that write the same
+	# JSON share a domain, keyed by Literal::Serializer.json_equality_key, so 1
+	# and 1.0 do too.
+	def const_domain(type)
+		case type
+		when Literal::Types::UnionType
+			domains = type.each.map { |member| const_domain(member) }
+			domains.reduce(Set[], :|) if domains.all?
+		when Literal::Types::FrozenType
+			const_domain(type.type)
+		when String, Symbol, Integer, Float, true, false, Literal::Enum
+			Set[Literal::Serializer.json_equality_key(serialize(type, type:))]
+		end
 	end
 
 	def build_json_schema(type, generator:)
@@ -332,12 +371,15 @@ class Literal::SerializationContext
 	end
 
 	# Weakly keyed where the engine supports it, so ad-hoc types can be
-	# garbage collected; otherwise a bounded hash cleared when full.
+	# garbage collected; otherwise a bounded hash cleared when full. Both
+	# compare keys with eql?, so a type rebuilt per call shares the entry of an
+	# equal one: eql? types are built from eql? members in the same order, so
+	# they serialize alike.
 	private def new_type_cache
 		if defined?(ObjectSpace::WeakKeyMap)
 			ObjectSpace::WeakKeyMap.new
 		else
-			{}.compare_by_identity
+			{}
 		end
 	end
 

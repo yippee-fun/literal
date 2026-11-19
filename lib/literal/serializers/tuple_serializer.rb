@@ -61,8 +61,10 @@ class Literal::TupleSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Array === raw && raw.size >= type.types.size
+
 		type.types.each_with_index.map do |member_type, index|
-			deserialize_contents(raw.fetch(index), type: member_type)
+			deserialize_contents(raw[index], type: member_type)
 		end
 	end
 end
