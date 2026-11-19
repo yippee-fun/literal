@@ -44,6 +44,15 @@ if defined?(SQLite3)
 		end
 	end
 
+	test "serializes query placeholders through the column type" do
+		with_enum_records_table do
+			substitute = ActiveRecord::StatementCache::Substitute.new
+			type = SQLiteEnumRecord.type_for_attribute(:color)
+
+			assert_equal type.subtype.serialize(substitute), type.serialize(substitute)
+		end
+	end
+
 	test "round-trips through an integer column" do
 		with_enum_records_table do |connection|
 			record = SQLiteEnumRecord.create!(color: "2")

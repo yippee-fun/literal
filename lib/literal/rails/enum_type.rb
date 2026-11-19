@@ -25,7 +25,12 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 	end
 
 	def serialize(value)
-		@subtype.serialize(cast(value)&.value)
+		case value
+		in ^@enum | Symbol
+			@subtype.serialize(@enum.coerce(value).value)
+		else
+			@subtype.serialize(value)
+		end
 	end
 
 	def deserialize(value)
