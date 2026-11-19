@@ -13,8 +13,16 @@ class Literal::Property
 
 	include Comparable
 
+	# Whether a generated parameter keeps its name's encoding. TruffleRuby reads
+	# all code as UTF-8, so there a name in another encoding can't be one.
+	NAMES_KEEP_ENCODING = Module.new.module_eval(<<~RUBY.encode(Encoding::ISO_8859_1), __FILE__, __LINE__ + 1)
+		instance_method(def probe(café:) = nil).parameters.dig(0, 1).encoding == Encoding::ISO_8859_1
+	RUBY
+
 	def self.valid_name?(name)
-		Symbol === name && NAME_PATTERN.match?(name.name.encode(Encoding::UTF_8))
+		Symbol === name &&
+			(NAMES_KEEP_ENCODING || name.name.ascii_only? || name.encoding == Encoding::UTF_8) &&
+			NAME_PATTERN.match?(name.name.encode(Encoding::UTF_8))
 	rescue EncodingError
 		false
 	end

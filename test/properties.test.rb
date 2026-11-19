@@ -936,11 +936,18 @@ test "prop refuses names that aren't Ruby local variable names" do
 	assert_raises(Literal::ArgumentError) { Literal::Data.define("a = 1; b": String) }
 end
 
-test "prop accepts valid names in other encodings" do
+test "prop accepts valid names in other encodings where Ruby can compile them" do
 	name = "café".encode(Encoding::ISO_8859_1).to_sym
-	klass = Class.new(Literal::Data) { prop name, String }
+	# TruffleRuby reads code as UTF-8, so its parameter would be :café in UTF-8.
+	compilable = Module.new.module_eval("instance_method(def probe(#{name.name}:) = nil)").parameters.dig(0, 1) == name
 
-	assert_equal klass.new(name => "x").to_h, { name => "x" }
+	if compilable
+		klass = Class.new(Literal::Data) { prop name, String }
+
+		assert_equal klass.new(name => "x").to_h, { name => "x" }
+	else
+		assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { prop name, String } }
+	end
 end
 
 test "prop? refuses a default" do
