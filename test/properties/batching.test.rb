@@ -511,3 +511,19 @@ test "Literal::Enum.defined hands on to a hook defined further up" do
 	assert example.frozen?
 	assert_equal reached, [example]
 end
+
+test "a reader named after a schema-wide method does not displace it while the batch is open" do
+	early = nil
+
+	example = Class.new(Literal::Struct) do
+		prop :name, String
+
+		begin_props
+		prop :hash, _Nilable(String)
+		early = { from_props(name: "Joel") => 1 }[from_props(name: "Joel")]
+		commit_props
+	end
+
+	assert_equal early, 1
+	assert_equal example.new(name: "Joel", hash: "abc").hash, example.new(name: "Joel", hash: "abc").hash
+end

@@ -406,19 +406,22 @@ module Literal::Properties
 	end
 
 	private def __define_literal_methods__(new_property)
-		if __literal_open_batches__ > 0
-			__literal_defer_schema_methods__
-			return unless new_property
+		batching = __literal_open_batches__ > 0
 
-			code = __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
+		if batching
+			code = new_property && __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
 		else
 			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
 			code = __generate_literal_methods__(new_property)
 		end
 
-		__literal_silence_redefinitions__(new_property) if new_property
-		# An explicit path, so every engine attributes these frames to Literal.
-		__literal_extension__.module_eval(code, __FILE__, __LINE__)
+		if code
+			__literal_silence_redefinitions__(new_property) if new_property
+			# An explicit path, so every engine attributes these frames to Literal.
+			__literal_extension__.module_eval(code, __FILE__, __LINE__)
+		end
+
+		__literal_defer_schema_methods__(new_property) if batching
 	end
 
 	private def __literal_open_batches__
@@ -436,15 +439,26 @@ module Literal::Properties
 	# calls one before the batch is committed — a Literal::Enum building its
 	# members in the class body — reaches a stand-in that generates the real
 	# methods and hands over to them.
-	private def __literal_defer_schema_methods__
-		return if @__literal_schema_methods_deferred__
+	private def __literal_defer_schema_methods__(new_property)
+		names = __literal_schema_methods__
+
+		if @__literal_schema_methods_deferred__
+			return unless new_property
+
+			# A reader or predicate named after a schema-wide method has just
+			# replaced its stand-in.
+			names = names.select do |name|
+				(new_property.reader && name == new_property.name) ||
+					(new_property.predicate && name.name == "#{new_property.name.name}?")
+			end
+		end
 
 		@__literal_schema_methods_deferred__ = true
 
 		shape = self
 		extension = __literal_extension__
 
-		__literal_schema_methods__.each do |name|
+		names.each do |name|
 			extension.alias_method(name, name)
 			extension.define_method(name) do |*args, **kwargs, &block|
 				shape.__send__(:__literal_define_schema_methods__)
