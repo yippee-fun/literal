@@ -83,7 +83,10 @@ class Literal::TimeSerializer < Literal::Serializer
 		# Built from the fields rather than parsed again, since engines' ISO 8601
 		# parsers differ in how much of a long fraction they keep.
 		if date_time
-			DateTime.new(year, month, day, hour, minute, second, Rational(offset || 0, 86_400))
+			# The fraction is added, since JRuby's DateTime.new silently loses a
+			# long one.
+			whole = second.floor
+			DateTime.new(year, month, day, hour, minute, whole, Rational(offset || 0, 86_400)) + ((second - whole) / 86_400)
 		else
 			Time.new(year, month, day, hour, minute, second, offset || "UTC")
 		end

@@ -1568,11 +1568,13 @@ test "date-times with long fractions load exactly" do
 
 	assert_equal(Example.deserialize(raw, type: Time), Time.utc(2024, 1, 5, 10, 0, fraction))
 
-	# JRuby's DateTime can't hold a fraction whose denominator overflows a long.
-	raw = "2024-01-05T10:00:00.#{'1' * 12}Z"
-	fraction = Rational(("1" * 12).to_i, 10 ** 12)
+	# JRuby's DateTime overflows on a fraction of 200 digits, but holds 20.
+	raw = "2024-01-05T10:00:00.#{'1' * 20}Z"
+	fraction = Rational(("1" * 20).to_i, 10 ** 20)
+	date_time = Example.deserialize(raw, type: DateTime)
 
-	assert_equal(Example.deserialize(raw, type: DateTime), DateTime.new(2024, 1, 5, 10, 0, fraction))
+	assert_equal date_time.sec_fraction, fraction
+	assert_equal [date_time.year, date_time.month, date_time.day, date_time.hour, date_time.minute, date_time.second, date_time.offset], [2024, 1, 5, 10, 0, 0, 0]
 end
 
 test "date-times load with their offsets" do
