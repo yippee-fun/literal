@@ -157,6 +157,8 @@ class Literal::Flags
 	end
 
 	def each
+		return enum_for(__method__) { self.class::FLAGS.size } unless block_given?
+
 		self.class::FLAGS.each do |key, bit|
 			yield key, @value & (2 ** bit) > 0
 		end

@@ -171,6 +171,8 @@ class Literal::Enum
 		end
 
 		def each
+			return enum_for(__method__) { @members.size } unless block_given?
+
 			@members.each { |member| yield(member) }
 		end
 

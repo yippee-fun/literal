@@ -109,3 +109,11 @@ test "#deconstruct_keys with filter" do
 		underlined: false,
 	}, flags.deconstruct_keys([:bold, :underlined]))
 end
+
+test "#each without a block returns an enumerator" do
+	enumerator = Example.new(bold: true).each
+
+	assert Enumerator === enumerator
+	assert_equal enumerator.size, 3
+	assert_equal enumerator.to_a, [[:bold, true], [:italic, false], [:underlined, false]]
+end

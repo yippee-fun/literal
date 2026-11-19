@@ -317,3 +317,11 @@ test "prop? defines an optional property with a public reader" do
 	assert_equal enum::Labelled.label, "One"
 	assert_equal enum::Plain.label, Literal::Undefined
 end
+
+test ".each without a block returns an enumerator" do
+	enumerator = Color.each
+
+	assert Enumerator === enumerator
+	assert_equal enumerator.size, 4
+	assert_equal enumerator.with_index.to_a.first, [Color::Red, 0]
+end
