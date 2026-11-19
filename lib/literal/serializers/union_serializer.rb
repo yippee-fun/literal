@@ -47,9 +47,9 @@ class Literal::Serializer::UnionType
 	# A union is natural when a deserializer can resolve the member from the
 	# raw value alone. Each member must map to its own JSON type, with two
 	# exceptions: integer and number may pair when the number member is a
-	# finite float (the pair collapses to "number"), and several object
-	# members may share a union when their key shapes are pairwise
-	# distinguishable.
+	# finite float (the pair collapses to "number"), several object members
+	# may share a union when their key shapes are pairwise distinguishable, and
+	# several constants may share a JSON type when their values are disjoint.
 	private def natural?(type)
 		diagnose(type).nil?
 	end
@@ -64,17 +64,24 @@ class Literal::Serializer::UnionType
 		members_by_json_type.each do |json_type, members|
 			next if members.length == 1
 
-			if json_type == "object"
-				if (reason = object_ambiguity(members))
-					return reason
-				end
-			else
-				a, b = members
-				return "#{a.inspect} and #{b.inspect} both serialize to JSON #{json_type} values, so raw values cannot be resolved to a member; use _TaggedUnion to discriminate them explicitly"
-			end
+			reason = (json_type == "object") ? object_ambiguity(members) : const_ambiguity(json_type, members)
+			return reason if reason
 		end
 
 		numeric_ambiguity(members_by_json_type)
+	end
+
+	private def const_ambiguity(json_type, members)
+		domains = members.to_h { |member| [member, @context.const_domain(member)] }
+
+		members.combination(2) do |a, b|
+			domain_a, domain_b = domains.fetch(a), domains.fetch(b)
+			next if domain_a && domain_b && domain_a.disjoint?(domain_b)
+
+			return "#{a.inspect} and #{b.inspect} both serialize to JSON #{json_type} values, so raw values cannot be resolved to a member; use _TaggedUnion to discriminate them explicitly"
+		end
+
+		nil
 	end
 
 	private def untyped_member_ambiguity(member)
@@ -227,10 +234,22 @@ class Literal::UnionSerializer < Literal::Serializer
 		when 1
 			members.first
 		else
-			# Only object members can share a JSON type in a natural union, and
-			# their shapes are pairwise distinguishable, so at most one accepts.
-			members.find { |member| @context.object_shape(member).accepts?(raw_value) } ||
-				raise(Literal::ArgumentError, "No union member type for JSON object with keys #{raw_value.keys.inspect} in #{type.inspect}")
+			# Members sharing a JSON type in a natural union are objects with
+			# pairwise distinguishable shapes or constants with disjoint domains,
+			# so at most one accepts. A constant member can be false itself, so
+			# the match is found by index.
+			index = members.index { |member| accepts_raw?(member, raw_value) } ||
+				raise(Literal::ArgumentError, "No union member type for JSON #{json_type} #{raw_value.inspect} in #{type.inspect}")
+
+			members[index]
+		end
+	end
+
+	private def accepts_raw?(member, raw_value)
+		if (shape = @context.object_shape(member))
+			shape.accepts?(raw_value)
+		else
+			@context.const_domain(member).include?(raw_value)
 		end
 	end
 

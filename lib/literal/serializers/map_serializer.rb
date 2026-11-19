@@ -51,7 +51,7 @@ class Literal::MapSerializer < Literal::Serializer
 			allowed << name
 			required << name unless value_type === nil || undefined_optional?(value_type)
 
-			if (domain = const_domain(without_undefined(value_type)))
+			if (domain = @context.const_domain(without_undefined(value_type)))
 				const_domains[name] = domain
 			end
 		end

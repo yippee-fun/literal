@@ -3049,6 +3049,25 @@ test "integer const discriminants" do
 	assert_equal(Example.deserialize(v2_serialized, type:), { version: 2, payload: "b" })
 end
 
+test "consts with disjoint values can share a JSON type in a union" do
+	[
+		[_Nilable(_Union(:draft, :published)), [:draft, :published, nil]],
+		[_Union(:auto, :none, Integer), [:auto, :none, 3]],
+		[_Union("x", "y", nil), ["x", "y", nil]],
+		[_Union(true, false, nil), [true, false, nil]],
+		[_Union(1, 2, "a"), [1, 2, "a"]],
+	].each do |type, values|
+		values.each do |value|
+			assert_equal(Example.deserialize(Example.serialize(value, type:), type:), value)
+		end
+	end
+
+	assert_raises(Literal::ArgumentError) { Example.deserialize("other", type: _Union(:auto, :none, Integer)) }
+
+	error = assert_raises(Literal::ArgumentError) { Example.json_schema(_Union(:auto, "auto", nil)) }
+	assert error.message.include?("both serialize to JSON string values")
+end
+
 test "optional const keys do not discriminate object members" do
 	type = _Union(
 		_Map(kind: _Nilable("circle"), size: Integer),

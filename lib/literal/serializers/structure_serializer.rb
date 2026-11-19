@@ -62,7 +62,7 @@ class Literal::StructureSerializer < Literal::Serializer
 			allowed << name
 			required << name if property.required?
 
-			if (domain = const_domain(without_undefined(property.type)))
+			if (domain = @context.const_domain(without_undefined(property.type)))
 				const_domains[name] = domain
 			end
 		end

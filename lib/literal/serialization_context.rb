@@ -221,6 +221,21 @@ class Literal::SerializationContext
 		end || nil
 	end
 
+	# The finite set of raw JSON values the given type can serialize to, or nil
+	# when the domain is unbounded or unknown. Constants have singleton domains;
+	# a union of constants has the union of theirs. Domains are compared as
+	# serialized values, so a Symbol and a String constant that write the same
+	# JSON share a domain.
+	def const_domain(type)
+		case type
+		when Literal::Types::UnionType
+			domains = type.each.map { |member| const_domain(member) }
+			domains.reduce(Set[], :|) if domains.all?
+		when String, Symbol, Integer, Float, true, false
+			Set[serialize(type, type:)]
+		end
+	end
+
 	def build_json_schema(type, generator:)
 		serializer_for_type(type).json_schema(type, generator:)
 	end
