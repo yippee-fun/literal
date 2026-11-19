@@ -16,6 +16,11 @@ class Literal::Railtie < Rails::Railtie
 	if defined?(::ActiveModel::Type)
 		require_relative "rails/enum_type"
 		require_relative "rails/flags_type"
+		require_relative "rails/enum_macro"
+
+		ActiveSupport.on_load(:active_record) do
+			extend Literal::Rails::EnumMacro
+		end
 
 		initializer "literal.register_active_model_types" do
 			ActiveModel::Type.register(:literal_enum) do |name, type:|

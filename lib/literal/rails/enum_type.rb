@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
 class Literal::Rails::EnumType < ActiveModel::Type::Value
-	def initialize(enum)
+	def initialize(enum, subtype = ActiveModel::Type.default_value)
 		@enum = enum
+		@subtype = subtype
 		super()
 	end
+
+	attr_reader :subtype
 
 	def type
 		:literal_enum
@@ -12,28 +15,40 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 
 	def cast(value)
 		case value
-		when nil
-			nil
-		else
+		in ^@enum | Symbol
 			@enum.coerce(value)
+		else
+			member_for(@subtype.cast(value))
 		end
 	end
 
 	def serialize(value)
-		case value
-		when nil
-			nil
-		else
-			@enum.coerce(value).value
-		end
+		@subtype.serialize(database_value(value))
+	end
+
+	def serializable?(value, &)
+		@subtype.serializable?(database_value(value), &)
 	end
 
 	def deserialize(value)
-		case value
-		when nil
+		member_for(@subtype.deserialize(value))
+	end
+
+	private def member_for(raw)
+		case raw
+		in nil
 			nil
 		else
-			@enum.coerce(value)
+			@enum.coerce(raw)
+		end
+	end
+
+	private def database_value(value)
+		case value
+		in ^@enum | Symbol
+			@enum.coerce(value).value
+		else
+			value
 		end
 	end
 end
