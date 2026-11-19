@@ -78,7 +78,7 @@ class Literal::DataStructure
 				property.default_value(instance)
 			elsif property.undefinable?
 				Literal::Undefined
-			elsif property.type === nil
+			elsif property.nil_default?
 				nil
 			else
 				raise Literal::ArgumentError.new("Missing property #{property.name.inspect} for #{self}")

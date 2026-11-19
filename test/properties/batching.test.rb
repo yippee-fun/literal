@@ -533,7 +533,8 @@ test "generating can define another shape with a batch of its own" do
 
 	outer = Class.new(Literal::Struct) do
 		props do
-			prop :child, _Deferred {
+			# Asking the union whether it takes nil materializes the deferred member.
+			prop :child, _Union(String, _Deferred {
 				inner ||= Class.new(Literal::Struct) do
 					props do
 						prop :name, String
@@ -541,7 +542,7 @@ test "generating can define another shape with a batch of its own" do
 				end
 
 				_Nilable(inner)
-			}
+			})
 		end
 	end
 

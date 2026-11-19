@@ -35,7 +35,15 @@ class Literal::Property
 	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion, :seal
 
 	def optional?
-		default? || undefinable? || @type === nil
+		default? || undefinable? || nil_default?
+	end
+
+	# Whether an omitted value is nil, because the type accepts nil. A bare
+	# `_Deferred` isn't asked: that would materialize it when the property is
+	# declared, before the constant it names may exist. It is required, and
+	# `_Nilable(_Deferred { … })` makes it optional.
+	def nil_default?
+		!(Literal::Types::DeferredType === @type) && @type === nil
 	end
 
 	# Whether the type is a union containing the exact `Literal::Undefined`

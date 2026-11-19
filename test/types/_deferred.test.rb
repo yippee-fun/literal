@@ -155,3 +155,56 @@ if defined?(Ractor)
 		assert Ractor.shareable?(Ractor.make_shareable(deferred))
 	end
 end
+
+test "a prop typed by a bare deferred type is required, and declaring it materializes nothing" do
+	materialized = 0
+
+	keyword = Class.new(Literal::Data) do
+		prop :a, _Deferred { materialized += 1; String }
+	end
+
+	positional = Class.new(Literal::Data) do
+		prop :a, _Deferred { materialized += 1; String }, :positional
+	end
+
+	assert_equal materialized, 0
+	assert keyword.literal_properties[:a].required?
+	assert positional.literal_properties[:a].required?
+	assert_equal materialized, 0
+
+	error = assert_raises(ArgumentError) { keyword.new }
+	assert_equal error.message, "missing keyword: :a"
+	assert_raises(ArgumentError) { positional.new }
+
+	error = assert_raises(Literal::ArgumentError) { keyword.from_props({}) }
+	assert error.message.include?("Missing property :a")
+
+	assert_equal keyword.new(a: "x").a, "x"
+	assert_raises(Literal::TypeError) { keyword.new(a: nil) }
+end
+
+test "a deferred type takes nil through _Nilable outside it" do
+	materialized = 0
+
+	nilable = Class.new(Literal::Data) do
+		prop :a, _Nilable(_Deferred { materialized += 1; String })
+		prop :b, _Nilable(_Deferred { materialized += 1; String }), :positional
+	end
+
+	optional = Class.new(Literal::Data) do
+		prop? :a, _Deferred { materialized += 1; String }
+	end
+
+	assert_equal materialized, 0
+	assert_equal nilable.new.to_h, { a: nil, b: nil }
+	assert_equal optional.new.to_h, { a: Literal::Undefined }
+end
+
+test "a deferred type is required even when it would take nil" do
+	klass = Class.new(Literal::Data) do
+		prop :a, _Deferred { _Nilable(String) }
+	end
+
+	assert_raises(ArgumentError) { klass.new }
+	assert_equal klass.new(a: nil).a, nil
+end

@@ -205,7 +205,7 @@ class Literal::Properties::Schema
 			when :positional
 				if property.default? || property.undefinable? # optional
 					buffer << locals[property.name] << " = ::Literal::Undefined"
-				elsif property.type === nil # optional
+				elsif property.nil_default?
 					buffer << locals[property.name] << " = nil"
 				else # required
 					buffer << locals[property.name]
@@ -213,7 +213,7 @@ class Literal::Properties::Schema
 			when :keyword
 				if property.default? || property.undefinable? # optional
 					buffer << property.name.name << ": ::Literal::Undefined"
-				elsif property.type === nil
+				elsif property.nil_default?
 					buffer << property.name.name << ": nil" # optional
 				else # required
 					buffer << property.name.name << ":"
