@@ -2,7 +2,7 @@
 
 # @api private
 class Literal::Types::FrozenType
-	ALWAYS_FROZEN = Set[Symbol, Integer, Float, Numeric, true, false, nil].freeze
+	ALWAYS_FROZEN = Set[Symbol, Integer, Float, true, false, nil].freeze
 
 	include Literal::Type
 	include Literal::Types::DraftTransparent
