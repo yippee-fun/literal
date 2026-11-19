@@ -25,8 +25,19 @@ class Literal::MapSerializer < Literal::Serializer
 
 	attr_reader :type
 
+	# Map keys become JSON object keys, so they must be Symbols or Strings
+	# naming distinct keys in UTF-8.
 	def handles_type?(type)
-		@type.matches?(type)
+		return false unless @type.matches?(type)
+
+		keys = type.shape.keys.map { |key| json_key(key) }
+		keys.all? && keys.uniq.size == keys.size
+	end
+
+	def rejection_reason(type)
+		if @type.matches?(type) && !handles_type?(type)
+			"its keys must be Symbols or Strings naming distinct UTF-8 JSON object keys"
+		end
 	end
 
 	def child_types(type)
@@ -47,7 +58,7 @@ class Literal::MapSerializer < Literal::Serializer
 		const_domains = {}
 
 		type.shape.each do |key, value_type|
-			name = key.name
+			name = json_key(key)
 			allowed << name
 			required << name unless value_type === nil || undefined_optional?(value_type)
 
@@ -63,7 +74,7 @@ class Literal::MapSerializer < Literal::Serializer
 		{
 			"type" => "object",
 			"properties" => type.shape.to_h do |key, value_type|
-				[key.name, json_schema_for(without_undefined(value_type), generator:)]
+				[json_key(key), json_schema_for(without_undefined(value_type), generator:)]
 			end,
 			"required" => object_shape(type).required.to_a,
 			"additionalProperties" => false,
@@ -71,7 +82,7 @@ class Literal::MapSerializer < Literal::Serializer
 	end
 
 	def mergeable_object?(type)
-		Literal::Types::MapType === type && !type.shape.key?(:$type)
+		Literal::Types::MapType === type && type.shape.each_key.none? { |key| json_key(key) == "$type" }
 	end
 
 	def serialize(value, type:)
@@ -79,19 +90,38 @@ class Literal::MapSerializer < Literal::Serializer
 			item = value[key]
 			next if undefined_optional?(value_type) && Literal::Undefined == item
 
-			[key.name, serialize_contents(item, type: without_undefined(value_type))]
+			[json_key(key), serialize_contents(item, type: without_undefined(value_type))]
 		end.to_h
 	end
 
 	def deserialize(raw, type:)
 		type.shape.to_h do |key, value_type|
-			if undefined_optional?(value_type) && !raw.key?(key.name)
+			name = json_key(key)
+
+			if undefined_optional?(value_type) && !raw.key?(name)
 				# An undefined value is omitted when serialized, so a missing key
 				# deserializes back to Literal::Undefined.
 				[key, Literal::Undefined]
 			else
-				[key, deserialize_contents(raw[key.name], type: without_undefined(value_type))]
+				[key, deserialize_contents(raw[name], type: without_undefined(value_type))]
 			end
 		end
+	end
+
+	private def json_key(key)
+		case key
+		in Symbol then utf8(key.name)
+		in String then utf8(key)
+		else nil
+		end
+	end
+
+	# JSON text is UTF-8, so keys are named, compared and looked up in UTF-8,
+	# and a key UTF-8 can't represent has no name.
+	private def utf8(name)
+		name = name.encode(Encoding::UTF_8) unless Encoding::UTF_8 == name.encoding
+		name if name.valid_encoding?
+	rescue EncodingError
+		nil
 	end
 end

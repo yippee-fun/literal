@@ -49,4 +49,5 @@ end
 
 test "inspect" do
 	assert_equal "_Map(a: String, b: _Nilable(Integer))", _Map(a: String, b: _Nilable(Integer)).inspect
+	assert_equal "_Map(\"a\" => String, 1 => Integer)", _Map("a" => String, 1 => Integer).inspect
 end

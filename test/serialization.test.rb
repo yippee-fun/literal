@@ -1545,6 +1545,40 @@ test "map serialization roundtrip" do
 	assert_equal(Example.deserialize(serialized, type:), original)
 end
 
+test "string-keyed map serialization roundtrip" do
+	original = { "name" => "Joel", :age => 42 }
+	type = _Map("name" => String, :age => Integer)
+	serialized = Example.serialize(original, type:)
+
+	assert_equal(serialized, { "name" => "Joel", "age" => 42 })
+	assert_equal(Example.deserialize(serialized, type:), original)
+	assert_equal(Example.json_schema(type)["required"], ["name", "age"])
+end
+
+test "maps whose keys cannot name distinct JSON object keys are not serializable" do
+	[_Map(1 => String), _Map(:name => String, "name" => String)].each do |type|
+		refute Example.serializable_type?(type)
+
+		error = assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+		assert error.message.include?("keys must be Symbols or Strings")
+	end
+end
+
+test "map keys name JSON object keys in UTF-8" do
+	latin = "café".encode(Encoding::ISO_8859_1)
+	type = _Map(latin => String)
+	value = { latin => "x" }
+
+	raw = JSON.parse(JSON.generate(Example.serialize(value, type:)))
+
+	assert_equal Example.deserialize(raw, type:), value
+	assert_equal Example.json_schema(type)["properties"].keys, ["café"]
+
+	refute Example.serializable_type?(_Map(latin => String, "café" => String))
+	refute Example.serializable_type?(_Map("caf\xE9".b => String))
+	refute Example.serializable_type?(_Map("caf\xE9" => String))
+end
+
 test "undefined map value is omitted when serializing" do
 	type = _Map(name: String, age: _Optional(Integer))
 

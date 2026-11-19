@@ -18,7 +18,16 @@ class Literal::Types::MapType
 	end
 
 	def inspect
-		"_Map(#{@shape.map { |key, type| "#{key.name}: #{type.inspect}" }.join(', ')})"
+		pairs = @shape.map do |key, type|
+			case key
+			when Symbol
+				"#{key.name}: #{type.inspect}"
+			else
+				"#{key.inspect} => #{type.inspect}"
+			end
+		end
+
+		"_Map(#{pairs.join(', ')})"
 	end
 
 	def literal_upper_bound
