@@ -5,11 +5,20 @@ class Literal::Types::RangeType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::RangeType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::RangeType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::RangeType === other && Literal.member_eql?(@type, other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
@@ -21,8 +30,12 @@ class Literal::Types::RangeType
 		"_Range(#{@type.inspect})"
 	end
 
+	def literal_upper_bound
+		Range
+	end
+
 	def ===(value)
-		Range === value && (
+		Range === value && !!(
 			(
 				@type === value.begin && (nil === value.end || @type === value.end)
 			) || (

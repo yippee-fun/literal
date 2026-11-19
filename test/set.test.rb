@@ -68,9 +68,23 @@ test "Generic#== compares member types" do
 	refute_equal Literal::Set(Integer), Literal::Set(String)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Set(Integer).eql?(Literal::Set(Integer))
+	refute Literal::Set(Integer).eql?(Literal::Set(String))
+	assert_equal({ Literal::Set(Integer) => 1 }[Literal::Set(Integer)], 1)
+	assert_equal [Literal::Set(Integer), Literal::Set(Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant" do
 	assert Literal.subtype?(Literal::Set(Integer), Literal::Set(Numeric))
 	refute Literal.subtype?(Literal::Set(Numeric), Literal::Set(Integer))
+end
+
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Set(Integer), Literal::Set)
+	assert Literal.subtype?(Literal::Set(Integer), Object)
+	assert Literal.subtype?(Literal::Set(Integer), _Nilable(Literal::Set))
+	refute Literal.subtype?(Literal::Set(Integer), Set)
 end
 
 test "literal set types and plain set types are never subtypes of each other" do
@@ -92,6 +106,16 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	input << "3"
 
 	assert_literal_set set, type: Integer, members: [1, 2]
+end
+
+test "#initialize and #replace copy only the members, not identity comparison" do
+	identity = ::Set["a"].compare_by_identity
+
+	refute Literal::Set(String).coerce(identity).to_set.compare_by_identity?
+	refute Literal::Set(String).new.replace(identity).to_set.compare_by_identity?
+
+	subclass = Class.new(::Set)
+	assert_equal Literal::Set(String).coerce(subclass["a"]).to_set.class, ::Set
 end
 
 # Equality
@@ -338,6 +362,42 @@ test "#freeze freezes the underlying storage" do
 	assert set.frozen?
 	assert_raises(FrozenError) { set.add(2) }
 	assert_raises(FrozenError) { set.clear }
+end
+
+test "mutations of a frozen set raise before running blocks or finding nothing to do" do
+	set = Literal::Set(Integer).new(1).freeze
+
+	assert_raises(FrozenError) { set.merge }
+
+	ran = false
+	assert_raises(FrozenError) { set.map! { ran = true } }
+	assert_raises(FrozenError) { set.select! { ran = true } }
+	assert_raises(FrozenError) { set.reject! { ran = true } }
+	refute ran
+
+	assert_raises(FrozenError) { set.subtract([]) }
+	assert_raises(FrozenError) { set.delete(2) }
+	assert_raises(FrozenError) { set.add("a") }
+end
+
+test "every mutation of a frozen set raises with the set as the receiver" do
+	set = Literal::Set(Integer).new(1).freeze
+
+	[
+		-> { set.add(1) },
+		-> { set << 1 },
+		-> { set.clear },
+		-> { set.delete(1) },
+		-> { set.map!(&:itself) },
+		-> { set.merge([1]) },
+		-> { set.reject! { false } },
+		-> { set.replace([1]) },
+		-> { set.select! { true } },
+		-> { set.subtract([1]) },
+	].each do |mutation|
+		error = assert_raises(FrozenError, &mutation)
+		assert error.receiver.equal?(set)
+	end
 end
 
 test "#clone of a frozen set is frozen" do

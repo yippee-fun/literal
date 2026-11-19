@@ -87,6 +87,31 @@ assert_allocations(_Truthy, false) => 0
 
 assert_allocations(_Tuple(String, Integer), ["a", 1]) => 0
 
+assert_allocations(_TaggedUnion(string: String, integer: Integer), 1) => 0
+assert_allocations(_TaggedUnion(string: String, integer: Integer), :symbol) => 0
+assert_allocations(_TaggedUnion(one: 1, string: String), 1.0) => 0
+assert_allocations(_TaggedUnion(one: 1, string: String), :symbol) => 0
+
 assert_allocations(_Union(String, "Hello", "World"), "World") => 0
+assert_allocations(_Union(String, Integer, nil), 1) => 0
+assert_allocations(_Union(String, Integer, nil), :symbol) => 0
+assert_allocations(_Union(1, "a", nil), 1.0) => 0
+assert_allocations(_Union(1, "a", nil), :symbol) => 0
+
+def assert_resolve_allocations(type, thing)
+	count_warm_allocations do
+		type.resolve(thing)
+	end.tap do |n|
+		puts "#{n} allocations for #{type.inspect}.resolve(#{thing.inspect})"
+	end
+end
+
+assert_resolve_allocations(_Union(String, Integer, nil), 1) => 0
+assert_resolve_allocations(_Union(String, Integer, nil), nil) => 0
+assert_resolve_allocations(_Union(1, "a", String), 1.0) => 0
+assert_resolve_allocations(_TaggedUnion(string: String, integer: Integer), 1) => 0
+
+recursive_union = _Union(nil, _Array(_Deferred { recursive_union }))
+assert_allocations(recursive_union, [[], [nil]]) => 0
 
 assert_allocations(_Void, nil) => 0

@@ -33,6 +33,13 @@ test "string json schema validation" do
 	refute uuid === "not-a-uuid"
 end
 
+test "string json schema dates are proleptic Gregorian" do
+	date = Literal::JSONSchema::String(format: "date")
+
+	assert date === "1582-10-10"
+	refute date === "1500-02-29"
+end
+
 if defined?(JsRegex)
 	test "string json schema pattern validation" do
 		pattern = Literal::JSONSchema::String(pattern: /\A[a-z]+\z/)

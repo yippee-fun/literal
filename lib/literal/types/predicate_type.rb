@@ -13,15 +13,26 @@ class Literal::Types::PredicateType
 			raise ArgumentError, "Unknown recursion policy #{recursion.inspect}"
 		end
 
-		@message = message
+		@message = message.dup.freeze
 		@block = block
 		@recursion = recursion
+		@hash = [Literal::Types::PredicateType, @message, block, recursion].hash
 
 		freeze
 	end
 
+	attr_reader :message, :block, :recursion, :hash
+
+	def ==(other)
+		Literal::Types::PredicateType === other && @message == other.message && @block == other.block && @recursion == other.recursion
+	end
+
+	def eql?(other)
+		Literal::Types::PredicateType === other && @message.eql?(other.message) && @block.eql?(other.block) && @recursion.eql?(other.recursion)
+	end
+
 	def inspect
-		%(_Predicate("#{@message}"))
+		"_Predicate(#{@message.inspect})"
 	end
 
 	def ===(other)
@@ -31,7 +42,7 @@ class Literal::Types::PredicateType
 		return @recursion == RECURSION_ACCEPT if state[key]
 
 		state[key] = true
-		@block === other
+		!!(@block === other)
 	ensure
 		state&.delete(key)
 		Thread.current[THREAD_KEY] = nil if state && state.empty?

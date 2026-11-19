@@ -84,9 +84,23 @@ test "Generic#== compares both types" do
 	refute_equal Literal::Hash(Symbol, Integer), Literal::Hash(String, Integer)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Hash(Symbol, Integer).eql?(Literal::Hash(Symbol, Integer))
+	refute Literal::Hash(Symbol, Integer).eql?(Literal::Hash(Symbol, String))
+	assert_equal({ Literal::Hash(Symbol, Integer) => 1 }[Literal::Hash(Symbol, Integer)], 1)
+	assert_equal [Literal::Hash(Symbol, Integer), Literal::Hash(Symbol, Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant" do
 	assert Literal.subtype?(Literal::Hash(Symbol, Integer), Literal::Hash(Symbol, Numeric))
 	refute Literal.subtype?(Literal::Hash(Symbol, Numeric), Literal::Hash(Symbol, Integer))
+end
+
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Hash(Symbol, Integer), Literal::Hash)
+	assert Literal.subtype?(Literal::Hash(Symbol, Integer), Object)
+	assert Literal.subtype?(Literal::Hash(Symbol, Integer), _Nilable(Literal::Hash))
+	refute Literal.subtype?(Literal::Hash(Symbol, Integer), Hash)
 end
 
 test "literal hash types and plain hash types are never subtypes of each other" do
@@ -108,6 +122,22 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	input[:b] = "nope"
 
 	assert_equal hash.to_h, { a: 1 }
+end
+
+test "#initialize copies only the entries, not defaults or identity comparison" do
+	with_default = Literal::Hash(String, Integer).new(Hash.new("bad")).to_h
+	assert_equal with_default["missing"], nil
+
+	with_default_proc = Literal::Hash(String, Integer).coerce(Hash.new { "bad" }).to_h
+	assert_equal with_default_proc["missing"], nil
+
+	identity = {}.compare_by_identity
+	identity["a"] = 1
+
+	refute Literal::Hash(String, Integer).new(identity).to_h.compare_by_identity?
+
+	subclass = Class.new(Hash)
+	assert_equal Literal::Hash(String, Integer).new(subclass[{ "a" => 1 }]).to_h.class, Hash
 end
 
 # Equality
@@ -206,6 +236,19 @@ test "#to_h and #to_hash return detached plain copies, enabling double-splats" d
 
 	kwargs = -> (**kw) { kw }
 	assert_equal kwargs.call(**hash), { a: 1 }
+end
+
+test "#deconstruct_keys supports pattern matching" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+
+	matched = case hash
+	in { a: Integer => a, **rest }
+		[a, rest]
+	end
+
+	assert_equal matched, [1, { b: 2 }]
+	assert_equal hash.deconstruct_keys([:a, :c]), { a: 1 }
+	refute_same hash.deconstruct_keys(nil), hash.__value__
 end
 
 test "#inspect" do
@@ -393,6 +436,34 @@ test "#freeze freezes the underlying storage" do
 	assert hash.frozen?
 	assert_raises(FrozenError) { hash[:b] = 2 }
 	assert_raises(FrozenError) { hash.clear }
+end
+
+test "mutations of a frozen hash raise before running blocks" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1 }).freeze
+
+	ran = false
+	assert_raises(FrozenError) { hash.merge!({ a: 2 }) { ran = true } }
+	refute ran
+	assert_raises(FrozenError) { hash.merge! }
+	assert_raises(FrozenError) { hash[:b] = "a" }
+end
+
+test "every mutation of a frozen hash raises with the hash as the receiver" do
+	hash = Literal::Hash(Symbol, Integer).new({ a: 1 }).freeze
+
+	[
+		-> { hash[:a] = 1 },
+		-> { hash.clear },
+		-> { hash.compact! },
+		-> { hash.delete(:b) },
+		-> { hash.delete(:b) { nil } },
+		-> { hash.merge!({ a: 1 }) },
+		-> { hash.reject! { false } },
+		-> { hash.select! { true } },
+	].each do |mutation|
+		error = assert_raises(FrozenError, &mutation)
+		assert error.receiver.equal?(hash)
+	end
 end
 
 test "#clone of a frozen hash is frozen" do

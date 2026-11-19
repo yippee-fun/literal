@@ -2,6 +2,7 @@
 
 class Literal::DateSerializer < Literal::Serializer
 	Type = Date
+	Format = /\A(\d{4})-(\d{2})-(\d{2})\z/
 
 	def type
 		Type
@@ -22,12 +23,26 @@ class Literal::DateSerializer < Literal::Serializer
 		end
 	end
 
+	# DateTime is a Date, but a date format cannot hold its time.
 	def serialize(value, type:)
+		value = representation(value, type)
+
+		if DateTime === value
+			raise Literal::ArgumentError, "Value #{value.inspect} cannot be serialized as #{type.inspect} without losing its time; use a DateTime type"
+		end
+
 		serialize_date(value)
 	end
 
+	# RFC 3339 dates are proleptic Gregorian. Loaded dates switch back to
+	# Ruby's default calendar, as Time#to_date does, keeping the same day.
 	def deserialize(raw, type:)
-		Date.parse(raw)
+		if String === raw && (match = Format.match(raw))
+			year, month, day = match.captures.map(&:to_i)
+			return Date.new(year, month, day, Date::GREGORIAN).italy if Date.valid_date?(year, month, day, Date::GREGORIAN)
+		end
+
+		raise Literal::ArgumentError, "Value #{raw.inspect} is not an RFC 3339 date and cannot be deserialized as #{type.inspect}"
 	end
 
 	private def constraint_json_schema(type)
@@ -41,7 +56,14 @@ class Literal::DateSerializer < Literal::Serializer
 		end
 	end
 
+	# RFC 3339 dates have four-digit years.
 	private def serialize_date(value)
-		value.strftime("%Y-%m-%d")
+		serialized = value.gregorian.strftime("%Y-%m-%d")
+
+		unless Format.match?(serialized)
+			raise Literal::ArgumentError, "Value #{value.inspect} has a year outside 0000-9999, which an RFC 3339 date cannot hold"
+		end
+
+		serialized
 	end
 end

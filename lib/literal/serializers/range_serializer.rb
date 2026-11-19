@@ -62,14 +62,22 @@ class Literal::RangeSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless Hash === raw && raw.key?("from") && raw.key?("to") && raw.key?("inclusive")
+
 		bound = bound_type(type)
 		from = deserialize_contents(raw["from"], type: bound)
 		to = deserialize_contents(raw["to"], type: bound)
 
-		if raw.fetch("inclusive")
-			from..to
+		case raw["inclusive"]
+		in true | false => inclusive
+			begin
+				Range.new(from, to, !inclusive)
+			rescue ArgumentError
+				# Bounds that can't be compared, such as 1 and "a", make no range.
+				raise malformed_raw_error(raw, type)
+			end
 		else
-			from...to
+			raise Literal::ArgumentError, "Range inclusive must be a boolean, got #{raw['inclusive'].inspect}"
 		end
 	end
 
