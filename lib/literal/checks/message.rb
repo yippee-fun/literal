@@ -206,9 +206,8 @@ module Literal::Checks::Message
 	end
 
 	# `length: 1..` reads as `filled`, `length: 5` as `exactly 5 characters`. A
-	# count's exclusive end always has an inclusive equivalent, so it is always
-	# worded inclusively. A constraint that is not a count of a known unit has no
-	# public wording, and gets none.
+	# constraint that is not a count of a known unit has no public wording, and
+	# gets none.
 	private def count_of(property, constraint)
 		unit = COUNTS[property]
 		return nil unless unit
@@ -217,12 +216,12 @@ module Literal::Checks::Message
 
 		min = constraint.begin
 		max = constraint.end
-		max -= 1 if max && constraint.exclude_end?
+		max -= 1 if Integer === max && constraint.exclude_end?
 
 		return "filled" if min == 1 && max.nil?
-		return exactly(min, unit) if min == max
+		return exactly(min, unit) if min == max && constraint.cover?(min)
 
-		bound = bounded(min, max, " #{unit}s")
+		bound = bounds(constraint, "#{unit}s")
 		bound unless bound.empty?
 	end
 

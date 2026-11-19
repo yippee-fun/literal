@@ -97,9 +97,28 @@ test "Generic#== compares element types" do
 	refute_equal Literal::Array(Integer), Literal::Array(String)
 end
 
+test "Generic#eql? and #hash make equal generics interchangeable as hash keys" do
+	assert Literal::Array(Literal::Array(Integer)).eql?(Literal::Array(Literal::Array(Integer)))
+	refute Literal::Array(Integer).eql?(Literal::Array(String))
+	assert_equal({ Literal::Array(Integer) => 1 }[Literal::Array(Integer)], 1)
+	assert_equal [Literal::Array(Integer), Literal::Array(Integer)].uniq.size, 1
+end
+
 test "Generic subtyping is covariant" do
 	assert Literal.subtype?(Literal::Array(Integer), Literal::Array(Numeric))
 	refute Literal.subtype?(Literal::Array(Numeric), Literal::Array(Integer))
+end
+
+test "Generics are subtypes of their class" do
+	assert Literal.subtype?(Literal::Array(Integer), Literal::Array)
+	assert Literal.subtype?(Literal::Array(Integer), Object)
+	assert Literal.subtype?(Literal::Array(Integer), _Nilable(Literal::Array))
+	refute Literal.subtype?(Literal::Array(Integer), Array)
+
+	parent = Class.new(Literal::Data) { prop :items, Literal::Array }
+	child = Class.new(parent) { prop :items, Literal::Array(Integer) }
+
+	assert_equal child.new(items: Literal::Array(Integer).new(1)).items, Literal::Array(Integer).new(1)
 end
 
 test "Generic#inspect" do
@@ -134,6 +153,18 @@ test "#to_ary converts to a detached plain array, enabling splats and destructur
 	assert_equal [a, b, c], [1, 2, 3]
 end
 
+test "#deconstruct supports pattern matching" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	matched = case array
+	in [first, *rest]
+		[first, rest]
+	end
+
+	assert_equal matched, [1, [2, 3]]
+	refute_same array.deconstruct, array.__value__
+end
+
 test "combining with a plain array type checks at the boundary" do
 	array = Literal::Array(Integer).new(1, 2, 3)
 
@@ -166,6 +197,13 @@ test "#initialize copies the input, so the caller's reference is harmless" do
 	input << "3"
 
 	assert_equal array.to_a, [1, 2]
+end
+
+test "#initialize copies the elements into a plain array, not an Array subclass" do
+	subclass = Class.new(Array)
+	array = Literal::Array(Integer).coerce(subclass[1, 2])
+
+	assert_equal array.__value__.class, Array
 end
 
 test "#initialize checks the whole array" do
@@ -542,6 +580,14 @@ test "#flat_map splices literal arrays, plain arrays and single values" do
 	end
 end
 
+test "#flat_map splices anything that converts with to_ary, like tuples" do
+	array = Literal::Array(Integer).new(1, 2)
+
+	flattened = array.flat_map(Integer) { |i| Literal::Tuple(Integer, Integer).new(i, i) }
+
+	assert_literal_array flattened, type: Integer, values: [1, 1, 2, 2]
+end
+
 # Tuple-producing methods
 
 test "#zip produces typed tuples" do
@@ -760,6 +806,109 @@ test "#[]= pads a nilable array with nils" do
 	assert_equal array.to_a, [1, nil, nil, 2]
 end
 
+test "#[]= converts the index with to_int before checking padding" do
+	array = Literal::Array(Integer).new(1, 2)
+
+	array[1.0] = 3
+	assert_equal array.to_a, [1, 3]
+
+	assert_raises(Literal::TypeError) { array[5.0] = 9 }
+	assert_raises(TypeError) { array["0"] = 9 }
+	assert_equal array.to_a, [1, 3]
+end
+
+test "#[]= with a range or a start and length splices elements" do
+	array = Literal::Array(Integer).new(1, 2, 3)
+
+	array[0..1] = 5
+	assert_equal array.to_a, [5, 3]
+
+	array[1, 1] = Literal::Array(Integer).new(6, 7)
+	assert_equal array.to_a, [5, 6, 7]
+
+	array[0, 2] = [8]
+	assert_equal array.to_a, [8, 7]
+
+	array[1..] = Literal::Tuple(Integer, Integer).new(9, 10)
+	assert_equal array.to_a, [8, 9, 10]
+
+	assert_raises(Literal::TypeError) { array[0, 1] = "a" }
+	assert_raises(Literal::TypeError) { array[0..0] = [1, "a"] }
+	assert_equal array.to_a, [8, 9, 10]
+end
+
+test "#[]= with a range or a start and length checks spliced elements, not the whole value" do
+	nested = Literal::Array(Literal::Array(Integer)).new(Literal::Array(Integer).new(1))
+
+	assert_raises(Literal::TypeError) { nested[0..0] = Literal::Array(Integer).new(5) }
+	assert_raises(Literal::TypeError) { nested[0, 1] = Literal::Array(Integer).new(5) }
+
+	nested[0..0] = [Literal::Array(Integer).new(5)]
+	assert_equal nested.to_a, [Literal::Array(Integer).new(5)]
+
+	plain = Literal::Array(_Array(String)).new(["a"])
+
+	assert_raises(Literal::TypeError) { plain[0..0] = ["b"] }
+
+	plain[0..0] = [["b"]]
+	assert_equal plain.to_a, [["b"]]
+end
+
+test "#[]= with a range or a start and length can't pad a non-nilable array with nils" do
+	array = Literal::Array(Integer).new(1, 2)
+
+	assert_raises(Literal::TypeError) { array[5..5] = 9 }
+	assert_raises(Literal::TypeError) { array[5, 0] = 9 }
+	assert_raises(Literal::TypeError) { array[3..] = [] }
+	assert_equal array.to_a, [1, 2]
+
+	array[2..] = 3
+	assert_equal array.to_a, [1, 2, 3]
+
+	nilable = Literal::Array(_Nilable(Integer)).new(1)
+	nilable[3, 0] = 2
+	assert_equal nilable.to_a, [1, nil, nil, 2]
+end
+
+test "#[]= with a range converts each endpoint once" do
+	array = Literal::Array(Integer).new(1, 2)
+	calls = 0
+	shifty = Object.new
+	shifty.define_singleton_method(:to_int) { ((calls += 1) == 1) ? 0 : 5 }
+	shifty.define_singleton_method(:<=>) { |_other| 0 }
+
+	array[Range.new(shifty, nil)] = [9]
+
+	assert_equal array.to_a, [9]
+	assert_equal calls, 1
+end
+
+test "#[]= with a range splices like core" do
+	endpoints = [nil, -(1 << 64), -4, -3, -1, 0, 1, 3, 4, 1 << 64]
+
+	endpoints.product(endpoints, [true, false]) do |first, last, exclusive|
+		range = Range.new(first, last, exclusive)
+		core = [1, 2, 3]
+		array = Literal::Array(_Nilable(Integer)).new(1, 2, 3)
+
+		expected = begin
+			core[range] = [7]
+			core
+		rescue RangeError => error
+			error.class
+		end
+
+		actual = begin
+			array[range] = [7]
+			array.to_a
+		rescue RangeError => error
+			error.class
+		end
+
+		assert_equal actual, expected
+	end
+end
+
 test "#insert checks values and padding" do
 	array = Literal::Array(Integer).new(1, 4)
 
@@ -768,7 +917,16 @@ test "#insert checks values and padding" do
 
 	assert_raises(Literal::TypeError) { array.insert(1, "2") }
 	assert_raises(Literal::TypeError) { array.insert(10, 5) }
+	assert_raises(Literal::TypeError) { array.insert(10.0, 5) }
 	assert_equal array.to_a, [1, 2, 3, 4]
+end
+
+test "#insert without values is a no-op, even past the end" do
+	array = Literal::Array(Integer).new(1)
+
+	assert_same array.insert(5), array
+	assert_equal array.to_a, [1]
+	assert_raises(FrozenError) { array.freeze.insert(5) }
 end
 
 test "#concat checks compatibility" do
@@ -948,6 +1106,58 @@ test "#freeze freezes the underlying storage" do
 	assert_raises(FrozenError) { array << 3 }
 	assert_raises(FrozenError) { array.map!(&:succ) }
 	assert_raises(FrozenError) { array.clear }
+end
+
+test "mutations of a frozen array raise before running blocks or finding nothing to do" do
+	empty = Literal::Array(Integer).new.freeze
+
+	assert_raises(FrozenError) { empty.pop }
+	assert_raises(FrozenError) { empty.shift }
+
+	ran = false
+	assert_raises(FrozenError) { Literal::Array(Integer).new(1).freeze.map! { ran = true } }
+	assert_raises(FrozenError) { empty.delete(1) { ran = true } }
+	refute ran
+
+	assert_raises(FrozenError) { empty.delete(1) }
+	assert_raises(FrozenError) { empty.delete_at(0) }
+	assert_raises(FrozenError) { empty << "a" }
+end
+
+test "every mutation of a frozen array raises with the array as the receiver" do
+	array = Literal::Array(Integer).new(1, 2).freeze
+
+	[
+		-> { array << 1 },
+		-> { array[0] = 1 },
+		-> { array[0..0] = [1] },
+		-> { array[0, 1] = [1] },
+		-> { array.clear },
+		-> { array.compact! },
+		-> { array.concat },
+		-> { array.delete(3) },
+		-> { array.delete_at(5) },
+		-> { array.insert(0) },
+		-> { array.map!(&:itself) },
+		-> { array.pop },
+		-> { array.pop(0) },
+		-> { array.push },
+		-> { array.reject! { false } },
+		-> { array.replace([1, 2]) },
+		-> { array.reverse! },
+		-> { array.rotate!(0) },
+		-> { array.select! { true } },
+		-> { array.shift },
+		-> { array.shift(0) },
+		-> { array.shuffle! },
+		-> { array.sort! },
+		-> { array.sort_by!(&:itself) },
+		-> { array.uniq! },
+		-> { array.unshift },
+	].each do |mutation|
+		error = assert_raises(FrozenError, &mutation)
+		assert error.receiver.equal?(array)
+	end
 end
 
 # Narrowing

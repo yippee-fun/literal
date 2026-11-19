@@ -7,15 +7,26 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 		super()
 	end
 
-	attr_reader :subtype
+	attr_reader :enum, :subtype
+
+	def ==(other)
+		super && @enum == other.enum && @subtype == other.subtype
+	end
+
+	alias_method :eql?, :==
+
+	def hash
+		[super, @enum, @subtype].hash
+	end
 
 	def type
 		:literal_enum
 	end
 
 	def cast(value)
+		# Not case/in, which on JRuby raises when no pattern matches a UTF-16 string.
 		case value
-		in ^@enum | Symbol
+		when @enum, Symbol
 			@enum.coerce(value)
 		else
 			member_for(@subtype.cast(value))
@@ -34,10 +45,13 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 		member_for(@subtype.deserialize(value))
 	end
 
+	# Form and database strings name the member whose backing value reads the same.
 	private def member_for(raw)
 		case raw
 		in nil
 			nil
+		in String
+			@enum[raw] || @enum.find { |it| it.value.to_s == raw } || (@enum.coerce(raw) unless raw.blank?)
 		else
 			@enum.coerce(raw)
 		end
@@ -45,8 +59,8 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 
 	private def database_value(value)
 		case value
-		in ^@enum | Symbol
-			@enum.coerce(value).value
+		in ^@enum | Symbol | String
+			cast(value)&.value
 		else
 			value
 		end

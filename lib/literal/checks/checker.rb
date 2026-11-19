@@ -34,7 +34,7 @@ module Literal::Checks::Checker
 
 		return result_type.failure(errors.to_errors) if !sound || errors.any?
 
-		result_type.success(draft.__send__(:__finalize_unchecked__))
+		result_type.success(Literal::Draft::API::FINALIZE_UNCHECKED.bind_call(draft))
 	end
 
 	# `only` narrows to the checks whose outcome depends on one property — what
@@ -63,7 +63,7 @@ module Literal::Checks::Checker
 		case input
 		when Literal::Draft
 			unless Literal::Draft(shape) === input
-				drafted = input.class.__type__
+				drafted = Literal::CLASS.bind_call(input).__type__
 				expected = shape.name || shape.inspect
 				actual = drafted&.name || drafted&.inspect || "an untyped draft"
 
@@ -72,7 +72,7 @@ module Literal::Checks::Checker
 				)
 			end
 
-			input.class.__type__
+			Literal::CLASS.bind_call(input).__type__
 		else
 			shape
 		end
@@ -90,10 +90,10 @@ module Literal::Checks::Checker
 			)
 		end
 
-		draft_properties = draft.class.literal_properties
+		draft_properties = Literal::CLASS.bind_call(draft).literal_properties
 		run_checks(shape, errors) do |name|
 			ivar = draft_properties[name].__ivar__
-			draft.instance_variable_defined?(ivar) ? draft.instance_variable_get(ivar) : Literal::Undefined
+			Literal::INSTANCE_VARIABLE_DEFINED.bind_call(draft, ivar) ? Literal::INSTANCE_VARIABLE_GET.bind_call(draft, ivar) : Literal::Undefined
 		end
 
 		[draft, sound]
@@ -105,12 +105,13 @@ module Literal::Checks::Checker
 	# Identity with the current draft class proves the input is current; a stale
 	# draft is read defensively onto a fresh one.
 	private def check_draft(shape, input, errors, depth)
-		draft = input.class.equal?(Literal::Draft(shape)) ? input.dup : Literal::Draft(shape).new
-		input_properties = input.class.literal_properties
+		input_class = Literal::CLASS.bind_call(input)
+		draft = input_class.equal?(Literal::Draft(shape)) ? Literal::DUP.bind_call(input) : Literal::Draft(shape).new
+		input_properties = input_class.literal_properties
 
 		each_property(shape, draft, errors) do |property|
 			slot = input_properties[property.name]
-			value = slot ? input.instance_variable_get(slot.__ivar__) : Literal::Undefined
+			value = slot ? Literal::INSTANCE_VARIABLE_GET.bind_call(input, slot.__ivar__) : Literal::Undefined
 
 			if Literal::Undefined == value
 				assign_missing(shape, draft, property, errors)
@@ -138,7 +139,7 @@ module Literal::Checks::Checker
 			# On the dup path the slot still holds the input's unjudged value,
 			# which no check may read.
 			ivar = property.__ivar__
-			draft.remove_instance_variable(ivar) if draft.instance_variable_defined?(ivar)
+			Literal::REMOVE_INSTANCE_VARIABLE.bind_call(draft, ivar) if Literal::INSTANCE_VARIABLE_DEFINED.bind_call(draft, ivar)
 			sound = false
 		end
 
@@ -199,7 +200,7 @@ module Literal::Checks::Checker
 	# coercion, so the type check that follows reports against the value the
 	# coercion actually produced.
 	private def coerce(draft, property, value, errors)
-		property.coerce(value, context: draft.__context__)
+		property.coerce(value, context: Literal::Draft::API::CONTEXT.bind_call(draft))
 	rescue Literal::CheckError => error
 		# The coercion built a nested value that broke its own checks; those
 		# surface under this prop with their paths.
@@ -214,14 +215,14 @@ module Literal::Checks::Checker
 	# representation, and that representation is what the prop's type describes;
 	# checking first would reject every value a sealed prop can hold.
 	private def store(draft, property, value, errors)
-		value = property.seal.call(value) if property.seal
+		value = property.apply_seal(value) if property.seal
 
 		unless property.type === value
 			errors.add(property.name, Literal::Checks::Message.for(property.type, value))
 			return false
 		end
 
-		draft.__store__(property.name, value)
+		Literal::Draft::API::STORE.bind_call(draft, property.name, value)
 		true
 	end
 
@@ -238,7 +239,7 @@ module Literal::Checks::Checker
 
 		# Only a Proc default reads the receiver, and the sync it triggers is
 		# not free.
-		receiver = (Proc === property.default) ? draft.__context__ : nil
+		receiver = (Proc === property.default) ? Literal::Draft::API::CONTEXT.bind_call(draft) : nil
 		value = shape.__send__(:missing_prop_value, property, receiver)
 
 		if property.coercion
@@ -270,7 +271,7 @@ module Literal::Checks::Checker
 
 		# Through store, so the prop's own seal and type still answer for the
 		# value the nested shape built.
-		store(draft, property, nested_draft.__send__(:__finalize_unchecked__), errors)
+		store(draft, property, Literal::Draft::API::FINALIZE_UNCHECKED.bind_call(nested_draft), errors)
 	end
 
 	# A Hash stands for a shape only when exactly one is reachable — which of
@@ -287,7 +288,7 @@ module Literal::Checks::Checker
 			# A draft the prop's type takes as it is stays one, as at finalize.
 			return nil if property.type === value
 
-			drafted = value.class.__type__
+			drafted = Literal::CLASS.bind_call(value).__type__
 			return nil unless Class === drafted
 
 			# The draft's own class, not the declared shape it fits: a subclass

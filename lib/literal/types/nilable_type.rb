@@ -4,13 +4,23 @@
 class Literal::Types::NilableType
 	include Literal::Type
 	include Literal::Types::DraftTransparent
+	include Literal::Types::Distributed
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::NilableType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::NilableType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::NilableType === other && Literal.member_eql?(@type, other.type)
+	end
 
 	def __relax__
 		Literal::Types._Nilable(yield(@type))
@@ -27,7 +37,7 @@ class Literal::Types::NilableType
 	end
 
 	def ===(value)
-		nil === value || @type === value
+		nil === value || !!(@type === value)
 	end
 
 	def record_literal_type_errors(ctx)
@@ -36,15 +46,10 @@ class Literal::Types::NilableType
 
 	def >=(other, context: nil)
 		case other
+		when Literal::Types::Distributed, Literal::Types::DeferredType
+			Literal.subtype?(other, self, context:)
 		when Literal::Types::VoidType
 			@type == Literal::Types::AnyType::Instance
-		when Literal::Types::NilableType
-			Literal.subtype?(other.type, @type, context:)
-		when Literal::Types::UnionType
-			# nil is covered by definition, so only the other members need to be.
-			# Without this, `_Union(String, nil)` is not recognised as a subtype of
-			# `_Nilable(String)`, even though the two denote the same set.
-			other.all? { |member| nil == member || Literal.subtype?(member, @type, context:) }
 		when nil
 			true
 		else

@@ -7,7 +7,7 @@ class Literal::Rails::EnumSerializer < ActiveJob::Serializers::ObjectSerializer
 
 	def serialize(object)
 		super(
-			"class" => object.class.name,
+			"class" => Literal::CLASS.bind_call(object).name,
 			# The value goes through ActiveJob so values that aren’t JSON primitives (e.g. symbols) survive the round trip.
 			"value" => ActiveJob::Arguments.serialize([object.value]).first
 		)

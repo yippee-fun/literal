@@ -143,3 +143,14 @@ test "self-referential values do not match" do
 	refute _JSONData === hash
 	refute _JSONData === { "wrapped" => [array] }
 end
+
+test "self-referential values are diagnosed without recursing forever" do
+	array = []
+	array << array
+
+	hash = {}
+	hash["self"] = hash
+
+	assert_raises(Literal::TypeError) { Literal.check(array, _JSONData) }
+	assert_raises(Literal::TypeError) { Literal.check(hash, _JSONData) }
+end

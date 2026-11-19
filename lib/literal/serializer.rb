@@ -16,7 +16,22 @@ class Literal::Serializer
 	# structural match; the default covers scalar serializers whose type is a
 	# plain Literal type.
 	def handles_type?(type)
-		Literal.subtype?(type, self.type) || const_type?(type)
+		within_domain?(type, self.type) || const_type?(type)
+	end
+
+	# Whether deserializing a value of the domain gives a value of the type.
+	# Being frozen is representation, not data, so a type that requires it
+	# needs a domain whose values are always frozen.
+	private def within_domain?(type, domain)
+		case type
+		in Literal::Types::UnionType
+			type.all? { |member| within_domain?(member, domain) }
+		else
+			frozen = Literal::Types::FrozenType::Anything
+
+			Literal.subtype?(type, domain) &&
+				(!Literal.subtype?(type, frozen) || Literal.subtype?(domain, frozen))
+		end
 	end
 
 	# A const type — a literal value of this serializer's domain, or a union of
@@ -31,6 +46,14 @@ class Literal::Serializer
 		else
 			self.type === type
 		end
+	end
+
+	# The value to write for a value of the type: a value equal to a const of
+	# the type is written as that const, so the type 1 writes 1.0 as 1. Only
+	# an equal value: a Date const's === admits any time on its day.
+	private def representation(value, type)
+		const = (Literal::Types::UnionType === type) ? type.resolve(value) : type
+		(self.type === const && const == value) ? const : value
 	end
 
 	# The child types this serializer would recurse into when serializing a
@@ -118,6 +141,25 @@ class Literal::Serializer
 		raw
 	end
 
+	# A key under which raw JSON values compare the way JSON Schema compares
+	# them: numbers by value at any depth, so 1 and 1.0 are the same value, and
+	# so are [1] and [1.0]. A Float is written as its shortest decimal, so it
+	# means that decimal's exact value: 1e24 is 10**24, though the Float
+	# itself is a little less.
+	def self.json_equality_key(value)
+		case value
+		in Float if value.finite?
+			number = Rational(value.to_s)
+			(number.denominator == 1) ? number.numerator : number
+		in Array
+			value.map { |item| json_equality_key(item) }
+		in Hash
+			value.to_h { |key, item| [key, json_equality_key(item)] }
+		else
+			value
+		end
+	end
+
 	# Sorts the keys of every object within serialized JSON data, at every
 	# depth. Arrays keep their order.
 	def self.sort_keys(value)
@@ -187,6 +229,12 @@ class Literal::Serializer
 		@context.json_type(type)
 	end
 
+	# Deserializers check the JSON shape they read on entry, so malformed input
+	# raises this rather than whatever the reading code happens to raise.
+	private def malformed_raw_error(raw, type)
+		Literal::ArgumentError.new("Value #{raw.inspect} cannot be deserialized as #{type.inspect}")
+	end
+
 	# Whether the type is a union containing Literal::Undefined, marking a
 	# property or shape key that is omitted when serializing an undefined value
 	# and restored to Literal::Undefined when its key is missing.
@@ -203,30 +251,13 @@ class Literal::Serializer
 		type.reject { |member_type| member_type == Literal::Undefined }
 	end
 
-	# The finite set of raw JSON values the given type can serialize to, or nil
-	# when the domain is unbounded or unknown. Constants have singleton domains;
-	# a union of constants has the union of theirs. Domains are compared as
-	# serialized values, so a Symbol and a String constant that write the same
-	# JSON share a domain.
-	private def const_domain(type)
-		case type
-		when Literal::Types::UnionType
-			domains = type.each.map { |member| const_domain(member) }
-			domains.reduce(Set[], :|) if domains.all?
-		when String, Symbol, Integer, Float, true, false
-			Set[@context.serialize(type, type:)]
-		end
-	end
-
 	private def apply_length_constraints(schema, property_constraints, min_key:, max_key:)
 		property_constraints.each do |property, constraint|
 			case [property, constraint]
 			in [:length | :size, Range]
-				schema[max_key] = range_end(constraint) if constraint.end
-				schema[min_key] = constraint.begin if constraint.begin
+				apply_length_range(schema, constraint, min_key:, max_key:)
 			in [:length | :size, Integer]
-				schema[max_key] = constraint
-				schema[min_key] = constraint
+				apply_length_range(schema, constraint..constraint, min_key:, max_key:)
 			else
 				# Constraints JSON Schema cannot express are ignored. The schema is
 				# looser than the type, but still accepts everything serialization
@@ -235,8 +266,46 @@ class Literal::Serializer
 		end
 	end
 
-	private def range_end(range)
-		range.exclude_end? ? range.end - 1 : range.end
+	# Lengths are whole and never negative, so bounds round inward, a minimum
+	# below zero says nothing, and a maximum below zero admits nothing.
+	private def apply_length_range(schema, range, min_key:, max_key:)
+		minimum = finite_bound(range.begin)
+		maximum = finite_bound(range.end)
+
+		schema[min_key] = [minimum.ceil, 0].max if minimum
+
+		if maximum
+			maximum = range.exclude_end? ? maximum.ceil - 1 : maximum.floor
+
+			if maximum < 0
+				schema["not"] = {}
+			else
+				schema[max_key] = maximum
+			end
+		end
+	end
+
+	# JSON has no infinite numbers, and an infinite bound is no bound at all.
+	private def finite_bound(bound)
+		bound if Numeric === bound && bound.finite?
+	end
+
+	# JSON generators write only Integers and Floats as numbers, so a bound
+	# of another class is written as one when that's exact, and left out
+	# otherwise: the schema is looser, but still accepts every value.
+	private def json_bound(bound)
+		case finite_bound(bound)
+		in nil | Integer | Float => number
+			number
+		in number unless number.real?
+			nil
+		in number if number == number.truncate
+			number.truncate
+		in number if number.to_f.finite? && number.to_r == number.to_f.to_r
+			number.to_f
+		else
+			nil
+		end
 	end
 
 	private def apply_range_constraints(schema, ranges)
@@ -259,14 +328,17 @@ class Literal::Serializer
 		exclusive_maximum = false
 
 		ranges.each do |range|
-			minimum = range.begin if !range.begin.nil? && (minimum.nil? || range.begin > minimum)
+			range_begin = json_bound(range.begin)
+			range_end = json_bound(range.end)
 
-			next if range.end.nil?
+			minimum = range_begin if !range_begin.nil? && (minimum.nil? || range_begin > minimum)
 
-			if maximum.nil? || range.end < maximum
-				maximum = range.end
+			next if range_end.nil?
+
+			if maximum.nil? || range_end < maximum
+				maximum = range_end
 				exclusive_maximum = range.exclude_end?
-			elsif range.end == maximum && range.exclude_end?
+			elsif range_end == maximum && range.exclude_end?
 				exclusive_maximum = true
 			end
 		end
