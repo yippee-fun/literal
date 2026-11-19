@@ -4,7 +4,6 @@
 class Literal::Types::NilableType
 	include Literal::Type
 	include Literal::Types::DraftTransparent
-	include Literal::Types::Distributed
 
 	def initialize(type)
 		@type = Literal::Freezing.frozen_member(type)
@@ -44,9 +43,9 @@ class Literal::Types::NilableType
 		@type.record_literal_type_errors(ctx) if @type.respond_to?(:record_literal_type_errors)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
-		when Literal::Types::Distributed, Literal::Types::DeferredType
+		when Literal::Types::DeferredType
 			Literal.subtype?(other, self, context:)
 		when Literal::Types::VoidType
 			@type == Literal::Types::AnyType::Instance

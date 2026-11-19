@@ -17,7 +17,7 @@ class Literal::Types::AnyType
 	# A type is a subtype of _Any if it rejects nil. Asking it may run user
 	# code, such as a predicate, that isn't defined for nil, in which case we
 	# can't tell.
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		!(other === nil)
 	rescue
 		false

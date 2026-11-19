@@ -25,6 +25,42 @@ test "literal values are subtypes of their module supertypes" do
 	assert_subtype date, Object
 end
 
+if defined?(Ractor) && Ractor.shareable?(Literal::OBJECT_ID)
+	test "shareable types can be compared in another Ractor" do
+		types = Ractor.make_shareable([_Boolean, _Array(_Union(String, Symbol)), _Array(String), _SameObject(:a)])
+
+		ractor = Ractor.new(types) do |(boolean, wide, narrow, same)|
+			[Literal.subtype?(true, boolean), wide >= narrow, narrow <= wide, narrow >= wide, same >= same, same === :a]
+		end
+
+		results = ractor.respond_to?(:value) ? ractor.value : ractor.take
+
+		assert_equal results, [true, true, true, false, true, true]
+	end
+
+	test "every method handle is shareable" do
+		handles = []
+		namespaces = [Literal]
+
+		while (namespace = namespaces.pop)
+			namespace.constants(false).each do |name|
+				next if namespace.autoload?(name)
+
+				case namespace.const_get(name, false)
+				in UnboundMethod => handle
+					handles << "#{namespace}::#{name}" unless Ractor.shareable?(handle)
+				in Module => nested if nested.name&.start_with?("#{namespace}::")
+					namespaces << nested
+				else
+					nil
+				end
+			end
+		end
+
+		assert_equal handles, []
+	end
+end
+
 include Literal::Types
 
 test "numeric literals are bounded by Numeric, not their own class" do
@@ -208,6 +244,57 @@ test "a type is a subtype of an intersection of types it is a subtype of" do
 	refute_subtype _Array(String), _Constraint(Array, size: 1)
 end
 
+test "a type's own rule answers against literal types" do
+	assert_subtype _Constraint(_Tuple(String), size: 1), _Tuple(String)
+	assert_subtype _Constraint(_Boolean, frozen?: true), _Boolean
+	assert_subtype _Constraint(_Union(String, Symbol), frozen?: true), _Union(String, Symbol, Integer)
+	assert_subtype _Constraint(Integer, integer?: _Truthy), _Union(Integer, String)
+
+	refute_subtype _Constraint(_Tuple(String), size: 1), _Tuple(Symbol)
+	refute_subtype _Constraint(_Boolean, frozen?: true), _Union(true, nil)
+
+	assert _Constraint(_Boolean, frozen?: true) <= _Boolean
+	assert _Boolean >= _Constraint(_Boolean, frozen?: true)
+end
+
+test "a singleton is a subtype of literal types only through their own rules" do
+	string = +"abc"
+
+	assert_subtype _SameObject(string), String
+	assert_subtype _SameObject(:foo), _Union(_SameObject(:foo), String)
+	refute_subtype _SameObject(string), _String(size: 3)
+	refute_subtype _SameObject(string), _Union("abc", Integer)
+	refute_subtype _SameObject((1..).each), _Enumerable(Integer)
+
+	three_characters = Class.new do
+		extend Literal::Type
+
+		def self.===(value) = String === value && value.size == 3
+	end
+
+	refute_subtype _SameObject(string), three_characters
+end
+
+test "a value that is also a type keeps its literal bound" do
+	value = Class.new(String) { include Literal::Type }.new("x")
+
+	assert_subtype value, _JSONData
+end
+
+test "a type overriding <= isn't asked it against literal types" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_upper_bound = Integer
+		def <=(other, context: nil) = super(other)
+	end.new
+
+	assert_subtype integers, Numeric
+	refute_subtype integers, _Array(String)
+	refute integers <= _Array(String)
+end
+
 test "a union's own comparison operators distribute it" do
 	union = _Union(String, _Array(Integer), 1)
 	nilable = _Nilable(String)
@@ -235,4 +322,93 @@ test "a union's own comparison operators distribute it" do
 
 	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
 	refute _TaggedUnion(string: String, any: matcher) <= Object
+end
+
+test "a custom type's own rule answers both subtype? and its comparisons" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_supertype_of?(other, context:) = Literal.subtype?(other, Integer, context:)
+		def literal_upper_bound = Integer
+	end.new
+
+	halves = _Union(_Integer(1..), _Integer(..0))
+
+	assert_subtype halves, integers
+	assert integers >= halves
+	assert halves <= integers
+	assert integers >= _Deferred { halves }
+	assert integers <= Numeric
+	refute integers >= _Union(Integer, String)
+	refute integers <= String
+end
+
+test "a custom type overriding >= and <= still answers subtype?" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def >=(other, context: nil) = Literal.subtype?(other, Integer, context:)
+		def <=(other, context: nil) = Literal.subtype?(Integer, other, context:)
+	end.new
+
+	assert_subtype _Integer(1..), integers
+	assert_subtype _Union(_Integer(1..), _Integer(..0)), integers
+	assert_subtype integers, Numeric
+	refute_subtype String, integers
+	refute_subtype integers, String
+end
+
+test "a custom BasicObject type overriding >= still answers subtype?" do
+	integers = Class.new(BasicObject) do
+		include Literal::Type
+
+		def ===(value) = ::Integer === value
+		def >=(other, context: nil) = ::Literal.subtype?(other, ::Integer, context:)
+	end.new
+
+	assert_subtype _Integer(1..), integers
+	refute_subtype String, integers
+end
+
+test "a custom type's >= and <= overrides can fall back to super" do
+	natural = _Integer(0..)
+
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_upper_bound = Integer
+
+		define_method(:>=) do |other, context: nil|
+			(natural == other) || super(other, context:)
+		end
+
+		def <=(other, context: nil)
+			(String == other) || super
+		end
+	end.new
+
+	assert_subtype _Integer(0..), integers
+	assert_subtype integers, integers
+	refute_subtype _Integer(..0), integers
+	assert_subtype integers, Numeric
+	assert integers <= Numeric
+	assert integers >= integers
+	refute integers >= _Integer(..0)
+end
+
+test "a plain pair that comes back to itself through a shared context terminates" do
+	range = Class.new(Range) do
+		attr_accessor :context
+
+		def cover?(other)
+			Literal.subtype?(other + 0, self, context:)
+		end
+	end.new(1, 20_000)
+
+	range.context = Literal::SubtypeContext.new
+
+	refute Literal.subtype?(12_501, range, context: range.context)
 end

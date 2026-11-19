@@ -73,7 +73,7 @@ class Literal::Tuple
 			true
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				types = @types

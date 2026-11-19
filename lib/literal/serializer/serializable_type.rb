@@ -24,7 +24,7 @@ class Literal::Serializer::SerializableType
 		Literal.with_match_guard(self, value) { @type === value }
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		@context.serializable_type?(other)
 	end
 end

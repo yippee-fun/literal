@@ -209,3 +209,46 @@ test "a deferred type is required even when it would take nil" do
 	assert_raises(ArgumentError) { klass.new }
 	assert_equal klass.new(a: nil).a, nil
 end
+
+test "a deferred type that materializes to another deferred type is compared by what the chain ends in" do
+	string = _Deferred { _Deferred { String } }
+	boolean = _Deferred { _Deferred { _Union(true, false) } }
+
+	assert_subtype string, String
+	assert_subtype _Array(string), _Array(String)
+	assert_subtype boolean, _Boolean
+	refute_subtype string, Integer
+end
+
+test "a deferred chain checked against a union doesn't force members it doesn't need" do
+	chain = _Deferred { _Deferred { _Union(String, Integer) } }
+
+	assert_subtype chain, _Union(String, Integer, _Deferred { FutureType })
+end
+
+test "a deferred chain compared with itself or _Never stays unmaterialized" do
+	chain = _Deferred { _Deferred { FutureType } }
+
+	assert_subtype chain, chain
+	assert_subtype _Never, chain
+end
+
+test "mutually deferred aliases are subtypes of each other and nothing else" do
+	b = nil
+	a = _Deferred { b }
+	b = _Deferred { a }
+
+	assert_subtype a, b
+	assert_subtype b, a
+	assert_subtype a, a
+	refute_subtype a, String
+	refute_subtype String, a
+end
+
+test "a deferred alias of a deferred chain matches it without forcing the shared tail" do
+	inner = _Deferred { _Deferred { FutureType } }
+	type = _Deferred { inner }
+	alias_type = _Deferred { type }
+
+	assert_subtype type, alias_type
+end

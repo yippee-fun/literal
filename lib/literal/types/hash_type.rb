@@ -51,7 +51,7 @@ class Literal::Types::HashType
 		true
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::HashType
 			(
@@ -60,7 +60,7 @@ class Literal::Types::HashType
 				Literal.structural_subtype?(other.value_type, @value_type, context:)
 			)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
+			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		else
 			false
 		end

@@ -66,7 +66,7 @@ class Literal::Types::TupleType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::TupleType
 			other_types = other.types

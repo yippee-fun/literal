@@ -85,7 +85,7 @@ class Literal::Types::MapType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::MapType
 			other_shape = other.shape

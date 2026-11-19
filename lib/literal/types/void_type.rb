@@ -14,7 +14,7 @@ class Literal::Types::VoidType
 		true
 	end
 
-	def >=(_, context: nil)
+	def literal_supertype_of?(_, context:)
 		true
 	end
 

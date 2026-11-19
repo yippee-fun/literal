@@ -3,7 +3,7 @@
 require "weakref"
 
 module Literal::ConstantTracker
-	CONST_GET_METHOD = Module.instance_method(:const_get)
+	CONST_GET_METHOD = Literal.method_handle(Module, :const_get)
 	CONSTANTS = ObjectSpace::WeakMap.new
 	LISTS = {}.compare_by_identity
 	LISTS_MUTEX = Mutex.new

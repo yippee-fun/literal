@@ -27,7 +27,7 @@ class Literal::Success < Literal::Result
 			literal_hash(Generic, @type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				Literal.structural_subtype?(other.type, @type, context:)
