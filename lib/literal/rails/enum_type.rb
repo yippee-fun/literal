@@ -34,10 +34,13 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 		member_for(@subtype.deserialize(value))
 	end
 
+	# Form and database strings name the member whose backing value reads the same.
 	private def member_for(raw)
 		case raw
 		in nil
 			nil
+		in String
+			@enum[raw] || @enum.find { |it| it.value.to_s == raw } || (@enum.coerce(raw) unless raw.blank?)
 		else
 			@enum.coerce(raw)
 		end
@@ -45,8 +48,8 @@ class Literal::Rails::EnumType < ActiveModel::Type::Value
 
 	private def database_value(value)
 		case value
-		in ^@enum | Symbol
-			@enum.coerce(value).value
+		in ^@enum | Symbol | String
+			cast(value)&.value
 		else
 			value
 		end

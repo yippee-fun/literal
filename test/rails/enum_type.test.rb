@@ -95,3 +95,86 @@ test "raises when the attribute has no declared type" do
 
 	assert_raises(Literal::ArgumentError) { model_class.new }
 end
+
+class ::TypedStatus < Literal::Enum(Symbol)
+	Active = new(:active)
+	Archived = new(:archived)
+end
+
+class ::TypedLevel < Literal::Enum(Integer)
+	None = new(0)
+	Low = new(1)
+	High = new(2)
+end
+
+class ::TypedBlankSymbol < Literal::Enum(Symbol)
+	Blank = new(:"")
+end
+
+class ::TypedSwitch < Literal::Enum(Literal::Types._Boolean)
+	On = new(true)
+	Off = new(false)
+end
+
+class ::TypedCode < Literal::Enum(String)
+	Blank = new("")
+	Filled = new("x")
+end
+
+status = Literal::Rails::EnumType.new(TypedStatus)
+level = Literal::Rails::EnumType.new(TypedLevel)
+switch = Literal::Rails::EnumType.new(TypedSwitch)
+code = Literal::Rails::EnumType.new(TypedCode)
+
+test "members, backing values and member names cast" do
+	assert_equal status.cast(TypedStatus::Active), TypedStatus::Active
+	assert_equal status.cast(:active), TypedStatus::Active
+	assert_equal level.cast(1), TypedLevel::Low
+	assert_equal level.cast(:High), TypedLevel::High
+end
+
+test "a Symbol-backed enum reads back from a string column" do
+	assert_equal status.deserialize("active"), TypedStatus::Active
+	assert_equal status.cast("archived"), TypedStatus::Archived
+
+	string_column = Literal::Rails::EnumType.new(TypedStatus, ActiveModel::Type::String.new)
+	assert_equal string_column.deserialize("active"), TypedStatus::Active
+	assert_equal string_column.serialize(TypedStatus::Active), "active"
+end
+
+test "a string casts to the member whose backing value reads the same" do
+	assert_equal level.cast("1"), TypedLevel::Low
+	assert_equal level.deserialize("2"), TypedLevel::High
+	assert_equal switch.cast("true"), TypedSwitch::On
+	assert_equal switch.cast("false"), TypedSwitch::Off
+end
+
+test "a string that only loosely reads as a backing value raises" do
+	assert_raises(ArgumentError) { level.cast("garbage") }
+	assert_raises(ArgumentError) { level.serialize("1oops") }
+	assert_raises(ArgumentError) { switch.cast("garbage") }
+end
+
+test "blank input casts to nil" do
+	assert_equal level.cast(""), nil
+	assert_equal level.cast("  "), nil
+	assert_equal level.cast(" ".encode(Encoding::UTF_16LE)), nil
+	assert_equal status.deserialize(""), nil
+	assert_equal level.cast(nil), nil
+end
+
+test "a blank string that is a backing value casts to its member" do
+	assert_equal code.cast(""), TypedCode::Blank
+	assert_equal Literal::Rails::EnumType.new(TypedBlankSymbol).deserialize(""), TypedBlankSymbol::Blank
+end
+
+test "input with no member raises" do
+	assert_raises(ArgumentError) { level.cast("3") }
+	assert_raises(ArgumentError) { status.deserialize("deleted") }
+end
+
+test "serializes to the backing value" do
+	assert_equal status.serialize(TypedStatus::Active), :active
+	assert_equal level.serialize("2"), 2
+	assert_equal level.serialize(nil), nil
+end
