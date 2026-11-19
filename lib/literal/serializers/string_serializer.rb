@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::StringSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = String
 
 	def type

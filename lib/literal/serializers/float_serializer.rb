@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::FloatSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = _Float(finite?: _Truthy)
 
 	def type

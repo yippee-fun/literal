@@ -41,10 +41,8 @@ class Literal::FrozenSerializer < Literal::Serializer
 
 	attr_reader :type
 
-	# The guard rejects a type that is only itself frozen, such as
-	# t = _Deferred { _Frozen(t) }, whose dispatch would otherwise recurse.
 	def handles_type?(type)
-		@type.matches?(type) && Literal.with_match_guard(self, type) { @context.serializer_for?(thawed(type)) }
+		@type.matches?(type) && @context.serializer_for?(thawed(type))
 	end
 
 	def rejection_reason(type)
@@ -94,12 +92,26 @@ class Literal::FrozenSerializer < Literal::Serializer
 	end
 
 	private def thawed(type)
-		case (thawed = unfrozen(type))
-		when Literal::Types::DeferredType
-			thawed.materialize
-		else
-			thawed
+		thawed = unfrozen(type)
+		thawed = thawed.materialize if Literal::Types::DeferredType === thawed
+
+		thaws_to_nothing?(thawed) ? Literal::Types::NeverType::Instance : thawed
+	end
+
+	# A chain of frozen types and deferred aliases that leads back into
+	# itself, like t = _Deferred { _Frozen(t) }, has no values.
+	private def thaws_to_nothing?(type)
+		seen = nil
+
+		while Literal::Types::DeferredType === type || @type.matches?(type)
+			seen ||= {}.compare_by_identity
+			return true if seen.key?(type)
+
+			seen[type] = true
+			type = (Literal::Types::DeferredType === type) ? type.materialize : unfrozen(type)
 		end
+
+		false
 	end
 
 	# The type without its frozen requirement.

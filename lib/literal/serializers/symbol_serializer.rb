@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::SymbolSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = Symbol
 
 	def type
