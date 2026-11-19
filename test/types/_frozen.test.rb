@@ -15,6 +15,8 @@ test "hierarchy" do
 	assert_subtype _Constraint(Array, frozen?: true), _Frozen(Enumerable)
 	assert_subtype Symbol, _Frozen(Symbol)
 	assert_subtype Integer, _Frozen(Numeric)
+	assert_subtype _Intersection(String, _Frozen(String)), _Frozen(String)
+	assert_subtype _Intersection(String, _Frozen(Comparable)), _Frozen(String)
 
 	refute_subtype String, _Frozen(String)
 	refute_subtype Symbol, _Frozen(String)

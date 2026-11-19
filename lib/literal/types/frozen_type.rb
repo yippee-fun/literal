@@ -50,7 +50,7 @@ class Literal::Types::FrozenType
 			frozen_match = Literal.subtype?(other.property_constraints[:frozen?], true, context:)
 
 			other.object_constraints.each do |constraint|
-				frozen_match ||= ALWAYS_FROZEN.include?(constraint)
+				frozen_match ||= ALWAYS_FROZEN.include?(constraint) || Literal::Types::FrozenType === constraint
 				type_match ||= Literal.subtype?(constraint, @type, context:)
 				return true if frozen_match && type_match
 			end

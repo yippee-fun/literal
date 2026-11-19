@@ -4184,15 +4184,101 @@ test "identity hashes with repeated keys serialize the same in any order" do
 	assert_equal(Example.serialize(second, type: _JSONData).to_a, [["a", 1], ["a", 2]])
 end
 
-test "types requiring frozen values serialize only when their domain is always frozen" do
-	refute Example.serializable_type?(_Frozen(String))
-	refute Example.serializable_type?(_Frozen(SerializationPriority))
-	refute Example.serializable_type?(_Frozen(Date))
-	refute Example.serializable_type?(_Frozen(_JSONData))
-	refute Example.serializable_type?(_Constraint(String, frozen?: true))
-	refute Example.serializable_type?(_Union(_String(/\Ax/), _Frozen(_String(/\Ay/))))
-	assert_raises(Literal::ArgumentError) { Example.deserialize("a", type: _Frozen(String)) }
+test "scalar serializers refuse types requiring frozen values unless their domain is always frozen" do
+	context = Literal::SerializationContext.new(Literal::StringSerializer, Literal::IntegerSerializer, defaults: false)
 
-	assert Example.serializable_type?(_Frozen(_Integer(1..)))
-	assert_equal Example.deserialize(Example.serialize(1, type: _Frozen(_Integer(1..))), type: _Frozen(_Integer(1..))), 1
+	refute context.serializable_type?(_Frozen(String))
+	refute context.serializable_type?(_Constraint(String, frozen?: true))
+	refute context.serializable_type?(_Intersection(String, _Frozen(String)))
+	assert context.serializable_type?(_Frozen(_Integer(1..)))
+end
+
+test "types requiring frozen values load frozen" do
+	[
+		[_Frozen(String), "a"],
+		[_Constraint(String, frozen?: true), "a"],
+		[_Intersection(String, _Frozen(String)), "a"],
+		[_Frozen(_Integer(1..)), 1],
+		[_Frozen(SerializationPriority), SerializationPriority::Low],
+		[_Frozen(Date), Date.new(2026, 1, 1).freeze],
+		[_Frozen(_Array(String)), ["a"].freeze],
+		[_Constraint(_Array(Integer), frozen?: true), [1].freeze],
+		[_Frozen(_Hash(String, _Array(String))), { "a" => ["b"].freeze }.freeze],
+		[_Frozen(_Set(String)), Set["a"].freeze],
+		[_Frozen(_Map(name: String)), { name: "a" }.freeze],
+		[_Frozen(_JSONData), { "a" => ["b"] }.freeze],
+		[_Frozen(Literal::Array(String)), Literal::Array(String).new("a").freeze],
+	].each do |type, value|
+		assert Example.serializable_type?(type)
+
+		serialized = Example.serialize(value, type:)
+		loaded = Example.deserialize(JSON.parse(JSON.generate(serialized)), type:)
+
+		assert_equal(loaded, value)
+		assert loaded.frozen?
+	end
+
+	assert_equal(Example.json_schema(_Frozen(_Array(String))), Example.json_schema(_Array(String)))
+	assert_equal(Example.json_schema(_Constraint(String, size: 1..2, frozen?: true)), Example.json_schema(_String(size: 1..2)))
+end
+
+test "types requiring frozen values deep-freeze plain data and copy what they freeze" do
+	raw = { "a" => [+"b"] }
+	loaded = Example.deserialize(raw, type: _Frozen(_JSONData))
+
+	assert loaded["a"].frozen?
+	assert loaded["a"][0].frozen?
+	refute raw.frozen?
+	refute raw["a"].frozen?
+	refute raw["a"][0].frozen?
+
+	loaded = Example.deserialize([+"a"], type: _Frozen(Literal::Array(String)))
+	assert loaded.frozen?
+	refute loaded.first.frozen?
+end
+
+test "frozen consts discriminate like their thawed consts" do
+	colors = _Union(_Frozen("red"), _Frozen("blue"))
+
+	assert Example.deserialize("blue", type: colors).frozen?
+	refute Example.serializable_type?(_Union(_Frozen("red"), "red"))
+end
+
+test "frozen members discriminate like their thawed types" do
+	type = _Union(_Frozen(String), Integer, _Frozen(_Map(name: String)))
+
+	assert_equal(Example.deserialize("a", type:), "a")
+	assert Example.deserialize("a", type:).frozen?
+	assert_equal(Example.deserialize(1, type:), 1)
+	assert Example.deserialize({ "name" => "a" }, type:).frozen?
+
+	refute Example.serializable_type?(_Union(_String(/\Ax/), _Frozen(_String(/\Ay/))))
+end
+
+test "types requiring frozen values see through deferred types and refuse frozen cycles" do
+	type = _Frozen(_Deferred { SerializationValueObject })
+
+	assert Example.serializable_type?(type)
+	assert_equal(Example.deserialize({ "value" => "a" }, type:), SerializationValueObject.new(value: "a"))
+
+	cycle = _Deferred { _Frozen(cycle) }
+	refute Example.serializable_type?(cycle)
+end
+
+test "deep freezing copies keep a hash's default and key comparison" do
+	identity = {}.compare_by_identity
+	identity[+"a"] = 1
+	identity[+"a"] = 2
+	frozen = Literal::Freezing.deep_frozen(identity)
+
+	assert frozen.compare_by_identity?
+	assert_equal(frozen.size, 2)
+	assert_equal(Literal::Freezing.deep_frozen(Hash.new(5))["missing"], 5)
+end
+
+test "types requiring frozen values whose thawed type has no serializer explain why" do
+	refute Example.serializable_type?(_Frozen(Object))
+
+	error = Example.unserializable_type_error(_Frozen(Object))
+	assert_equal(error.message, "Type _Frozen(Object) cannot be serialized because there is no serializer for Object.")
 end

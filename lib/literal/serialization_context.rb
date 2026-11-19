@@ -14,6 +14,7 @@ class Literal::SerializationContext
 	DefaultSerializers = [
 		Literal::NeverSerializer,
 		Literal::VoidSerializer,
+		Literal::FrozenSerializer,
 		Literal::StringSerializer,
 		Literal::SymbolSerializer,
 		Literal::IntegerSerializer,
@@ -232,6 +233,8 @@ class Literal::SerializationContext
 		when Literal::Types::UnionType
 			domains = type.each.map { |member| const_domain(member) }
 			domains.reduce(Set[], :|) if domains.all?
+		when Literal::Types::FrozenType
+			const_domain(type.type)
 		when String, Symbol, Integer, Float, true, false, Literal::Enum
 			Set[Literal::Serializer.json_equality_key(serialize(type, type:))]
 		end
