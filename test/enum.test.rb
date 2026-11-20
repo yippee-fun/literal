@@ -16,6 +16,10 @@ class Color < Literal::Enum(Integer)
 	Blue = new(3, hex: "#0000FF")
 	SPRING_GREEN = new(4, hex: "#00FF7F")
 
+	SPRING_GREEN_HEX = "#00FF7F"
+
+	Scarlet = Red
+
 	__after_defined__ if RUBY_ENGINE == "truffleruby"
 end
 
@@ -51,6 +55,24 @@ end
 test ".coerce with invalid symbol raises an ArgumentError" do
 	assert_raises ArgumentError do
 		Color.coerce(:Invalid)
+	end
+end
+
+test ".coerce with the name of a constant that isn't a member raises an ArgumentError" do
+	assert_raises ArgumentError do
+		Color.coerce(:String)
+	end
+
+	assert_raises ArgumentError do
+		Color.coerce(:SPRING_GREEN_HEX)
+	end
+
+	parent = Class.new(Literal::Enum(Integer)) { const_set(:One, new(1)) }
+	child = Class.new(parent) { const_set(:Two, new(2)) }
+	parent.const_set(:Foreign, child::Two)
+
+	assert_raises ArgumentError do
+		parent.coerce(:Foreign)
 	end
 end
 
@@ -161,6 +183,31 @@ test "#<=>" do
 	assert_equal Color::Red <=> Color::Green, -1
 	assert_equal Color::Red <=> Color::Red, 0
 	assert_equal Color::Green <=> Color::Red, 1
+	assert_equal Color::Red <=> Switch::On, nil
+	assert_equal Color::Red <=> 1, nil
+end
+
+test "members are Comparable" do
+	assert Color::Red < Color::Green
+	assert Color::Blue > Color::Green
+	assert Color::Green.between?(Color::Red, Color::Blue)
+	assert_equal Color::SPRING_GREEN.clamp(Color::Red, Color::Blue), Color::Blue
+	assert_equal [Color::Blue, Color::Red].max, Color::Blue
+
+	assert_raises(ArgumentError) { Color::Red < Switch::On }
+	refute Color::Red == Switch::On
+	refute Color::Red == 1
+	assert Color::Red == Color::Scarlet
+end
+
+test "members of a subclassed enum don't compare with the parent's" do
+	parent = Class.new(Literal::Enum(Integer)) { const_set(:One, new(1)) }
+	child = Class.new(parent) { const_set(:Two, new(2)) }
+
+	assert_equal parent::One <=> child::Two, nil
+	refute parent::One == child::Two
+	refute child::Two == parent::One
+	refute parent::One === child::Two
 end
 
 test "#name" do
@@ -244,4 +291,125 @@ test "pattern matching" do
 	match { Color::Red => Color }
 	match { Color::Red => Color[1] }
 	match { Color::Red => Color[hex: "#FF0000"] }
+end
+
+test "members are tracked by their constant names" do
+	assert_equal Literal.const_name(Color::Red), Color::Red.name
+end
+
+test "an alias keeps the member's name and gets a predicate of its own" do
+	assert Color::Scarlet.equal?(Color::Red)
+	assert Color::Red.name.end_with?("Color::Red")
+	assert_equal Color::Red.to_sym, :Red
+	assert Color::Red.scarlet?
+	refute Color::Green.scarlet?
+	assert_equal Color.coerce(:Scarlet), Color::Red
+end
+
+test "prop? defines an optional property with a public reader" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop? :label, String
+
+		const_set(:Labelled, new(1, label: "One"))
+		const_set(:Plain, new(2))
+	end
+
+	assert_equal enum::Labelled.label, "One"
+	assert_equal enum::Plain.label, Literal::Undefined
+end
+
+test ".each without a block returns an enumerator" do
+	enumerator = Color.each
+
+	assert Enumerator === enumerator
+	assert_equal enumerator.size, 4
+	assert_equal enumerator.with_index.to_a.first, [Color::Red, 0]
+end
+
+test "members are singletons, so dup and clone return the member" do
+	assert Color::Red.dup.equal?(Color::Red)
+	assert Color::Red.clone.equal?(Color::Red)
+	assert Color::Red.clone(freeze: true).equal?(Color::Red)
+	assert_raises(ArgumentError) { Color::Red.clone(freeze: false) }
+	assert_raises(ArgumentError) { Color::Red.clone(freeze: :junk) }
+end
+
+test "members load from their dump" do
+	assert Color._load(Color::Blue._dump(-1)).equal?(Color::Blue)
+end
+
+test "loading a value that isn't a member raises" do
+	assert_raises(KeyError) { Color._load(Marshal.dump(99)) }
+end
+
+test "#find_by with more than one index names find_by" do
+	error = assert_raises(ArgumentError) { Color.find_by(hex: "#FF0000", lower_hex: "#ff0000") }
+	assert_equal error.message, "You can only specify one index when using `find_by`."
+end
+
+test "a member of an anonymous enum is named after the enum's inspect" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		const_set(:A, new(1))
+	end
+
+	assert_equal enum::A.name, "#{enum.inspect}::A"
+
+	error = assert_raises(ArgumentError) { enum.new(1) }
+	assert_equal error.message, "The value 1 is already used by #{enum.inspect}::A."
+end
+
+test "a member whose predicate would override an existing method is refused" do
+	[[:Nil, :nil?], [:Frozen, :frozen?], [:Between, :between?]].each do |member, predicate|
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(Literal::Enum(Integer)) { const_set(member, new(1)) }
+		end
+
+		assert error.message.include?("The member #{member}")
+		assert error.message.include?("##{predicate}")
+	end
+
+	assert_raises(Literal::ArgumentError) do
+		Class.new(Literal::Enum(Integer)) do
+			prop :active, _Boolean, predicate: :public
+			const_set(:Active, new(1, active: true))
+		end
+	end
+end
+
+test "refusing a member built before others keeps their positions" do
+	enum = Class.new(Literal::Enum(Integer))
+	first = enum.new(1)
+	second = enum.new(2)
+	assert_raises(Literal::ArgumentError) { enum.const_set(:Nil, first) }
+	enum.const_set(:Second, second)
+
+	assert_equal enum::Second.pred, first
+	assert_equal enum.position_of(enum::Second), 1
+end
+
+test "a property named __position__ keeps its own slot" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		prop :__position__, Integer, reader: false
+		const_set(:A, new(1, __position__: 10))
+		const_set(:B, new(2, __position__: 20))
+	end
+
+	assert_equal enum::A.succ, enum::B
+	assert_equal enum::A.to_h[:__position__], 10
+	assert enum::A < enum::B
+end
+
+test "a refused member leaves nothing behind" do
+	enum = Class.new(Literal::Enum(Integer)) do
+		const_set(:A, new(1))
+	end
+
+	assert_raises(Literal::ArgumentError) { enum.const_set(:Nil, enum.new(2)) }
+
+	refute enum.const_defined?(:Nil, false)
+	assert_equal enum[2], nil
+	assert_equal enum.members, [enum::A]
+
+	enum.const_set(:B, enum.new(2))
+	assert_equal enum::B.__position__, 1
 end

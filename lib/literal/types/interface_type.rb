@@ -4,16 +4,22 @@
 class Literal::Types::InterfaceType
 	include Literal::Type
 
-	# List of `===` method owners where the comparison will only match for objects with the same class
-	OwnClassTypeMethodOwners = Set[String, Integer, Kernel, Float, NilClass, TrueClass, FalseClass].freeze
-
 	def initialize(methods)
 		raise Literal::ArgumentError.new("_Interface type must have at least one method.") if methods.size < 1
 		@methods = methods.to_set.freeze
+		@hash = [Literal::Types::InterfaceType, @methods].hash
 		freeze
 	end
 
-	attr_reader :methods
+	attr_reader :methods, :hash
+
+	def ==(other)
+		Literal::Types::InterfaceType === other && @methods == other.methods
+	end
+
+	def eql?(other)
+		Literal::Types::InterfaceType === other && @methods.eql?(other.methods)
+	end
 
 	def inspect
 		"_Interface(#{@methods.map(&:inspect).join(', ')})"
@@ -27,7 +33,7 @@ class Literal::Types::InterfaceType
 		true
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::InterfaceType
 			@methods.subset?(other.methods)
@@ -37,11 +43,9 @@ class Literal::Types::InterfaceType
 		when Literal::Types::ConstraintType
 			@methods.all? { |method| other.object_constraints.any? { |type| covers_method?(type, method, context:) } }
 		else
-			if OwnClassTypeMethodOwners.include?(other.method(:===).owner)
-				self === other
-			else
-				false
-			end
+			# An object matched with Kernel#=== stands for itself. Literals admit
+			# every value == to them, so subtype? judges them by their bound.
+			Literal.literal_bound(other).nil? && Kernel == other.method(:===).owner && self === other
 		end
 	end
 

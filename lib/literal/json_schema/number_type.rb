@@ -26,8 +26,8 @@ class Literal::JSONSchema::NumberType < Literal::Data
 		number_matches?(value)
 	end
 
-	def <=(other, context: nil)
-		return true if other == Literal::JSONSchema::NumberType
+	def literal_subtype_of?(other, context:)
+		return true if Literal::JSONSchema::NumberType == other
 
 		Literal.subtype?(::Numeric, other, context:)
 	end

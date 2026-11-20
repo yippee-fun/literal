@@ -4,9 +4,33 @@ require "zeitwerk"
 require_relative "literal/version"
 
 module Literal
-	OBJECT_ID = BasicObject.instance_method(:__id__)
-	EQUAL = BasicObject.instance_method(:equal?)
-	FROZEN = Kernel.instance_method(:frozen?)
+	# An instance method held for calling with bind_call, shareable so any
+	# Ractor can use it on Rubies that can share method objects (4.0+).
+	def self.method_handle(owner, name)
+		handle = owner.instance_method(name)
+		Ractor.make_shareable(handle) if defined?(Ractor)
+		handle
+	rescue Ractor::Error
+		handle
+	end
+
+	OBJECT_ID = method_handle(BasicObject, :__id__)
+	EQUAL = method_handle(BasicObject, :equal?)
+	FROZEN = method_handle(Kernel, :frozen?)
+	FREEZE = method_handle(Kernel, :freeze)
+	CLASS = method_handle(Kernel, :class)
+	SEND = method_handle(BasicObject, :__send__)
+	PUBLIC_SEND = method_handle(Kernel, :public_send)
+	INSTANCE_EXEC = method_handle(BasicObject, :instance_exec)
+	RESPOND_TO = method_handle(Kernel, :respond_to?)
+	DUP = method_handle(Kernel, :dup)
+	INSTANCE_VARIABLE_GET = method_handle(Kernel, :instance_variable_get)
+	INSTANCE_VARIABLE_SET = method_handle(Kernel, :instance_variable_set)
+	INSTANCE_VARIABLE_DEFINED = method_handle(Kernel, :instance_variable_defined?)
+	REMOVE_INSTANCE_VARIABLE = method_handle(Kernel, :remove_instance_variable)
+	METHOD = method_handle(Kernel, :method)
+	HASH = method_handle(Kernel, :hash)
+	INSPECT = method_handle(Kernel, :inspect)
 
 	Loader = Zeitwerk::Loader.for_gem.tap do |loader|
 		loader.ignore("#{__dir__}/literal/kernel.rb")
@@ -30,6 +54,84 @@ module Literal
 
 	Immediate = Types._Union(Integer, Float, Symbol, nil, Types._Boolean)
 
+	SINGLETON_METHODS = method_handle(Kernel, :singleton_methods)
+
+	# Kernel#respond_to? needs respond_to_missing?, which BasicObject lacks on JRuby.
+	def self.implements?(object, method_name)
+		class_of_object = CLASS.bind_call(object)
+
+		if class_of_object.private_method_defined?(:respond_to_missing?) || class_of_object.method_defined?(:respond_to_missing?)
+			RESPOND_TO.bind_call(object, method_name, true)
+		else
+			class_of_object.private_method_defined?(method_name) || class_of_object.method_defined?(method_name) ||
+				SINGLETON_METHODS.bind_call(object).include?(method_name)
+		end
+	end
+
+	# Compares and hashes a wrapped payload, which may undefine eql? or hash,
+	# or replace __send__.
+	def self.payload_eql?(payload, other)
+		EQUAL.bind_call(payload, other) || (implements?(payload, :eql?) && SEND.bind_call(payload, :eql?, other))
+	end
+
+	def self.payload_hash(payload)
+		implements?(payload, :hash) ? SEND.bind_call(payload, :hash) : HASH.bind_call(payload)
+	end
+
+	# Compares and hashes a type's members, which may be matchers without eql?
+	# or hash, like a BasicObject: those compare by identity. A container met
+	# again is met through a cycle, and answers true or 0, as Ruby's recursive
+	# eql? and hash do.
+	def self.member_eql?(member, other, active = nil)
+		member.eql?(other)
+	rescue NoMethodError
+		case member
+		when ::Array, ::Hash
+			active ||= {}.compare_by_identity
+			return true if active.key?(member)
+
+			active[member] = true
+
+			begin
+				case member
+				when ::Array
+					::Array === other && member.size == other.size && member.each_index.all? { |i| member_eql?(member[i], other[i], active) }
+				else
+					::Hash === other && member.size == other.size && member.all? { |key, item| other.key?(key) && member_eql?(item, other[key], active) }
+				end
+			ensure
+				active.delete(member)
+			end
+		else
+			payload_eql?(member, other)
+		end
+	end
+
+	def self.member_hash(member, active = nil)
+		member.hash
+	rescue NoMethodError
+		case member
+		when ::Array, ::Hash
+			active ||= {}.compare_by_identity
+			return 0 if active.key?(member)
+
+			active[member] = true
+
+			begin
+				case member
+				when ::Array
+					member.map { |item| member_hash(item, active) }.hash
+				else
+					member.to_h { |key, item| [member_hash(key, active), member_hash(item, active)] }.hash
+				end
+			ensure
+				active.delete(member)
+			end
+		else
+			payload_hash(member)
+		end
+	end
+
 	def self.const_name(object)
 		const_ref(object).first&.name
 	end
@@ -49,14 +151,14 @@ module Literal
 		elsif subtype?(type, String)
 			value_class.alias_method :to_s, :value
 			value_class.alias_method :to_str, :value
-		elsif subtype?(type, Array)
+		elsif subtype?(type, ::Array)
 			value_class.alias_method :to_a, :value
 			value_class.alias_method :to_ary, :value
-		elsif subtype?(type, Hash)
+		elsif subtype?(type, ::Hash)
 			value_class.alias_method :to_h, :value
 		elsif subtype?(type, Float)
 			value_class.alias_method :to_f, :value
-		elsif subtype?(type, Set)
+		elsif subtype?(type, ::Set)
 			value_class.alias_method :to_set, :value
 		end
 
@@ -195,45 +297,117 @@ module Literal
 	end
 
 	def self.subtype?(type, supertype, context: nil)
-		context ||= SubtypeContext.new
-		raw_key = [type.object_id, supertype.object_id]
-		raw_acquired = false
-		resolved_key = nil
-		resolved_acquired = false
+		return !!(supertype >= type) if Module === type && Module === supertype && !(Literal::Type === supertype)
 
-		return context.fetch(raw_key) if context.memoized?(raw_key)
-
-		# Coinductive cycle handling: if we are already in the middle of proving this
-		# exact pair, assume it holds — provided the recursion has passed through a
-		# structural constructor (see SubtypeContext#assume). This is what makes
-		# subtyping between recursive (looping) types terminate with the right answer.
-		return context.assume(raw_key) unless context.acquire(raw_key)
-
-		raw_acquired = true
-
-		subtype = type
-
-		subtype = subtype.materialize if Types::DeferredType === subtype
-		supertype = supertype.materialize if Types::DeferredType === supertype
-		resolved_key = [subtype.object_id, supertype.object_id]
-
-		if resolved_key != raw_key
-			if context.memoized?(resolved_key)
-				result = context.fetch(resolved_key)
-				context.store(raw_key, result)
-				return result
-			end
-
-			return context.assume(resolved_key) unless context.acquire(resolved_key)
-
-			resolved_acquired = true
+		# With no Literal type on either side, only a context could bring the
+		# check back to this pair, so a check that starts here needs none.
+		if context.nil? && !(Literal::Type === type || Literal::Type === supertype)
+			return !!resolved_subtype?(type, supertype, nil)
 		end
 
-		result = if subtype == Types::NeverType::Instance
-			true
-		elsif supertype == subtype
-			true
-		elsif supertype == nil
+		context ||= SubtypeContext.new
+		type_id = OBJECT_ID.bind_call(type)
+		supertype_id = OBJECT_ID.bind_call(supertype)
+
+		# Coinductive cycle handling: if we are already in the middle of proving this
+		# exact pair, assume it holds — provided the cycle justifies it (see
+		# SubtypeContext#assume). This is what makes subtyping between recursive
+		# (looping) types terminate with the right answer.
+		known = context.recall(type_id, supertype_id, type)
+		return known unless known.nil?
+
+		raw_frame = context.acquire(type_id, supertype_id)
+		subtype = type
+		resolved_supertype = supertype
+
+		if Types::DeferredType === type || Types::DeferredType === supertype
+			subtype = context.unfold_left(type) if Types::DeferredType === type
+			resolved_supertype = supertype.materialize if Types::DeferredType === supertype
+			subtype_id = OBJECT_ID.bind_call(subtype)
+			resolved_supertype_id = OBJECT_ID.bind_call(resolved_supertype)
+
+			unless subtype_id == type_id && resolved_supertype_id == supertype_id
+				known = context.recall(subtype_id, resolved_supertype_id, subtype)
+
+				unless known.nil?
+					context.store(type_id, supertype_id, raw_frame, known)
+					return known
+				end
+
+				resolved_frame = context.acquire(subtype_id, resolved_supertype_id)
+			end
+		end
+
+		result = !!resolved_subtype?(subtype, resolved_supertype, context)
+
+		# A proof resting on an assumption its type turned out not to support
+		# stores nothing, and is tried again refusing that assumption.
+		while context.store(type_id, supertype_id, raw_frame, result).nil?
+			result = !!resolved_subtype?(subtype, resolved_supertype, context)
+		end
+
+		context.store(subtype_id, resolved_supertype_id, resolved_frame, result) if resolved_frame
+		result
+	ensure
+		context.release(subtype_id, resolved_supertype_id, resolved_frame) if resolved_frame
+		context.release(type_id, supertype_id, raw_frame) if raw_frame
+	end
+
+	# A union is a subtype of anything all its members are subtypes of.
+	private_class_method def self.resolved_subtype?(subtype, supertype, context)
+		return true if subtype == Types::NeverType::Instance || supertype == subtype
+
+		case subtype
+		in Types::DeferredType unless Types::DeferredType === supertype
+			context.left_unfolded_subtype?(subtype, supertype)
+		in Types::UnionType
+			subtype.all? { |member| subtype?(member, supertype, context:) }
+		in Types::NilableType
+			subtype?(nil, supertype, context:) && subtype?(subtype.type, supertype, context:)
+		in Types::TaggedUnionType
+			subtype.members.each_value.all? { |member| subtype?(member, supertype, context:) }
+		in Result::Generic
+			# Results are closed: Result(S, F) is _Union(Success(S), Failure(F)).
+			subtype?(Success(subtype.success_type), supertype, context:) &&
+				subtype?(Failure(subtype.failure_type), supertype, context:)
+		else
+			member_subtype?(subtype, supertype, context)
+		end
+	end
+
+	# The tightest type closed under a literal's ==, which bounds every value
+	# the literal admits as a type. Numeric equality crosses classes
+	# (10 == 10.0 == 10r == Complex(10)), so a numeric literal is bounded by
+	# the core numerics and its own class — use _Integer(10) for an
+	# Integer-anchored one — and a Date equals any DateTime or number (its
+	# astronomical Julian day) on the same instant. Like the rest of subtype?,
+	# this is sound against honest core types: String#== and friends defer to
+	# an operand that merely converts, like one responding to to_str.
+	def self.literal_bound(literal)
+		case literal
+		in Numeric then numerics_or(literal.class)
+		in String then String
+		in Symbol then Symbol
+		in ::Array then ::Array
+		in ::Hash then ::Hash
+		in nil | true | false then literal.class
+		else
+			numerics_or(::Date) if defined?(::Date) && ::Date === literal
+		end
+	end
+
+	private_class_method def self.numerics_or(type)
+		Types._Union(Integer, Float, Rational, Complex, *(::BigDecimal if defined?(::BigDecimal)), type)
+	end
+
+	# A literal is a subtype of whatever its bound is a subtype of.
+	private_class_method def self.bounded_subtype?(literal, supertype, context)
+		bound = literal_bound(literal)
+		!bound.nil? && subtype?(bound, supertype, context:)
+	end
+
+	private_class_method def self.member_subtype?(subtype, supertype, context)
+		if supertype == nil
 			subtype == NilClass
 		elsif supertype == true
 			subtype == TrueClass
@@ -242,38 +416,24 @@ module Literal
 		else
 			case supertype
 			when Literal::Type
-				supertype.>=(subtype, context:)
+				supertype.literal_supertype_of?(subtype, context:) ||
+					(Literal::Type === subtype && subtype.literal_subtype_of?(supertype, context:)) ||
+					bounded_subtype?(subtype, supertype, context)
 			when Module
 				case subtype
 				when Module
 					supertype >= subtype
-				when Numeric
-					# A numeric literal admits every value it is == to, and Ruby's numeric
-					# equality crosses classes (10 == 10.0 == 10r), so the tightest honest
-					# nominal bound is Numeric, not the literal's own class. Use
-					# _Integer(10) for an Integer-anchored literal.
-					supertype >= Numeric
-				when String
-					supertype >= String
-				when Symbol
-					supertype >= Symbol
-				when ::Array
-					supertype >= ::Array
-				when ::Hash
-					supertype >= ::Hash
 				when Literal::Type
-					subtype.<=(supertype, context:)
+					subtype.literal_subtype_of?(supertype, context:)
 				else
-					if defined?(::Date) && ::Date === subtype
-						supertype >= ::Date
-					else
-						false
-					end
+					bounded_subtype?(subtype, supertype, context)
 				end
 			when Range
 				case subtype
 				when Literal::Type
-					subtype.<=(supertype, context:)
+					subtype.literal_subtype_of?(supertype, context:)
+				when Range
+					range_contains?(supertype, subtype)
 				else
 					supertype.cover?(subtype)
 				end
@@ -281,15 +441,34 @@ module Literal
 				false
 			end
 		end
+	end
 
-		context.store(resolved_key, result)
-		context.store(raw_key, result)
-		result
-	ensure
-		if context
-			context.release(resolved_key) if resolved_acquired
-			context.release(raw_key) if raw_acquired
+	# Range#cover?(range) treats integer ranges as discrete, so (1..4) covers
+	# (1...5) even though 4.5 is in the latter. Compare the endpoints instead.
+	private_class_method def self.range_contains?(range, other)
+		begin_contained = case [range.begin, other.begin]
+		in [nil, _] then true
+		in [_, nil] then false
+		in [lower, other_lower]
+			# <=> may answer any number, like a difference, so only its sign counts.
+			case lower <=> other_lower
+			in Numeric => order then order <= 0
+			else false
+			end
 		end
+
+		end_contained = case [range.end, other.end]
+		in [nil, _] then true
+		in [_, nil] then false
+		in [upper, other_upper]
+			case upper <=> other_upper
+			in Numeric => order if order.zero? then !range.exclude_end? || other.exclude_end?
+			in Numeric => order then order > 0
+			else false
+			end
+		end
+
+		begin_contained && end_contained
 	end
 end
 

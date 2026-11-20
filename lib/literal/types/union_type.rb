@@ -1,9 +1,15 @@
 # frozen_string_literal: true
 
+require "delegate"
+
 class Literal::Types::UnionType
 	include Enumerable
 	include Literal::Type
 	include Literal::Types::DraftTransparent
+
+	# Literal values, which a value resolves to first when it is one and last
+	# when it is merely == to one.
+	PRIMITIVES = [Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil].freeze
 
 	def initialize(queue)
 		raise Literal::ArgumentError.new("_Union type must have at least one type.") if queue.size < 1
@@ -11,10 +17,11 @@ class Literal::Types::UnionType
 		primitives = Set[]
 
 		while queue.length > 0
-			type = queue.shift
+			type = Literal::Freezing.frozen_member(queue.shift)
 			# Flattened members are queued at the front so that they take the
-			# position of the member they came from — order decides which member
-			# `resolve` tries first and how JSON schemas list them.
+			# position of the member they came from — order decides how JSON
+			# schemas list them and which of two incomparable members `resolve`
+			# picks.
 			case type
 			when Literal::Types::UnionType
 				queue.unshift(*type.types, *type.primitives)
@@ -23,21 +30,81 @@ class Literal::Types::UnionType
 				# is what makes `_Optional(_Nilable(String))` and
 				# `_Nilable(_Optional(String))` the same union.
 				queue.unshift(type.type, nil)
-			when Array, Hash, String, Symbol, Integer, Float, Complex, Rational, true, false, nil
+			when *PRIMITIVES
 				primitives << type
 			else
 				types << type
 			end
 		end
 
-		types.uniq!
+		begin
+			types.uniq!
+		rescue NoMethodError
+			# A matcher without #hash, as a BasicObject may be, is unique by identity.
+			types.uniq! { |type| Literal.implements?(type, :hash) ? type : Literal::OBJECT_ID.bind_call(type) }
+		end
+
 		@types = types.freeze
 		@primitives = primitives.freeze
+		@primitive_list = primitives.to_a.freeze
+		@hash = literal_hash(Literal::Types::UnionType, @types, @primitive_list)
+		@guarded = Literal::Types::UnionType.reaches_opaque_match?(types)
+		# Only an instance of a primitive's class can be eql? to it — any String,
+		# Array or Hash to one of those, whatever their subclasses — or else a
+		# delegator, which forwards eql? and hash to the object it wraps.
+		member_classes = primitives.map { |primitive| [String, Array, Hash].find { |base| base === primitive } || primitive.class }.uniq
+		member_classes << Delegator if member_classes.any?
+		@member_classes = member_classes.freeze
 
 		freeze
 	end
 
-	attr_reader :types, :primitives
+	attr_reader :types, :primitives, :hash
+
+	protected attr_reader :primitive_list
+
+	# The earliest of the matching members, in declaration order, that no other
+	# is a strict subtype of. Only matches are compared, so a deferred member
+	# is never materialized unless the value matched it.
+	def self.most_specific(matches)
+		matches.find do |match|
+			type = yield match
+			matches.none? { |other| strict_subtype?(yield(other), type) }
+		end or raise Literal::ArgumentError.new("No most specific member of #{matches.inspect}: they are strict subtypes of one another in a cycle.")
+	end
+
+	# Whether matching any of these types can run opaque code — a proc, an
+	# object or module with its own `===`, or a method the value defines —
+	# without first passing a deferred type's guard. Opaque code can re-enter
+	# the match, so a union that reaches it needs a guard of its own.
+	def self.reaches_opaque_match?(types, seen = {}.compare_by_identity)
+		types.any? do |type|
+			next false if seen.key?(type)
+
+			seen[type] = true
+
+			case type
+			in Literal::Types::DeferredType
+				false
+			in Literal::Types::ConstraintType if type.property_constraints.any?
+				true
+			in Literal::Types::InterfaceType | Literal::Types::EnumerableType
+				true
+			in Literal::Type
+				reaches_opaque_match?(type.literal_child_types, seen)
+			in Module
+				Module != Literal::METHOD.bind_call(type, :===).owner
+			in String | Symbol | Numeric | Regexp | Range | ::Array | ::Hash | true | false | nil
+				false
+			else
+				Kernel != Literal::METHOD.bind_call(type, :===).owner
+			end
+		end
+	end
+
+	private_class_method def self.strict_subtype?(type, supertype)
+		!type.equal?(supertype) && Literal.subtype?(type, supertype) && !Literal.subtype?(supertype, type)
+	end
 
 	def __relax__(&relax)
 		Literal::Types._Union(*@types.map(&relax), *@primitives)
@@ -64,34 +131,54 @@ class Literal::Types::UnionType
 	def ===(value)
 		return true if primitive_match?(value)
 
-		Literal.with_match_guard(self, value) do
-			types = @types
-
-			i, len = 0, types.size
-			while i < len
-				return true if types[i] === value
-				i += 1
-			end
-
-			false
+		if @guarded
+			Literal.with_match_guard(self, value) { type_match?(value) }
+		else
+			type_match?(value)
 		end
 	end
 
-	def resolve(value)
-		if @primitives.include?(value)
-			value
-		else
-			types = @types
+	private def type_match?(value)
+		types = @types
 
-			i, len = 0, types.size
-			while i < len
-				type = types[i]
-				return type if type === value
-				i += 1
+		i, len = 0, types.size
+		while i < len
+			return true if types[i] === value
+			i += 1
+		end
+
+		false
+	end
+
+	# The member a value belongs to: a primitive it is, or else a most specific
+	# matching type, or else a primitive it is merely == to — so
+	# BigDecimal("1") resolves to a BigDecimal member before the literal 1.
+	def resolve(value)
+		return value if primitive_member?(value)
+
+		types = @types
+
+		i, len = 0, types.size
+		while i < len
+			type = types[i]
+
+			if type === value
+				j = i + 1
+				while j < len
+					return most_specific_type(i, j, value) if types[j] === value
+					j += 1
+				end
+
+				return type
 			end
 
-			raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.")
+			i += 1
 		end
+
+		index = equal_primitive_index(value)
+		raise Literal::ArgumentError.new("No match found for #{value.inspect} in #{inspect}.") unless index
+
+		@primitive_list[index]
 	end
 
 	def each(&)
@@ -110,17 +197,23 @@ class Literal::Types::UnionType
 		to_a
 	end
 
-	# Member order is behaviourally meaningful — `resolve` takes the first match
-	# and JSON schemas list members in order — but it does not distinguish one
-	# type from another, so equality compares members as a set. `@primitives`
-	# already does; `@types` is uniqued by the constructor, so for equal sizes a
-	# subset is an equal set.
+	# Member order is behaviourally meaningful — `resolve` breaks ties by it and
+	# JSON schemas list members in order — but it does not change which values
+	# a union admits, so `==` compares members as a set. `@primitives` already
+	# does; `@types` is uniqued with eql? by the constructor, so for equal sizes
+	# an eql? subset is an equal set. `eql?` (and so hash keys) also requires
+	# the same order, like 1 == 1.0 but not 1.eql?(1.0), so unions sharing a
+	# key behave alike.
+	def eql?(other)
+		Literal::Types::UnionType === other && Literal.member_eql?(@types, other.types) && @primitive_list.eql?(other.primitive_list)
+	end
+
 	def ==(other)
 		case other
 		when Literal::Types::UnionType
 			@primitives == other.primitives &&
 				@types.size == other.types.size &&
-				(@types == other.types || @types.all? { |type| other.types.include?(type) })
+				(Literal.member_eql?(@types, other.types) || @types.all? { |type| other.types.any? { |member| Literal.member_eql?(member, type) } })
 		else
 			false
 		end
@@ -153,15 +246,10 @@ class Literal::Types::UnionType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
-		when Literal::Types::UnionType
-			other.types.all? { |type| covers?(type, context:) } &&
-				other.primitives.all? { |primitive| covers?(primitive, context:) }
-		when Literal::Types::TaggedUnionType
-			other.members.values.all? { |type| covers?(type, context:) }
-		when Literal::Types::NilableType
-			covers?(nil, context:) && covers?(other.type, context:)
+		when Literal::Types::DeferredType
+			Literal.subtype?(other, self, context:)
 		when Literal::Types::FalsyType
 			covers?(nil, context:) && covers?(false, context:)
 		else
@@ -174,15 +262,43 @@ class Literal::Types::UnionType
 			@types.any? { |member| Literal.subtype?(type, member, context:) }
 	end
 
-	private def primitive_match?(value)
-		@primitives.include?(value)
-	rescue
-		@primitives.any? { |primitive| primitive == value }
+	# Members `first` and `second` both match; no member between them does.
+	private def most_specific_type(first, second, value)
+		matches = [@types[first], @types[second], *@types[(second + 1)..].select { |type| type === value }]
+		Literal::Types::UnionType.most_specific(matches, &:itself)
 	end
 
-	def <=(other, context: nil)
-		@primitives.all? { |primitive| Literal.subtype?(primitive, other, context:) } &&
-			@types.all? { |type| Literal.subtype?(type, other, context:) }
+	private def primitive_match?(value)
+		primitive_member?(value) || !equal_primitive_index(value).nil?
+	end
+
+	# The Set lookup hashes the value, which walks everything inside a struct
+	# or an array, so it's skipped for values that can't be eql? to a primitive.
+	private def primitive_member?(value)
+		classes = @member_classes
+		i, len = 0, classes.size
+		while i < len
+			return @primitives.include?(value) if classes[i] === value
+			i += 1
+		end
+
+		false
+	rescue
+		false
+	end
+
+	# Primitives match with ==, like bare literals (1 === 1.0), so a value
+	# that isn't eql? to one may still equal one.
+	private def equal_primitive_index(value)
+		primitives = @primitive_list
+
+		i, len = 0, primitives.size
+		while i < len
+			return i if primitives[i] == value
+			i += 1
+		end
+
+		nil
 	end
 
 	freeze

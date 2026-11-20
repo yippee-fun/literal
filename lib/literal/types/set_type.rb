@@ -5,11 +5,20 @@ class Literal::Types::SetType
 	include Literal::Type
 
 	def initialize(type)
-		@type = type
+		@type = Literal::Freezing.frozen_member(type)
+		@hash = literal_hash(Literal::Types::SetType, @type)
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::SetType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::SetType === other && Literal.member_eql?(@type, other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
@@ -19,6 +28,10 @@ class Literal::Types::SetType
 
 	def inspect
 		"_Set(#{@type.inspect})"
+	end
+
+	def literal_upper_bound
+		Set
 	end
 
 	def ===(value)
@@ -41,12 +54,12 @@ class Literal::Types::SetType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::SetType
 			Literal.structural_subtype?(other.type, @type, context:)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
+			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		else
 			false
 		end

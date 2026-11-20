@@ -25,8 +25,8 @@ class Literal::Hash
 		include Literal::Coercions::Composable
 
 		def initialize(key_type, value_type)
-			@key_type = key_type
-			@value_type = value_type
+			@key_type = Literal::Freezing.frozen_member(key_type)
+			@value_type = Literal::Freezing.frozen_member(value_type)
 			freeze
 		end
 
@@ -56,13 +56,21 @@ class Literal::Hash
 			Generic === other && @key_type == other.key_type && @value_type == other.value_type
 		end
 
+		def eql?(other)
+			Generic === other && Literal.member_eql?(@key_type, other.key_type) && Literal.member_eql?(@value_type, other.value_type)
+		end
+
+		def hash
+			literal_hash(Generic, @key_type, @value_type)
+		end
+
 		def ===(value)
 			Literal::Hash === value &&
 				Literal.subtype?(value.__key_type__, @key_type) &&
 				Literal.subtype?(value.__value_type__, @value_type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				Literal.structural_subtype?(other.key_type, @key_type, context:) &&
@@ -70,6 +78,10 @@ class Literal::Hash
 			else
 				false
 			end
+		end
+
+		def literal_upper_bound
+			Literal::Hash
 		end
 
 		def literal_child_types
@@ -99,7 +111,7 @@ class Literal::Hash
 
 		@__key_type__ = key_type
 		@__value_type__ = value_type
-		@__value__ = value.dup
+		@__value__ = {}.update(value)
 		@__collection_type__ = collection_type
 	end
 
@@ -126,6 +138,8 @@ class Literal::Hash
 	end
 
 	def []=(key, value)
+		__check_frozen__
+
 		Literal.check(key, @__key_type__) do |c|
 			c.fill_receiver(receiver: self, method: "#[]=")
 		end
@@ -138,6 +152,7 @@ class Literal::Hash
 	end
 
 	def clear
+		__check_frozen__
 		@__value__.clear
 		self
 	end
@@ -164,11 +179,17 @@ class Literal::Hash
 	end
 
 	def compact!
+		__check_frozen__
 		@__value__.compact!
 		self
 	end
 
+	def deconstruct_keys(keys)
+		keys ? @__value__.slice(*keys) : @__value__.dup
+	end
+
 	def delete(key, &block)
+		__check_frozen__
 		return @__value__.delete(key, &block) if block
 
 		@__value__.delete(key) { Literal::Undefined }
@@ -258,6 +279,7 @@ class Literal::Hash
 	end
 
 	def merge!(*others, &block)
+		__check_frozen__
 		values = others.map { |other| __compatible_value__(other, "#merge!") }
 
 		if block
@@ -307,6 +329,7 @@ class Literal::Hash
 
 	def reject!(&block)
 		raise ArgumentError.new("#reject! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.reject!(&block)
 		self
@@ -320,6 +343,7 @@ class Literal::Hash
 
 	def select!(&block)
 		raise ArgumentError.new("#select! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.select!(&block)
 		self
@@ -410,6 +434,10 @@ class Literal::Hash
 			value_type: @__value_type__,
 			collection_type: @__collection_type__,
 		)
+	end
+
+	private def __check_frozen__
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
 	end
 
 	# Unwraps the other operand for operations where its entries end up in our

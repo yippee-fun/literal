@@ -13,6 +13,14 @@ rescue LoadError
 	nil
 end
 
+# sqlite3 doesn't install on JRuby, so Active Record tests that need a
+# database are defined only when it’s available.
+begin
+	require "sqlite3"
+rescue LoadError
+	nil
+end
+
 module Fixtures
 	Objects = Set[
 		SecureRandom.hex,

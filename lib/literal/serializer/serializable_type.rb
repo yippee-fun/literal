@@ -18,11 +18,13 @@ class Literal::Serializer::SerializableType
 		@type.inspect
 	end
 
+	# Serializer kinds refer back to this type through the context, so like
+	# `_Deferred` it is where a match can cycle, and re-entry answers false.
 	def ===(value)
-		@type === value
+		Literal.with_match_guard(self, value) { @type === value }
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		@context.serializable_type?(other)
 	end
 end

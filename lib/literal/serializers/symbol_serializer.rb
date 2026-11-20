@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::SymbolSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = Symbol
 
 	def type
@@ -29,6 +31,8 @@ class Literal::SymbolSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
+		raise malformed_raw_error(raw, type) unless String === raw
+
 		raw.to_sym
 	end
 

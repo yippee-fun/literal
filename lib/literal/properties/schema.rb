@@ -4,6 +4,9 @@
 class Literal::Properties::Schema
 	include Enumerable
 
+	EQL_INTERFACE = Literal::Types::InterfaceType.new([:eql?])
+	HASH_INTERFACE = Literal::Types::InterfaceType.new([:hash])
+
 	# One lock for every schema rather than one each: a Mutex can never be
 	# Ractor-shareable, and a schema must be for its class to be built in another
 	# Ractor. Properties are only added while classes are defined, so it is
@@ -32,14 +35,23 @@ class Literal::Properties::Schema
 	def <<(value)
 		MUTEX.synchronize do
 			@properties_index[value.name] = value
-			# ruby's sort is unstable, this trick makes it stable
-			n = 0
 			# Replacing (not mutating) the array is a contract: `snapshot`
 			# relies on its identity changing with every schema change.
-			@sorted_properties = @properties_index.values.sort_by! { |it| n += 1; [it, n] }
+			@sorted_properties = sort(@properties_index)
 		end
 
 		self
+	end
+
+	# The sorted properties this schema would have with the property added.
+	def sorted_with(property)
+		sort(@properties_index.merge(property.name => property))
+	end
+
+	private def sort(properties_index)
+		# ruby's sort is unstable, this trick makes it stable
+		n = 0
+		properties_index.values.sort_by! { |it| n += 1; [it, n] }
 	end
 
 	def dup
@@ -62,15 +74,19 @@ class Literal::Properties::Schema
 	end
 
 	def generate_initializer(buffer = +"", checked: false)
+		check_signature
+
+		locals, property_local = initializer_locals
+
 		buffer << "alias initialize initialize\n" \
 			"def initialize("
-		generate_initializer_params(buffer)
+		generate_initializer_params(buffer, locals)
 		buffer << ")\n"
-		generate_initializer_body(buffer)
+		generate_initializer_body(buffer, locals, property_local)
 		buffer << "" \
-			"rescue Literal::TypeError => error\n" \
-			"  error.set_backtrace(caller(2))\n" \
-			"  raise\n" \
+			"rescue ::Literal::TypeError => error\n" \
+			"  error.set_backtrace(::Literal::Error.trim(::Kernel.caller_locations(1)))\n" \
+			"  ::Kernel.raise\n" \
 			"else\n"
 		generate_after_initializer(buffer)
 
@@ -84,7 +100,7 @@ class Literal::Properties::Schema
 	end
 
 	def generate_after_initializer(buffer = +"")
-		buffer << "  after_initialize if respond_to?(:after_initialize, true)\n"
+		buffer << "  after_initialize if ::Literal::RESPOND_TO.bind_call(self, :after_initialize, true)\n"
 	end
 
 	def generate_to_h(buffer = +"")
@@ -105,38 +121,105 @@ class Literal::Properties::Schema
 
 	def generate_hash(buffer = +"")
 		buffer << "alias hash hash\n" \
-			"def hash\n  [self.class,\n"
+			"def hash\n  [::Literal::CLASS.bind_call(self),\n"
 
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
 		while i < n
 			property = sorted_properties[i]
-			buffer << "  @" << property.name.name << ",\n"
+			value = "@#{property.name.name}"
+
+			if promises?(property, HASH_INTERFACE)
+				buffer << "  " << value << ",\n"
+			else
+				buffer << "  ((::Kernel === #{value} && #{value}.respond_to?(:hash)) ? #{value}.hash : ::Literal.payload_hash(#{value})),\n"
+			end
+
 			i += 1
 		end
 
 		buffer << "  ].hash\n" << "end\n"
 	end
 
+	# eql? compares values with eql?, as hash hashes them. A value whose type
+	# doesn't promise a public eql? or hash, such as a BasicObject, is checked
+	# for one, and goes through the payload helpers without it.
 	def generate_eq(buffer = +"")
-		buffer << "alias == ==\n" \
-			"def ==(other)\n"
-		buffer << "  return false unless self.class == other.class\n"
+		generate_comparison(buffer, "==") { |_property, value, other| "#{value} == #{other}" }
+
+		generate_comparison(buffer, "eql?") do |property, value, other|
+			if promises?(property, EQL_INTERFACE)
+				"#{value}.eql?(#{other})"
+			else
+				"((::Kernel === #{value} && #{value}.respond_to?(:eql?)) ? #{value}.eql?(#{other}) : ::Literal.payload_eql?(#{value}, #{other}))"
+			end
+		end
+	end
+
+	private def generate_comparison(buffer, operator)
+		buffer << "alias " << operator << " " << operator << "\n" \
+			"def " << operator << "(other)\n"
+		buffer << "  return false unless ::Kernel === other && ::Literal::CLASS.bind_call(self).equal?(::Literal::CLASS.bind_call(other))\n"
 
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
 		while i < n
 			property = sorted_properties[i]
-			buffer << "  @#{property.name.name} == other.instance_variable_get(:@#{property.name.name})"
+			buffer << "  " << yield(property, "@#{property.name.name}", "::Literal::INSTANCE_VARIABLE_GET.bind_call(other, :@#{property.name.name})")
 			buffer << " &&\n  " if i < n - 1
 			i += 1
 		end
 		buffer << "  true" if n.zero?
 		buffer << "\nend\n"
-		buffer << "alias eql? ==\n"
 	end
 
-	private def generate_initializer_params(buffer = +"")
+	# Only a module is asked: asking a _Deferred would materialize it when the
+	# property is declared, before the constant it names may exist.
+	private def promises?(property, interface)
+		Module === property.type && Literal.subtype?(property.type, interface)
+	end
+
+	# Refuse what Ruby can't compile as the initializer's parameters: a second
+	# splat, double splat or block, and optional positional parameters that
+	# aren't one contiguous run — or aren't last before a splat.
+	def check_signature(sorted_properties = @sorted_properties)
+		variadic = {}
+		first_optional = nil
+		required_after_optional = nil
+
+		sorted_properties.each do |property|
+			case property.kind
+			in :* | :** | :&
+				if (other = variadic[property.kind])
+					raise Literal::ArgumentError.new(
+						"#{property.name.inspect} can't be a #{property.kind.inspect} property, because #{other.name.inspect} already is.",
+					)
+				end
+
+				variadic[property.kind] = property
+			in :positional if property.optional?
+				if required_after_optional
+					raise Literal::ArgumentError.new(
+						"The optional positional property #{property.name.inspect} can't follow the required #{required_after_optional.name.inspect}, because optional positional properties must be contiguous.",
+					)
+				end
+
+				first_optional ||= property
+			in :positional
+				required_after_optional ||= property if first_optional
+			in :keyword
+				nil
+			end
+		end
+
+		if required_after_optional && variadic[:*]
+			raise Literal::ArgumentError.new(
+				"The required positional property #{required_after_optional.name.inspect} can't follow the optional #{first_optional.name.inspect}, because #{variadic[:*].name.inspect} is a splat.",
+			)
+		end
+	end
+
+	private def generate_initializer_params(buffer, locals)
 		sorted_properties = @sorted_properties
 		i, n = 0, sorted_properties.size
 		while i < n
@@ -144,23 +227,23 @@ class Literal::Properties::Schema
 
 			case property.kind
 			when :*
-				buffer << "*" << property.escaped_name
+				buffer << "*" << locals[property.name]
 			when :**
-				buffer << "**" << property.escaped_name
+				buffer << "**" << locals[property.name]
 			when :&
-				buffer << "&" << property.escaped_name
+				buffer << "&" << locals[property.name]
 			when :positional
 				if property.default? || property.undefinable? # optional
-					buffer << property.escaped_name << " = Literal::Undefined"
-				elsif property.type === nil # optional
-					buffer << property.escaped_name << " = nil"
+					buffer << locals[property.name] << " = ::Literal::Undefined"
+				elsif property.nil_default?
+					buffer << locals[property.name] << " = nil"
 				else # required
-					buffer << property.escaped_name
+					buffer << locals[property.name]
 				end
 			when :keyword
 				if property.default? || property.undefinable? # optional
-					buffer << property.name.name << ": Literal::Undefined"
-				elsif property.type === nil
+					buffer << property.name.name << ": ::Literal::Undefined"
+				elsif property.nil_default?
 					buffer << property.name.name << ": nil" # optional
 				else # required
 					buffer << property.name.name << ":"
@@ -176,18 +259,35 @@ class Literal::Properties::Schema
 		buffer
 	end
 
-	private def generate_initializer_body(buffer = +"")
-		buffer << "  __properties__ = self.class.literal_properties.properties_index\n"
-		generate_initializer_handle_properties(@sorted_properties, buffer)
-	end
-
-	private def generate_initializer_handle_properties(properties, buffer = +"")
-		i, n = 0, properties.size
+	private def generate_initializer_body(buffer, locals, property_local)
+		sorted_properties = @sorted_properties
+		i, n = 0, sorted_properties.size
 		while i < n
-			properties[i].generate_initializer_handle_property(buffer)
+			property = sorted_properties[i]
+			property.generate_initializer_handle_property(buffer, local: locals[property.name], property_local:)
 			i += 1
 		end
 
 		buffer
+	end
+
+	# Every name a local variable could take is also a property name, so the
+	# initializer's own locals — a Ruby keyword's escape, and the property
+	# being handled — take the first name with enough leading underscores that
+	# no property has it.
+	private def initializer_locals
+		taken = Set.new(@properties_index.each_key.map(&:name))
+
+		locals = @properties_index.to_h do |name, property|
+			[name, property.ruby_keyword? ? unique_local("__#{name.name}__", taken) : name.name]
+		end
+
+		[locals, unique_local("__property__", taken)]
+	end
+
+	private def unique_local(name, taken)
+		name = "_#{name}" while taken.include?(name)
+		taken << name
+		name
 	end
 end

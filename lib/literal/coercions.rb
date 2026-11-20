@@ -3,7 +3,7 @@
 module Literal::Coercions
 	# Shallow: freezes a copy, so the caller’s object is never mutated.
 	# References held by the value (array elements, hash values) stay mutable.
-	Immutable = Literal::Seal { |it| it.frozen? ? it : it.dup.freeze }
+	Immutable = Literal::Seal { |it| Literal::FROZEN.bind_call(it) ? it : Literal::Freezing.shallow_frozen(it.dup) }
 
 	# Deep: makes the value Ractor-shareable, freezing the entire object graph.
 	# Works on a deep copy, so the caller’s object is never mutated. Raises

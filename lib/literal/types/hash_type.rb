@@ -5,12 +5,21 @@ class Literal::Types::HashType
 	include Literal::Type
 
 	def initialize(key_type, value_type)
-		@key_type = key_type
-		@value_type = value_type
+		@key_type = Literal::Freezing.frozen_member(key_type)
+		@value_type = Literal::Freezing.frozen_member(value_type)
+		@hash = literal_hash(Literal::Types::HashType, @key_type, @value_type)
 		freeze
 	end
 
-	attr_reader :key_type, :value_type
+	attr_reader :key_type, :value_type, :hash
+
+	def ==(other)
+		Literal::Types::HashType === other && @key_type == other.key_type && @value_type == other.value_type
+	end
+
+	def eql?(other)
+		Literal::Types::HashType === other && Literal.member_eql?(@key_type, other.key_type) && Literal.member_eql?(@value_type, other.value_type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
@@ -21,6 +30,10 @@ class Literal::Types::HashType
 
 	def inspect
 		"_Hash(#{@key_type.inspect}, #{@value_type.inspect})"
+	end
+
+	def literal_upper_bound
+		Hash
 	end
 
 	def map(&)
@@ -38,7 +51,7 @@ class Literal::Types::HashType
 		true
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::HashType
 			(
@@ -47,7 +60,7 @@ class Literal::Types::HashType
 				Literal.structural_subtype?(other.value_type, @value_type, context:)
 			)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
+			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		else
 			false
 		end

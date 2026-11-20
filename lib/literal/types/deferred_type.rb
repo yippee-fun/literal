@@ -5,55 +5,73 @@ class Literal::Types::DeferredType
 	include Literal::Types::DraftTransparent
 
 	UNMATERIALIZED = Object.new.freeze
+	# Shared rather than per instance, so a materialized deferred type can still
+	# be made Ractor-shareable. It is held only to publish a result.
+	PUBLISHING = Mutex.new
 
 	def initialize(&block)
 		@block = block
 		@materialized = UNMATERIALIZED
-		@materializing = false
 	end
 
 	attr_reader :block
+
+	def materialized?
+		!UNMATERIALIZED.equal?(@materialized)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
 
 		type = materialize
-		yield type unless type.equal?(self)
+		yield type unless Literal::EQUAL.bind_call(type, self)
 	end
 
 	def inspect
 		"_Deferred"
 	end
 
+	# The type a chain of deferred types ends in. A chain that cycles never
+	# ends, so it resolves to a deferred type on the cycle.
+	def resolve
+		type = materialize
+		seen = nil
+
+		while Literal::Types::DeferredType === type
+			seen ||= { self => true }.compare_by_identity
+			return type if seen.key?(type)
+
+			seen[type] = true
+			type = type.materialize
+		end
+
+		type
+	end
+
+	# A thread re-entering its own materialization — a deferred type that refers
+	# to itself — gets the deferred type back. Other threads run the block
+	# themselves rather than wait, since the block can wait on locks they hold
+	# (like shape generation), and the first result published is everyone's.
 	def materialize
 		return @materialized unless UNMATERIALIZED.equal?(@materialized)
-		# Frozen before its first use, say by Ractor.make_shareable ahead of the
-		# constants the block names, so it can no longer remember the answer.
-		return __materialize_frozen__ if frozen?
 
-		__materialize__
-	end
+		materializing = (Thread.current[:literal_materializing] ||= [])
+		return self if materializing.any? { |deferred| deferred.equal?(self) }
 
-	# The same guard as __materialize__, kept outside the frozen object.
-	private def __materialize_frozen__
-		materializing = (Thread.current[:__literal_materializing__] ||= {}.compare_by_identity)
-		return self if materializing.key?(self)
+		materializing.push(self)
 
 		begin
-			materializing[self] = true
-			@block.call
+			result = @block.call
 		ensure
-			materializing.delete(self)
+			materializing.pop
 		end
-	end
 
-	private def __materialize__
-		return self if @materializing
+		return result if frozen?
 
-		@materializing = true
-		@materialized = @block.call
-	ensure
-		@materializing = false
+		PUBLISHING.synchronize do
+			@materialized = result if UNMATERIALIZED.equal?(@materialized)
+			@materialized
+		end
 	end
 
 	# Wrapped rather than materialized: the deferred constant may not be
@@ -62,11 +80,20 @@ class Literal::Types::DeferredType
 		Literal::Types::DeferredType.new { relax.call(materialize) }
 	end
 
+	# Types are immutable and built bottom-up, so a type graph can only cycle
+	# through a deferred type. Guarding here alone stops a cyclic value from
+	# recursing forever: re-entry with the same value answers false.
 	def ===(other)
-		materialize === other
+		Literal.with_match_guard(self, other) { !!(materialize === other) }
 	end
 
-	def >=(other, context: nil)
-		Literal.subtype?(other, materialize, context:)
+	# Unfolds this side first, so an alias of a chain matches it without
+	# forcing their shared tail. Two alias cycles have no values, so failing
+	# that, unfolding the other side lets the cycle there prove it.
+	def literal_supertype_of?(other, context:)
+		Literal.subtype?(other, materialize, context:) ||
+			(Literal::Types::DeferredType === other && context.left_unfolded_subtype?(other, self))
 	end
+
+	freeze
 end

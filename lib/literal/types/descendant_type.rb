@@ -5,10 +5,19 @@ class Literal::Types::DescendantType
 
 	def initialize(type)
 		@type = type
+		@hash = [Literal::Types::DescendantType, type].hash
 		freeze
 	end
 
-	attr_reader :type
+	attr_reader :type, :hash
+
+	def ==(other)
+		Literal::Types::DescendantType === other && @type == other.type
+	end
+
+	def eql?(other)
+		Literal::Types::DescendantType === other && @type.eql?(other.type)
+	end
 
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
@@ -20,11 +29,16 @@ class Literal::Types::DescendantType
 		"_Descendant(#{@type})"
 	end
 
-	def ===(value)
-		Module === value && value < @type
+	# Only classes can descend from a class.
+	def literal_upper_bound
+		(Class === @type) ? Class : Module
 	end
 
-	def >=(other, context: nil)
+	def ===(value)
+		Module === value && !!(value < @type)
+	end
+
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::DescendantType
 			Literal.subtype?(other.type, @type, context:)

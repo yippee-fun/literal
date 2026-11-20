@@ -4,8 +4,8 @@ class Literal::Result::Generic
 	include Literal::Type
 
 	def initialize(success_type, failure_type)
-		@success_type = success_type
-		@failure_type = failure_type
+		@success_type = Literal::Freezing.frozen_member(success_type)
+		@failure_type = Literal::Freezing.frozen_member(failure_type)
 
 		freeze
 	end
@@ -15,10 +15,41 @@ class Literal::Result::Generic
 	def ===(object)
 		case object
 		when Literal::Success
-			@success_type === object.value!
+			!!(@success_type === object.value!)
 		when Literal::Failure
-			@failure_type === object.error!
+			!!(@failure_type === object.error!)
+		else
+			false
 		end
+	end
+
+	def ==(other)
+		Literal::Result::Generic === other && @success_type == other.success_type && @failure_type == other.failure_type
+	end
+
+	def eql?(other)
+		Literal::Result::Generic === other && Literal.member_eql?(@success_type, other.success_type) && Literal.member_eql?(@failure_type, other.failure_type)
+	end
+
+	def hash
+		literal_hash(Literal::Result::Generic, @success_type, @failure_type)
+	end
+
+	def literal_supertype_of?(other, context:)
+		case other
+		when Literal::Types::DeferredType
+			Literal.subtype?(other, self, context:)
+		when Literal::Success::Generic
+			Literal.structural_subtype?(other.type, @success_type, context:)
+		when Literal::Failure::Generic
+			Literal.structural_subtype?(other.type, @failure_type, context:)
+		else
+			false
+		end
+	end
+
+	def inspect
+		"Literal::Result(#{@success_type.inspect}, #{@failure_type.inspect})"
 	end
 
 	def name

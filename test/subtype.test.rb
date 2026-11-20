@@ -18,8 +18,47 @@ test "literal values are subtypes of their module supertypes" do
 
 	date = Date.new(2025, 1, 13)
 
-	assert_subtype date, Date
+	# A date is == to its astronomical Julian day number.
+	assert date == date.ajd
+	refute_subtype date, Date
+	assert_subtype date, Comparable
 	assert_subtype date, Object
+end
+
+if defined?(Ractor) && Ractor.shareable?(Literal::OBJECT_ID)
+	test "shareable types can be compared in another Ractor" do
+		types = Ractor.make_shareable([_Boolean, _Array(_Union(String, Symbol)), _Array(String), _SameObject(:a)])
+
+		ractor = Ractor.new(types) do |(boolean, wide, narrow, same)|
+			[Literal.subtype?(true, boolean), wide >= narrow, narrow <= wide, narrow >= wide, same >= same, same === :a]
+		end
+
+		results = ractor.respond_to?(:value) ? ractor.value : ractor.take
+
+		assert_equal results, [true, true, true, false, true, true]
+	end
+
+	test "every method handle is shareable" do
+		handles = []
+		namespaces = [Literal]
+
+		while (namespace = namespaces.pop)
+			namespace.constants(false).each do |name|
+				next if namespace.autoload?(name)
+
+				case namespace.const_get(name, false)
+				in UnboundMethod => handle
+					handles << "#{namespace}::#{name}" unless Ractor.shareable?(handle)
+				in Module => nested if nested.name&.start_with?("#{namespace}::")
+					namespaces << nested
+				else
+					nil
+				end
+			end
+		end
+
+		assert_equal handles, []
+	end
 end
 
 include Literal::Types
@@ -62,4 +101,314 @@ test "recursive types can be compared" do
 
 	refute_subtype json_data, strict_json_data
 	refute_subtype _Array(json_data), _Array(strict_json_data)
+end
+
+test "results resting on a failed coinductive assumption are not memoized" do
+	a = b = left = right = nil
+	a = _Union(String, _Deferred { left })
+	b = _Union(String, _Deferred { right })
+	left = _Tuple(a, Symbol)
+	right = _Tuple(b, String)
+	other = _Tuple(b, Symbol)
+
+	refute_subtype left, other
+	refute_subtype left, _Union(right, other)
+end
+
+test "range literals compare as continuous intervals" do
+	assert_subtype (1..4), (1..4)
+	assert_subtype (1...4), (1..4)
+	assert_subtype (2..3), (1..4)
+	assert_subtype (2..3), (1..)
+	assert_subtype (2..3), (..4)
+	assert_subtype (1..4), (nil..nil)
+	assert_subtype (1.0..4.0), (1..4)
+
+	refute_subtype (1...5), (1..4)
+	refute_subtype (1..4), (1...4)
+	refute_subtype (0..4), (1..4)
+	refute_subtype (1..), (1..4)
+	refute_subtype (..4), (1..4)
+	refute_subtype ("a".."z"), (1..4)
+	refute_subtype _Float(1...5), _Constraint(Numeric, 1..4)
+end
+
+test "range endpoints compare by the sign of <=>, whatever its magnitude" do
+	point = Struct.new(:n) do
+		include Comparable
+
+		def <=>(other) = n - other.n
+	end
+
+	below, zero, two, eight, ten, eleven = [-1, 0, 2, 8, 10, 11].map { |n| point.new(n) }
+
+	assert_subtype (two..eight), (zero..ten)
+	assert_subtype (zero...ten), (zero...ten)
+	refute_subtype (zero..eleven), (zero..ten)
+	refute_subtype (below..eight), (zero..ten)
+	refute_subtype (zero..ten), (zero...ten)
+end
+
+test "literal types are subtypes of the modules bounding their members" do
+	assert_subtype _Array(String), Array
+	assert_subtype _Array(String), Enumerable
+	assert_subtype _Tuple(String), Array
+	assert_subtype _Hash(String, Integer), Hash
+	assert_subtype _Map(a: String), Hash
+	assert_subtype _Set(String), Set
+	assert_subtype _Range(Integer), Range
+	assert_subtype _Enumerable(String), Enumerable
+	assert_subtype _Class(String), Class
+	assert_subtype _Descendant(String), Class
+	assert_subtype _Descendant(Enumerable), Module
+	assert_subtype _Frozen(String), String
+	assert_subtype _Boolean, Object
+	assert_subtype _Nilable(String), Object
+	assert_subtype _JSONData, Object
+	assert_subtype _TaggedUnion(a: String, b: Integer), Comparable
+
+	refute_subtype _Array(String), Hash
+	refute_subtype _Tuple(String), String
+	refute_subtype _Class(String), String
+	refute_subtype _Descendant(Enumerable), Class
+	refute_subtype _Frozen(String), Symbol
+	refute_subtype _Boolean, TrueClass
+	refute_subtype _Nilable(String), String
+	refute_subtype _JSONData, Comparable
+	refute_subtype _TaggedUnion(a: String, b: Array), Comparable
+end
+
+test "a union is a subtype of anything all its members are subtypes of" do
+	assert_subtype _Union(true, false), _Boolean
+	assert_subtype _Nilable(String), _JSONData
+	assert_subtype _Union(String, Integer), _JSONData
+	assert_subtype _TaggedUnion(a: String, b: Integer), _JSONData
+	assert_subtype _Union(String, _Nilable(Integer)), _Nilable(_JSONData)
+	assert_subtype _Union(1, 2), 0..5
+	assert_subtype _Union(String, Symbol), _Interface(:to_s)
+	assert_subtype _Union(_Array(String), _Array(Integer)), _Array(_Union(String, Integer))
+
+	refute_subtype _Union(true, nil), _Boolean
+	refute_subtype _Nilable(String), _JSONData(String)
+	refute_subtype _Union(String, Symbol), _JSONData
+	refute_subtype _TaggedUnion(a: String, b: Symbol), String
+end
+
+test "a serializable value type is not necessarily a serializable type" do
+	context = Literal::SerializationContext.new
+
+	assert Literal.subtype?(_Union(String, Symbol), context.type)
+	refute context.kind === _Union(String, Symbol)
+	refute context.property_kind === _Union(String, Symbol, Literal::Undefined)
+	assert context.property_kind === _Deferred { _Optional(String) }
+end
+
+test "<= on a type agrees with subtype?" do
+	assert _Nilable(Integer) <= _Nilable(Numeric)
+	assert _Union(true, false) <= _Boolean
+	assert _TaggedUnion(a: String, b: Integer) <= _JSONData
+	refute _Nilable(String) <= _JSONData(String)
+end
+
+test "a literal's properties hold only when its bound entails them" do
+	# Literals admit every value == to them: +"x" == "x" but isn't frozen, and
+	# [1.0] == [1] but its first element isn't an Integer.
+	refute_subtype "x", _Constraint(String, frozen?: true)
+	refute_subtype "x", _Frozen(String)
+	refute_subtype [1], _Constraint(Array, first: Integer)
+	refute_subtype({ a: 1 }, _Constraint(Hash, size: 1..))
+	refute_subtype 1, _Interface(:<)
+
+	assert_subtype "x", _Constraint(String, Comparable)
+	assert_subtype [1], _Constraint(Array, Enumerable)
+
+	# Symbols, true, false and nil are == only to themselves.
+	assert_subtype :a, _Constraint(Symbol, size: 1)
+	assert_subtype nil, _Constraint(NilClass, nil?: true)
+	assert_subtype :a, _Frozen(_Interface(:to_proc))
+end
+
+test "a literal is a subtype of whatever its bound is a subtype of" do
+	assert_subtype "x", _JSONData
+	assert_subtype ["x"], _Constraint(Array, Enumerable)
+	assert_subtype :a, _Interface(:to_proc)
+	assert_subtype Date.new(2025, 1, 1), _Interface(:<=>)
+	refute_subtype Date.new(2025, 1, 1), _Interface(:jd)
+
+	refute_subtype 1, _JSONData
+	refute_subtype "x", _Interface(:foo)
+end
+
+test "a type is a subtype of an intersection of types it is a subtype of" do
+	assert_subtype _Array(String), _Constraint(Array, Enumerable)
+	refute_subtype _Array(String), _Constraint(Array, size: 1)
+end
+
+test "a type's own rule answers against literal types" do
+	assert_subtype _Constraint(_Tuple(String), size: 1), _Tuple(String)
+	assert_subtype _Constraint(_Boolean, frozen?: true), _Boolean
+	assert_subtype _Constraint(_Union(String, Symbol), frozen?: true), _Union(String, Symbol, Integer)
+	assert_subtype _Constraint(Integer, integer?: _Truthy), _Union(Integer, String)
+
+	refute_subtype _Constraint(_Tuple(String), size: 1), _Tuple(Symbol)
+	refute_subtype _Constraint(_Boolean, frozen?: true), _Union(true, nil)
+
+	assert _Constraint(_Boolean, frozen?: true) <= _Boolean
+	assert _Boolean >= _Constraint(_Boolean, frozen?: true)
+end
+
+test "a singleton is a subtype of literal types only through their own rules" do
+	string = +"abc"
+
+	assert_subtype _SameObject(string), String
+	assert_subtype _SameObject(:foo), _Union(_SameObject(:foo), String)
+	refute_subtype _SameObject(string), _String(size: 3)
+	refute_subtype _SameObject(string), _Union("abc", Integer)
+	refute_subtype _SameObject((1..).each), _Enumerable(Integer)
+
+	three_characters = Class.new do
+		extend Literal::Type
+
+		def self.===(value) = String === value && value.size == 3
+	end
+
+	refute_subtype _SameObject(string), three_characters
+end
+
+test "a value that is also a type keeps its literal bound" do
+	value = Class.new(String) { include Literal::Type }.new("x")
+
+	assert_subtype value, _JSONData
+end
+
+test "a type overriding <= isn't asked it against literal types" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_upper_bound = Integer
+		def <=(other, context: nil) = super(other)
+	end.new
+
+	assert_subtype integers, Numeric
+	refute_subtype integers, _Array(String)
+	refute integers <= _Array(String)
+end
+
+test "a union's own comparison operators distribute it" do
+	union = _Union(String, _Array(Integer), 1)
+	nilable = _Nilable(String)
+	tagged = _TaggedUnion(string: String, integer: Integer)
+	result = Literal::Result(String, Integer)
+
+	[union, nilable, tagged, result].each do |type|
+		assert type <= Object
+		assert type >= type
+		assert type <= type
+		assert type >= _Deferred { type }
+	end
+
+	assert _Union(String, Integer) >= _Union(Integer, String)
+	assert _Union(String, Integer, nil) >= nilable
+	assert nilable >= _Union(String, nil)
+	assert tagged >= _Union(String, Integer)
+	assert _Union(String, Integer) >= tagged
+	assert result >= _Union(Literal::Success(String), Literal::Failure(Integer))
+	assert nilable <= _Union(String, nil)
+
+	refute _Union(String, Integer) <= String
+	refute nilable >= _Union(String, Integer)
+	refute tagged <= String
+
+	matcher = Class.new(BasicObject) { def ===(_value) = true }.new
+	refute _TaggedUnion(string: String, any: matcher) <= Object
+end
+
+test "a custom type's own rule answers both subtype? and its comparisons" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_supertype_of?(other, context:) = Literal.subtype?(other, Integer, context:)
+		def literal_upper_bound = Integer
+	end.new
+
+	halves = _Union(_Integer(1..), _Integer(..0))
+
+	assert_subtype halves, integers
+	assert integers >= halves
+	assert halves <= integers
+	assert integers >= _Deferred { halves }
+	assert integers <= Numeric
+	refute integers >= _Union(Integer, String)
+	refute integers <= String
+end
+
+test "a custom type overriding >= and <= still answers subtype?" do
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def >=(other, context: nil) = Literal.subtype?(other, Integer, context:)
+		def <=(other, context: nil) = Literal.subtype?(Integer, other, context:)
+	end.new
+
+	assert_subtype _Integer(1..), integers
+	assert_subtype _Union(_Integer(1..), _Integer(..0)), integers
+	assert_subtype integers, Numeric
+	refute_subtype String, integers
+	refute_subtype integers, String
+end
+
+test "a custom BasicObject type overriding >= still answers subtype?" do
+	integers = Class.new(BasicObject) do
+		include Literal::Type
+
+		def ===(value) = ::Integer === value
+		def >=(other, context: nil) = ::Literal.subtype?(other, ::Integer, context:)
+	end.new
+
+	assert_subtype _Integer(1..), integers
+	refute_subtype String, integers
+end
+
+test "a custom type's >= and <= overrides can fall back to super" do
+	natural = _Integer(0..)
+
+	integers = Class.new do
+		include Literal::Type
+
+		def ===(value) = Integer === value
+		def literal_upper_bound = Integer
+
+		define_method(:>=) do |other, context: nil|
+			(natural == other) || super(other, context:)
+		end
+
+		def <=(other, context: nil)
+			(String == other) || super
+		end
+	end.new
+
+	assert_subtype _Integer(0..), integers
+	assert_subtype integers, integers
+	refute_subtype _Integer(..0), integers
+	assert_subtype integers, Numeric
+	assert integers <= Numeric
+	assert integers >= integers
+	refute integers >= _Integer(..0)
+end
+
+test "a plain pair that comes back to itself through a shared context terminates" do
+	range = Class.new(Range) do
+		attr_accessor :context
+
+		def cover?(other)
+			Literal.subtype?(other + 0, self, context:)
+		end
+	end.new(1, 20_000)
+
+	range.context = Literal::SubtypeContext.new
+
+	refute Literal.subtype?(12_501, range, context: range.context)
 end

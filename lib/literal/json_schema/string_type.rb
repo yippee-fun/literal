@@ -55,7 +55,7 @@ class Literal::JSONSchema::StringType < Literal::Data
 		true
 	end
 
-	def <=(other, context: nil)
+	def literal_subtype_of?(other, context:)
 		Literal.subtype?(::String, other, context:)
 	end
 
@@ -111,7 +111,7 @@ class Literal::JSONSchema::StringType < Literal::Data
 	end
 
 	private def parse_date(value)
-		::Date.iso8601(value)
+		::Date.iso8601(value, ::Date::GREGORIAN)
 		true
 	rescue ::ArgumentError
 		false

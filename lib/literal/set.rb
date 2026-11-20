@@ -18,7 +18,7 @@ class Literal::Set
 		include Literal::Coercions::Composable
 
 		def initialize(type)
-			@type = type
+			@type = Literal::Freezing.frozen_member(type)
 			freeze
 		end
 
@@ -50,17 +50,29 @@ class Literal::Set
 			Generic === other && @type == other.type
 		end
 
+		def eql?(other)
+			Generic === other && Literal.member_eql?(@type, other.type)
+		end
+
+		def hash
+			literal_hash(Generic, @type)
+		end
+
 		def ===(value)
 			Literal::Set === value && Literal.subtype?(value.__type__, @type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				Literal.structural_subtype?(other.type, @type, context:)
 			else
 				false
 			end
+		end
+
+		def literal_upper_bound
+			Literal::Set
 		end
 
 		def literal_child_types
@@ -88,7 +100,7 @@ class Literal::Set
 		end
 
 		@__type__ = type
-		@__value__ = value.dup
+		@__value__ = ::Set.new(value)
 		@__collection_type__ = collection_type
 	end
 
@@ -118,6 +130,8 @@ class Literal::Set
 	end
 
 	def add(value)
+		__check_frozen__
+
 		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#add")
 		end
@@ -129,11 +143,13 @@ class Literal::Set
 	alias_method :<<, :add
 
 	def clear
+		__check_frozen__
 		@__value__.clear
 		self
 	end
 
 	def delete(value)
+		__check_frozen__
 		@__value__.delete(value)
 		self
 	end
@@ -206,6 +222,7 @@ class Literal::Set
 
 	def map!(&block)
 		raise ArgumentError.new("#map! requires a block.") unless block
+		__check_frozen__
 
 		transform_type = Literal::Transforms.dig(@__type__, block)
 		mapped = ::Set.new
@@ -225,12 +242,9 @@ class Literal::Set
 	end
 
 	def merge(*others)
+		__check_frozen__
 		values = others.map { |other| __compatible_value__(other, "#merge") }
-
-		values.each do |value|
-			@__value__.merge(value)
-		end
-
+		@__value__.merge(*values)
 		self
 	end
 
@@ -261,13 +275,17 @@ class Literal::Set
 
 	def reject!(&block)
 		raise ArgumentError.new("#reject! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.reject!(&block)
 		self
 	end
 
+	# Set#replace would adopt a plain set's compare_by_identity, so we replace
+	# with a fresh copy of its members instead.
 	def replace(other)
-		@__value__.replace(__compatible_value__(other, "#replace"))
+		__check_frozen__
+		@__value__.replace(::Set.new(__compatible_value__(other, "#replace")))
 		self
 	end
 
@@ -279,6 +297,7 @@ class Literal::Set
 
 	def select!(&block)
 		raise ArgumentError.new("#select! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.select!(&block)
 		self
@@ -311,6 +330,7 @@ class Literal::Set
 	end
 
 	def subtract(other)
+		__check_frozen__
 		@__value__.subtract(__other_value__(other, "#subtract"))
 		self
 	end
@@ -351,6 +371,10 @@ class Literal::Set
 			type: @__type__,
 			collection_type: @__collection_type__,
 		)
+	end
+
+	private def __check_frozen__
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
 	end
 
 	# Unwraps the other operand for operations where the result can only

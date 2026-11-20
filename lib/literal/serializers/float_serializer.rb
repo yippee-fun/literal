@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::FloatSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = _Float(finite?: _Truthy)
 
 	def type
@@ -25,7 +27,7 @@ class Literal::FloatSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		value
+		representation(value, type)
 	end
 
 	def deserialize(raw, type:)

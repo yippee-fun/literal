@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::StringSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = String
 
 	def type
@@ -27,7 +29,7 @@ class Literal::StringSerializer < Literal::Serializer
 	end
 
 	def serialize(value, type:)
-		value
+		representation(value, type)
 	end
 
 	def deserialize(raw, type:)

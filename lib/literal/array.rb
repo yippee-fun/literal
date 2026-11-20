@@ -24,7 +24,7 @@ class Literal::Array
 		include Literal::Coercions::Composable
 
 		def initialize(type)
-			@type = type
+			@type = Literal::Freezing.frozen_member(type)
 			freeze
 		end
 
@@ -54,17 +54,29 @@ class Literal::Array
 			Generic === other && @type == other.type
 		end
 
+		def eql?(other)
+			Generic === other && Literal.member_eql?(@type, other.type)
+		end
+
+		def hash
+			literal_hash(Generic, @type)
+		end
+
 		def ===(value)
 			Literal::Array === value && Literal.subtype?(value.__type__, @type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				Literal.structural_subtype?(other.type, @type, context:)
 			else
 				false
 			end
+		end
+
+		def literal_upper_bound
+			Literal::Array
 		end
 
 		def literal_child_types
@@ -92,7 +104,7 @@ class Literal::Array
 		end
 
 		@__type__ = type
-		@__value__ = value.dup
+		@__value__ = ::Array.new(value)
 		@__collection_type__ = collection_type
 	end
 
@@ -126,6 +138,8 @@ class Literal::Array
 	end
 
 	def <<(value)
+		__check_frozen__
+
 		Literal.check(value, @__type__) do |c|
 			c.fill_receiver(receiver: self, method: "#<<")
 		end
@@ -169,17 +183,40 @@ class Literal::Array
 		Literal::Undefined
 	end
 
-	def []=(index, value)
-		Literal.check(value, @__type__) do |c|
-			c.fill_receiver(receiver: self, method: "#[]=")
+	# Like Ruby's Array, assigning to a slice (a range, or a start and length)
+	# splices in the elements of anything that converts with `to_ary`.
+	def []=(*arguments)
+		__check_frozen__
+
+		case arguments
+		in [Range => range, value]
+			range = __index_range__(range)
+			elements = __splice_elements__(value)
+			__check_padding__(range.begin || 0)
+			@__value__[range] = elements
+		in [index, value]
+			index = __to_index__(index)
+
+			Literal.check(value, @__type__) do |c|
+				c.fill_receiver(receiver: self, method: "#[]=")
+			end
+
+			__check_padding__(index)
+			@__value__[index] = value
+		in [start, length, value]
+			start = __to_index__(start)
+			elements = __splice_elements__(value)
+			__check_padding__(start)
+			@__value__[start, __to_index__(length)] = elements
+		else
+			raise ::ArgumentError.new("wrong number of arguments (given #{arguments.size}, expected 2..3)")
 		end
 
-		__check_padding__(index)
-
-		@__value__[index] = value
+		value
 	end
 
 	def clear
+		__check_frozen__
 		@__value__.clear
 		self
 	end
@@ -204,11 +241,13 @@ class Literal::Array
 	end
 
 	def compact!
+		__check_frozen__
 		@__value__.compact!
 		self
 	end
 
 	def concat(*others)
+		__check_frozen__
 		values = others.map { |other| __compatible_value__(other, "#concat") }
 		@__value__.concat(*values)
 		self
@@ -218,13 +257,19 @@ class Literal::Array
 		@__value__.count(...)
 	end
 
+	def deconstruct
+		@__value__.dup
+	end
+
 	def delete(value, &block)
+		__check_frozen__
 		return @__value__.delete(value, &block) if block
 
 		@__value__.delete(value) { Literal::Undefined }
 	end
 
 	def delete_at(index)
+		__check_frozen__
 		@__value__.fetch(index) { return Literal::Undefined }
 
 		@__value__.delete_at(index)
@@ -281,22 +326,7 @@ class Literal::Array
 	def flat_map(type, &block)
 		raise ArgumentError.new("#flat_map requires a block.") unless block
 
-		result = []
-
-		@__value__.each do |element|
-			mapped = block.call(element)
-
-			case mapped
-			when Literal::Array
-				result.concat(mapped.__value__)
-			when ::Array
-				result.concat(mapped)
-			else
-				result << mapped
-			end
-		end
-
-		Literal::Array.new(result, type:)
+		Literal::Array.new(@__value__.flat_map(&block), type:)
 	end
 
 	def freeze
@@ -317,13 +347,16 @@ class Literal::Array
 	end
 
 	def insert(index, *values)
+		__check_frozen__
+		index = __to_index__(index)
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#insert")
 			end
 		end
 
-		__check_padding__(index)
+		__check_padding__(index) unless values.empty?
 
 		@__value__.insert(index, *values)
 		self
@@ -363,6 +396,7 @@ class Literal::Array
 
 	def map!(&block)
 		raise ArgumentError.new("#map! requires a block.") unless block
+		__check_frozen__
 
 		transform_type = Literal::Transforms.dig(@__type__, block)
 		mapped = @__value__.map(&block)
@@ -467,6 +501,7 @@ class Literal::Array
 	end
 
 	def pop(n = nil)
+		__check_frozen__
 		return __with__(@__value__.pop(n)) if n
 		return Literal::Undefined if @__value__.empty?
 
@@ -501,6 +536,8 @@ class Literal::Array
 	end
 
 	def push(*values)
+		__check_frozen__
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#push")
@@ -519,12 +556,14 @@ class Literal::Array
 
 	def reject!(&block)
 		raise ArgumentError.new("#reject! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.reject!(&block)
 		self
 	end
 
 	def replace(other)
+		__check_frozen__
 		@__value__.replace(__compatible_value__(other, "#replace"))
 		self
 	end
@@ -534,6 +573,7 @@ class Literal::Array
 	end
 
 	def reverse!
+		__check_frozen__
 		@__value__.reverse!
 		self
 	end
@@ -543,6 +583,7 @@ class Literal::Array
 	end
 
 	def rotate!(count = 1)
+		__check_frozen__
 		@__value__.rotate!(count)
 		self
 	end
@@ -562,12 +603,14 @@ class Literal::Array
 
 	def select!(&block)
 		raise ArgumentError.new("#select! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.select!(&block)
 		self
 	end
 
 	def shift(n = nil)
+		__check_frozen__
 		return __with__(@__value__.shift(n)) if n
 		return Literal::Undefined if @__value__.empty?
 
@@ -579,6 +622,7 @@ class Literal::Array
 	end
 
 	def shuffle!(random: Random)
+		__check_frozen__
 		@__value__.shuffle!(random:)
 		self
 	end
@@ -592,6 +636,7 @@ class Literal::Array
 	end
 
 	def sort!(&)
+		__check_frozen__
 		@__value__.sort!(&)
 		self
 	end
@@ -604,6 +649,7 @@ class Literal::Array
 
 	def sort_by!(&block)
 		raise ArgumentError.new("#sort_by! requires a block.") unless block
+		__check_frozen__
 
 		@__value__.sort_by!(&block)
 		self
@@ -673,11 +719,14 @@ class Literal::Array
 	end
 
 	def uniq!(&)
+		__check_frozen__
 		@__value__.uniq!(&)
 		self
 	end
 
 	def unshift(*values)
+		__check_frozen__
+
 		values.each do |value|
 			Literal.check(value, @__type__) do |c|
 				c.fill_receiver(receiver: self, method: "#unshift")
@@ -809,10 +858,36 @@ class Literal::Array
 		end
 	end
 
+	private def __check_frozen__
+		raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
+	end
+
+	private def __splice_elements__(value)
+		elements = ::Array.try_convert(value) || [value]
+
+		Literal.check(elements, @__collection_type__) do |c|
+			c.fill_receiver(receiver: self, method: "#[]=")
+		end
+
+		elements
+	end
+
+	private def __to_index__(index)
+		Integer.try_convert(index) || raise(::TypeError.new("no implicit conversion of #{index.class} into Integer"))
+	end
+
+	# Converts each endpoint once, so the bounds we check are the bounds we use.
+	private def __index_range__(range)
+		first = range.begin.nil? ? nil : __to_index__(range.begin)
+		last = range.end.nil? ? nil : __to_index__(range.end)
+
+		::Range.new(first, last, range.exclude_end?)
+	end
+
 	# Writing beyond the end of the array pads the gap with nils, which is only
 	# valid if our element type admits nil.
 	private def __check_padding__(index)
-		if Integer === index && index > @__value__.length && !(@__type__ === nil)
+		if index > @__value__.length && !(@__type__ === nil)
 			raise Literal::TypeError.new(
 				context: Literal::TypeError::Context.new(
 					expected: @__type__,

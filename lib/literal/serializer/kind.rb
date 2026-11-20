@@ -8,7 +8,7 @@
 module Literal::Serializer::Kind
 	include Literal::Type
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		matches?(other) && @context.serializable_type?(other)
 	end
 end

@@ -18,6 +18,10 @@ class Literal::Types::JSONDataType
 
 	def inspect = "_JSONData"
 
+	def literal_upper_bound
+		Literal::Types._Union(String, Integer, Float, TrueClass, FalseClass, NilClass, Array, Hash)
+	end
+
 	def ===(value)
 		case value
 		when String, Integer, true, false, nil
@@ -59,7 +63,7 @@ class Literal::Types::JSONDataType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		return true if COMPATIBLE_TYPES.include?(other)
 
 		case other
@@ -69,7 +73,7 @@ class Literal::Types::JSONDataType
 			Literal.subtype?(other.key_type, String, context:) && Literal.subtype?(other.value_type, self, context:)
 		when Literal::Types::ConstraintType
 			Literal.subtype?(other, Literal::Types._Float(finite?: Literal::Types._Truthy), context:) ||
-				other.object_constraints.any? { |type| self.>=(type, context:) }
+				other.object_constraints.any? { |type| Literal.subtype?(type, self, context:) }
 		else
 			false
 		end

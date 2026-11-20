@@ -18,7 +18,7 @@ class Literal::Types::FalsyType
 		!value
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::FalsyType, nil, false
 			true

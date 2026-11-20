@@ -10,11 +10,15 @@ class Literal::Types::BooleanType
 		"_Boolean"
 	end
 
+	def literal_upper_bound
+		Literal::Types._Union(TrueClass, FalseClass)
+	end
+
 	def ===(value)
 		true == value || false == value
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when true, false, Literal::Types::BooleanType
 			true

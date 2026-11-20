@@ -97,8 +97,8 @@ test "a union flattens nilable members" do
 end
 
 test "flattening a member keeps its declared position" do
-	# Order decides which member resolve tries first and how JSON schemas list
-	# members, so a flattened member takes the place of the one it came from.
+	# Order decides how JSON schemas list members and how resolve breaks ties,
+	# so a flattened member takes the place of the one it came from.
 	assert_equal _Union(_Nilable(String), Integer).literal_child_types.to_a, [String, Integer]
 	assert_equal _Union(Integer, _Nilable(String)).literal_child_types.to_a, [Integer, String]
 	assert_equal _Union(_Union(String, Symbol), Integer).literal_child_types.to_a, [String, Symbol, Integer]
@@ -106,7 +106,7 @@ test "flattening a member keeps its declared position" do
 end
 
 test "a union of the same members is equal regardless of order" do
-	# Order is behaviourally meaningful — resolve takes the first match — but it
+	# Order is behaviourally meaningful — resolve breaks ties by it — but it
 	# does not distinguish one type from another.
 	assert_equal _Union(String, Integer), _Union(Integer, String)
 	assert_equal _Union(String, Integer, :a, :b), _Union(:b, Integer, :a, String)
@@ -184,4 +184,282 @@ test "error message" do
 		  Expected: _Union(String, Integer)
 		  Actual (Symbol): :symbol
 	ERROR
+end
+
+test "#resolve picks the most specific matching member" do
+	parent = Class.new
+	child = Class.new(parent)
+
+	[_Union(parent, child), _Union(child, parent)].each do |type|
+		assert_equal type.resolve(child.new), child
+		assert_equal type.resolve(parent.new), parent
+	end
+end
+
+test "#resolve breaks ties between incomparable members by declaration order" do
+	both = Class.new { include Comparable, Enumerable }.new
+
+	assert_equal _Union(Comparable, Enumerable).resolve(both), Comparable
+	assert_equal _Union(Enumerable, Comparable).resolve(both), Enumerable
+end
+
+# Ties are judged among the matches alone: a subtype of `animal` that doesn't
+# match can't push `animal` behind `robot`.
+test "#resolve breaks ties by declaration order whatever else the union holds" do
+	animal = Class.new
+	robot = Module.new
+	dog = Class.new(animal)
+	type = _Union(animal, robot, dog)
+
+	assert_equal type.resolve(Class.new(animal) { include robot }.new), animal
+	assert_equal type.resolve(Class.new(dog) { include robot }.new), robot
+	assert_equal type.resolve(dog.new), dog
+end
+
+test "#resolve matches primitives before types" do
+	assert_equal _Union(Integer, 1).resolve(1), 1
+	assert_equal _Union(Integer, 1).resolve(2), Integer
+	assert_raises(Literal::ArgumentError) { _Union(Integer, 1).resolve("1") }
+end
+
+# A type is below another only if the latter says so, so the relation need not
+# be transitive: here c is below b and b below a, but c is not below a.
+test "#resolve picks a most specific member when subtyping is not transitive" do
+	rung = Class.new do
+		include Literal::Type
+
+		def initialize(name, *below)
+			@name = name
+			@below = below
+		end
+
+		attr_reader :name
+
+		def ===(value) = value.include?(@name)
+
+		def >=(other, context: nil)
+			equal?(other) || @below.include?(other)
+		end
+	end
+
+	c = rung.new(:c)
+	b = rung.new(:b, c)
+	a = rung.new(:a, b)
+	type = _Union(a, c, b)
+
+	assert_equal type.resolve([:a, :b, :c]), c
+	assert_equal type.resolve([:a, :c]), a
+	assert_equal type.resolve([:a, :b]), b
+	assert_equal type.resolve([:b, :c]), c
+	assert_equal type.resolve([:a]), a
+end
+
+test "#resolve refuses members that are strict subtypes of one another in a cycle" do
+	rung = Class.new do
+		include Literal::Type
+
+		def initialize = @below = []
+
+		attr_reader :below
+
+		def ===(value) = true
+
+		def >=(other, context: nil)
+			equal?(other) || @below.include?(other)
+		end
+	end
+
+	a, b, c = rung.new, rung.new, rung.new
+	a.below << b
+	b.below << c
+	c.below << a
+
+	assert_raises(Literal::ArgumentError) { _Union(a, b, c).resolve(1) }
+end
+
+test "constructing a union does not materialize deferred members" do
+	materialized = false
+	deferred = _Deferred do
+		materialized = true
+		Integer
+	end
+	type = _Union(String, deferred)
+
+	assert type === "a"
+	refute materialized
+
+	assert_equal type.resolve(1), deferred
+	assert materialized
+end
+
+test "resolving a value does not materialize deferred members it doesn't match" do
+	deferred = _Deferred { raise "materialized" }
+	type = _Union(String, _Array(Integer), _Array(deferred))
+
+	assert_equal type.resolve("a"), String
+end
+
+if defined?(Ractor)
+	test "a union is Ractor-shareable and resolves once shared" do
+		type = Ractor.make_shareable(_Union(String, Integer))
+
+		assert Ractor.shareable?(type)
+		assert_equal type.resolve(1), Integer
+	end
+end
+
+test "a cyclic value re-entering a union through a proc member does not match" do
+	node = _Union(nil, _Array(-> (value) { node === value }))
+	array = []
+	array << array
+
+	refute node === array
+	assert node === [nil, [nil]]
+end
+
+test "a value re-entering a union through a module with its own === does not match" do
+	union = nil
+	reentrant = Class.new { define_singleton_method(:===) { |value| union === value } }
+	union = _Union(nil, reentrant)
+
+	refute union === :x
+end
+
+test "building a union over shared subtrees visits each once" do
+	tuple = Integer
+	30.times { tuple = _Tuple(tuple, tuple) }
+
+	refute _Union(nil, tuple) === 1
+end
+
+test "literal members match with ==, like bare literals" do
+	union = _Union(1, "a", [1])
+
+	assert 1 === 1.0
+	assert union === 1.0
+	assert union === 1r
+	assert union === [1.0]
+	assert union === +"a"
+
+	refute union === 2.0
+	refute union === "b"
+end
+
+test "#resolve finds the literal member a value equals" do
+	union = _Union(1, "a", String)
+
+	assert_same union.resolve(1.0), 1
+	assert_equal union.resolve(1), 1
+	assert_equal union.resolve("a"), "a"
+	assert_equal union.resolve("b"), String
+end
+
+test "#resolve prefers a matching type to a literal the value is merely == to" do
+	union = _Union(1, Float)
+
+	assert_equal union.resolve(1.0), Float
+	assert_equal union.resolve(1r), 1
+end
+
+test "a value re-entering a union through its own methods does not match" do
+	union = nil
+	reader = Class.new { define_method(:name) { union === self } }
+	responder = Class.new { define_method(:respond_to_missing?) { |*| union === self } }
+	enumerable = Class.new do
+		include Enumerable
+		define_method(:size) { 1 }
+		define_method(:each) { |&block| block.(union === self) }
+	end
+
+	[
+		[_Constraint(name: true), reader],
+		[_Interface(:name), responder],
+		[_Enumerable(true), enumerable],
+	].each do |(member, value_class)|
+		union = _Union(String, member)
+
+		refute union === value_class.new
+	end
+end
+
+test "#=== does not hash a value that cannot be one of its primitives" do
+	hashed = []
+	value = Object.new
+	value.define_singleton_method(:hash) { hashed << self; object_id }
+
+	refute _Union(:a, 1, String) === value
+	refute _Union(String, Integer) === value
+	assert _Union(Object) === value
+	assert_equal _Union(:a, Object).resolve(value), Object
+
+	assert_equal hashed, []
+end
+
+test "#=== matches a primitive given an instance of a subclass of its class" do
+	subclass = Class.new(String)
+
+	assert _Union("a", Integer) === subclass.new("a")
+	refute _Union("a", Integer) === subclass.new("b")
+end
+
+test "#=== matches a primitive given a delegator to it" do
+	assert _Union("a", Integer) === SimpleDelegator.new("a")
+	assert _Union(:a, Integer) === SimpleDelegator.new(:a)
+	refute _Union(:a, Integer) === SimpleDelegator.new(:b)
+end
+
+test "#=== and #resolve treat a literal member as one the value is eql? to or that is == to the value" do
+	equal_to = -> (expected) { Class.new { define_method(:==) { |other| expected == other } } }
+	coercible = -> (method, expected) { Class.new(equal_to.(expected)) { define_method(method) { expected } } }
+
+	big = 2 ** 70
+	numbers = [0, 1, 2, big, 1.0, -0.0, 1.5, big.to_f, Float::NAN, 1r, 1.5r, Complex(1, 0), Complex(1, 1), BigDecimal("1")]
+	strings = ["a", "b", "", "a".b, "a".encode("UTF-16LE"), Class.new(String).new("a")]
+	collections = [[], [1], [1.0], [[1]], Class.new(Array).new([1]), {}, { a: 1 }, { a: 1.0 }, Class.new(Hash)[a: 1]]
+	objects = [Object.new, Struct.new(:a).new(1), Data.define(:a).new(a: 1), Set[1], 1..2]
+	delegators = [SimpleDelegator.new(:a), SimpleDelegator.new("a"), SimpleDelegator.new(1.0), SimpleDelegator.new(nil), Literal::Delegator(String).new("a")]
+	impostors = [equal_to.(1).new, Class.new { def ==(_) = true }.new, coercible.(:to_str, "a").new, coercible.(:to_ary, [1]).new, coercible.(:to_hash, { a: 1 }).new]
+	basic = [Class.new { def hash = raise }.new, BasicObject.new, Class.new(BasicObject) { def ==(other) = other.equal?(1) }.new]
+	values = [*numbers, *strings, :a, :b, nil, true, false, *collections, *objects, *delegators, *impostors, *basic]
+
+	literals = [1, 1.0, 2, 1r, Complex(1, 0), big, "a", "", :a, nil, true, false, [1], [], { a: 1 }, {}]
+	literals += [Class.new(String).new("a"), Class.new(Array).new([1]), Class.new(Hash)[a: 1]]
+	types = [[], [String], [Integer], [Float], [Numeric], [Object], [String, Integer]]
+
+	eql = -> (value, literal) do
+		value.hash == literal.hash && value.eql?(literal)
+	rescue NoMethodError, RuntimeError
+		false
+	end
+
+	# JRuby's Array#== and Hash#== call a BasicObject's missing respond_to?.
+	outcome = -> (&block) do
+		block.call
+	rescue NoMethodError => error
+		error.class
+	end
+
+	mismatches = (1..2).flat_map { |n| literals.combination(n).to_a }.product(types).flat_map do |members, member_types|
+		union = Literal::Types::UnionType.new([*members, *member_types])
+
+		values.reject do |value|
+			matching_types = member_types.select { |type| type === value }
+			match = outcome.() do
+				members.any? { |literal| eql.(value, literal) } || members.any? { |literal| literal == value } || matching_types.any?
+			end
+
+			next false unless outcome.() { union === value } == match
+			next true unless match == true
+
+			if members.any? { |literal| eql.(value, literal) }
+				union.resolve(value).equal?(value)
+			elsif matching_types.any?
+				union.resolve(value) == Literal::Types::UnionType.most_specific(matching_types, &:itself)
+			else
+				union.resolve(value).eql?(members.find { |literal| literal == value })
+			end
+		end.map { |value| [union, value] }
+	end
+
+	assert_equal mismatches, []
 end
