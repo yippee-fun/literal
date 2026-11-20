@@ -205,6 +205,15 @@ class HashTest < Quickdraw::Test
 		assert_equal hash.dig(:b, :deeper), Literal::Undefined
 	end
 
+	test "merging a hash with a default or default proc adopts only its entries" do
+		hash = Literal::Hash(String, Integer).new({ "a" => 1 })
+		other = Hash.new { "nope" }.merge("b" => 2)
+
+		assert_equal hash.merge(other).to_h["zz"], nil
+		assert_equal hash.merge!(other).to_h["zz"], nil
+		assert_equal hash.to_h, { "a" => 1, "b" => 2 }
+	end
+
 	test "#each yields pairs and returns self" do
 		hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
 		yielded = []
@@ -237,6 +246,22 @@ class HashTest < Quickdraw::Test
 
 		kwargs = -> (**kw) { kw }
 		assert_equal kwargs.call(**hash), { a: 1 }
+	end
+
+	test "#to_h with a block maps pairs into a plain hash" do
+		hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+
+		inverted = hash.to_h { |key, value| [value, key] }
+
+		assert_equal inverted.class, Hash
+		assert_equal inverted, { 1 => :a, 2 => :b }
+		assert_equal hash.to_h, { a: 1, b: 2 }
+	end
+
+	test "#to_hash ignores a block, like Hash#to_hash" do
+		hash = Literal::Hash(Symbol, Integer).new({ a: 1, b: 2 })
+
+		assert_equal hash.to_hash { |key, value| [value, key] }, { a: 1, b: 2 }
 	end
 
 	test "#deconstruct_keys supports pattern matching" do
