@@ -8,5 +8,5 @@ class Literal::Checks::Error < Literal::Data
 	prop :path, _Array(_Union(Symbol, Integer)), default: -> { [] }
 
 	# So that a failed check can be reported inside any Ractor.
-	Ractor.make_shareable(literal_properties) if defined?(Ractor)
+	Literal.make_shareable(self)
 end

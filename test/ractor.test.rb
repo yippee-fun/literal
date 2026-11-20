@@ -2,8 +2,9 @@
 
 include Literal::Types
 
-# Only CRuby has Ractors.
-if RUBY_ENGINE == "ruby"
+# Only CRuby has Ractors, and only from 4.0 can they share the method handles
+# Literal calls through.
+if RUBY_ENGINE == "ruby" && RUBY_VERSION >= "4.0"
 	class RactorStruct < Literal::Struct
 		prop :position, _Tuple(Integer, Integer)
 		prop :tags, _Array(String), default: -> { [] }
@@ -39,14 +40,21 @@ if RUBY_ENGINE == "ruby"
 		Itself = Ractor.make_shareable(_Deferred { Itself.materialize })
 	end
 
-	[RactorStruct, RactorData, RactorObject, RactorRange].each do |shape|
-		Ractor.make_shareable(shape.literal_properties)
+	class RactorUnshared < Literal::Struct
+		prop :name, String
 	end
 
-	Ractor.make_shareable(RactorRange.literal_checks)
+	class RactorBase < Literal::Struct
+		prop :id, Integer
+	end
 
-	# Ruby 3.3 cannot autoload outside the main Ractor.
-	Literal::Checks::Collector
+	class RactorChild < RactorBase
+		prop :name, String
+	end
+
+	[RactorStruct, RactorData, RactorObject, RactorRange, RactorChild].each do |shape|
+		Literal.make_shareable(shape)
+	end
 
 	class Quickdraw::Test
 		def in_ractor(&)
@@ -142,6 +150,29 @@ if RUBY_ENGINE == "ruby"
 			RactorObject.prop :extra, Integer
 		end
 
-		assert_equal error.message, "Cannot define :extra on #{RactorObject}, because its properties are frozen."
+		assert_equal error.message, "Cannot define :extra on #{RactorObject}, because it is frozen."
+	end
+
+	test "a shape that was never made shareable says so inside a Ractor" do
+		message = in_ractor do
+			RactorUnshared.new(name: "x")
+		rescue Ractor::IsolationError => error
+			error.message
+		end
+
+		assert_equal message, "#{RactorUnshared} can't be built outside the main Ractor until it is passed to Literal.make_shareable."
+	end
+
+	test "a shape whose superclass was never built can be built inside a Ractor" do
+		child = in_ractor { RactorChild.new(id: 1, name: "child") }
+
+		assert_equal child.to_h, { id: 1, name: "child" }
+	end
+
+	test "making a shape shareable materializes the deferred types it reaches" do
+		deferred = RactorStruct.literal_properties[:next].type.literal_child_types.first
+
+		assert deferred.materialized?
+		assert Ractor.shareable?(deferred)
 	end
 end

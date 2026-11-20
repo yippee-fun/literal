@@ -140,6 +140,24 @@ module Literal
 		ConstantTracker.const_ref(object)
 	end
 
+	# Readies a shape to be built and read in any Ractor. It is frozen, the
+	# deferred types its properties reach are materialized, and its schema and
+	# checks are deeply frozen — defaults, coercions and check blocks too, so
+	# none of them may capture mutable state.
+	def self.make_shareable(shape)
+		unless Literal::Properties === shape
+			raise Literal::ArgumentError.new("Literal.make_shareable requires a class that extends Literal::Properties.")
+		end
+
+		shape.freeze
+		shape.__send__(:__literal_make_shareable__)
+		shape
+	end
+
+	def self.main_ractor?
+		!defined?(Ractor) || Ractor.current.equal?(Ractor.main)
+	end
+
 	def self.Value(*, **, &block)
 		value_class = Class.new(Literal::Value)
 
