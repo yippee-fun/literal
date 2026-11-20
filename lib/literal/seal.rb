@@ -32,7 +32,7 @@ class Literal::Seal
 			raise Literal::ArgumentError.new("Literal::Seal requires a callable or a block.")
 		end
 
-		@callable = __proc_from__(callable)
+		@callable = Literal::Pipeline.proc_from(callable)
 		@coercion = coercion
 
 		pipeline = self
@@ -72,7 +72,7 @@ class Literal::Seal
 				)
 			end
 
-			Literal::Seal.new(__compose__(@callable, other.seal_proc), coercion: @coercion)
+			Literal::Seal.new(Literal::Pipeline.compose(@callable, other.seal_proc), coercion: @coercion)
 		else
 			raise Literal::ArgumentError.new(
 				"A coercion cannot run after a seal. Compose as `coercion >> seal` or `seal << coercion` instead.",
@@ -91,28 +91,12 @@ class Literal::Seal
 				)
 			end
 
-			Literal::Seal.new(__compose__(other.seal_proc, @callable), coercion: other.coercion_proc)
+			Literal::Seal.new(Literal::Pipeline.compose(other.seal_proc, @callable), coercion: other.coercion_proc)
 		when Literal::Coercion
-			Literal::Seal.new(@callable, coercion: @coercion ? __compose__(other.coercion_proc, @coercion) : other.coercion_proc)
+			Literal::Seal.new(@callable, coercion: @coercion ? Literal::Pipeline.compose(other.coercion_proc, @coercion) : other.coercion_proc)
 		else
-			preceding = __proc_from__(other)
-			Literal::Seal.new(@callable, coercion: @coercion ? __compose__(preceding, @coercion) : preceding)
+			preceding = Literal::Pipeline.proc_from(other)
+			Literal::Seal.new(@callable, coercion: @coercion ? Literal::Pipeline.compose(preceding, @coercion) : preceding)
 		end
-	end
-
-	private def __proc_from__(callable)
-		case callable
-		when ::Proc
-			callable
-		else
-			callable.respond_to?(:to_proc) ? callable.to_proc : proc { |value| callable.call(value) }
-		end
-	end
-
-	private def __compose__(first, second)
-		# instance_exec, not call: a composed coercion carried by a seal runs
-		# against the object being constructed, and each stage should see that
-		# context the same way an uncomposed block would.
-		proc { |value| instance_exec(instance_exec(value, &first), &second) }
 	end
 end

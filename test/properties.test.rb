@@ -185,6 +185,18 @@ test "prop refuses a frozen class without changing it" do
 	assert_equal klass.new(a: 1).to_h, { a: 1 }
 end
 
+test "a frozen shape has no checks for a name none of them reads" do
+	klass = Class.new(Literal::Data) do
+		prop :a, Integer
+		check(:a, "must be positive", &:positive?)
+	end
+
+	klass.freeze
+
+	assert_equal klass.literal_checks_for(:a).size, 1
+	assert_equal klass.literal_checks_for(:b), []
+end
+
 test "frozen defaults are type checked when the property is defined" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new(Example) do

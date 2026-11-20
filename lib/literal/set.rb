@@ -85,8 +85,10 @@ class Literal::Set
 			"Literal::Set(#{@type.inspect})"
 		end
 
+		# A lambda rather than a method proc, which can never be made shareable.
 		def to_proc
-			method(:coerce).to_proc
+			coercer = self
+			-> (value) { coercer.coerce(value) }
 		end
 	end
 

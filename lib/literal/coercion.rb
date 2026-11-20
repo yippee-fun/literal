@@ -24,7 +24,7 @@ class Literal::Coercion
 			raise Literal::ArgumentError.new("Literal::Coercion requires a callable or a block.")
 		end
 
-		@callable = __proc_from__(callable)
+		@callable = Literal::Pipeline.proc_from(callable)
 
 		pipeline = self
 		@proc = proc { |value| pipeline.call(value) }
@@ -59,12 +59,12 @@ class Literal::Coercion
 		when Literal::Seal
 			Literal::Seal.new(
 				other.seal_proc,
-				coercion: (coercion = other.coercion_proc) ? __compose__(@callable, coercion) : @callable,
+				coercion: (coercion = other.coercion_proc) ? Literal::Pipeline.compose(@callable, coercion) : @callable,
 			)
 		when Literal::Coercion
-			Literal::Coercion.new(__compose__(@callable, other.coercion_proc))
+			Literal::Coercion.new(Literal::Pipeline.compose(@callable, other.coercion_proc))
 		else
-			Literal::Coercion.new(__compose__(@callable, __proc_from__(other)))
+			Literal::Coercion.new(Literal::Pipeline.compose(@callable, Literal::Pipeline.proc_from(other)))
 		end
 	end
 
@@ -77,25 +77,9 @@ class Literal::Coercion
 				"A coercion cannot run after a seal. Compose as `coercion >> seal` or `seal << coercion` instead.",
 			)
 		when Literal::Coercion
-			Literal::Coercion.new(__compose__(other.coercion_proc, @callable))
+			Literal::Coercion.new(Literal::Pipeline.compose(other.coercion_proc, @callable))
 		else
-			Literal::Coercion.new(__compose__(__proc_from__(other), @callable))
+			Literal::Coercion.new(Literal::Pipeline.compose(Literal::Pipeline.proc_from(other), @callable))
 		end
-	end
-
-	private def __proc_from__(callable)
-		case callable
-		when ::Proc
-			callable
-		else
-			callable.respond_to?(:to_proc) ? callable.to_proc : proc { |value| callable.call(value) }
-		end
-	end
-
-	private def __compose__(first, second)
-		# instance_exec, not call: coercions run against the object being
-		# constructed, and each stage should see that context the same way an
-		# uncomposed block would.
-		proc { |value| instance_exec(instance_exec(value, &first), &second) }
 	end
 end

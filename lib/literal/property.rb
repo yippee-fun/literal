@@ -38,6 +38,7 @@ class Literal::Property
 		@description = description
 		@coercion = coercion
 		@seal = seal
+		@__ivar__ = :"@#{name.name}"
 	end
 
 	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion, :seal
@@ -90,9 +91,7 @@ class Literal::Property
 
 	# The instance variable this property is stored in. Generated code writes
 	# `@name` literally; this is for the runtime paths that cannot.
-	def __ivar__
-		@__ivar__ ||= :"@#{@name.name}"
-	end
+	attr_reader :__ivar__
 
 	def default?
 		return true if splat? || double_splat?

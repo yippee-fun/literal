@@ -10,7 +10,6 @@ class Literal::Properties::Schema
 	def initialize(properties_index: {}, sorted_properties: [])
 		@properties_index = properties_index
 		@sorted_properties = sorted_properties
-		@mutex = Mutex.new
 	end
 
 	attr_reader :properties_index
@@ -27,13 +26,12 @@ class Literal::Properties::Schema
 		@properties_index[key]
 	end
 
+	# Only under the lock of the shape that owns the schema.
 	def <<(value)
-		@mutex.synchronize do
-			@properties_index[value.name] = value
-			# Replacing (not mutating) the array is a contract: `snapshot`
-			# relies on its identity changing with every schema change.
-			@sorted_properties = sort(@properties_index)
-		end
+		@properties_index[value.name] = value
+		# Replacing (not mutating) the array is a contract: `snapshot`
+		# relies on its identity changing with every schema change.
+		@sorted_properties = sort(@properties_index)
 
 		self
 	end

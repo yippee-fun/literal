@@ -66,6 +66,8 @@ class Literal::Types::DeferredType
 			materializing.pop
 		end
 
+		return result if frozen?
+
 		PUBLISHING.synchronize do
 			@materialized = result if UNMATERIALIZED.equal?(@materialized)
 			@materialized
