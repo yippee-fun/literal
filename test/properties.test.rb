@@ -893,40 +893,30 @@ class PropertiesTest < Quickdraw::Test
 		assert_equal klass.literal_properties.map(&:optional?), [true, true]
 	end
 
-	test "a batch's signature is judged when it commits" do
+	test "each prop's signature is judged as it is declared" do
 		parent = Class.new(Literal::Data) do
 			prop :a, _Nilable(String), :positional
 			prop :b, _Nilable(String), :positional
 			prop :c, _Array(String), :*
 		end
 
+		assert_raises(Literal::ArgumentError) do
+			Class.new(parent) { prop :b, String, :positional }
+		end
+
 		child = Class.new(parent) do
-			props do
-				prop :b, String, :positional
-				prop :a, String, :positional
-			end
+			prop :a, String, :positional
+			prop :b, String, :positional
 		end
 
 		assert_equal child.new("a", "b", "c").to_h, { a: "a", b: "b", c: ["c"] }
 
 		forward = Class.new(Literal::Data) do
-			props do
-				prop :a, _Deferred { const_get(:Later) }, :positional
-				const_set(:Later, String)
-			end
+			prop :a, _Deferred { const_get(:Later) }, :positional
+			const_set(:Later, String)
 		end
 
 		assert_equal forward.new("a").a, "a"
-
-		assert_raises(Literal::ArgumentError) do
-			Class.new(Literal::Data) do
-				props do
-					prop :a, String, :positional, default: "a"
-					prop :b, String, :positional
-					prop :c, Array, :*
-				end
-			end
-		end
 	end
 
 	test "props can be named after Ruby keywords" do

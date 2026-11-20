@@ -48,17 +48,15 @@ class RubyLSPAddonTest < Quickdraw::Test
 			assert_equal symbols.size, 1
 		end
 
-		test "lists props in props and coercion blocks but not other blocks" do
+		test "lists props in coercion blocks but not other blocks" do
 			symbols = document_symbols(<<~RUBY)
 				module M
 					A = Class.new(Literal::Data) { prop :hidden, String }
 
 					class B
-						props do
-							prop :name, String
-							prop :age, Integer do |value|
-								prop :hidden, String
-							end
+						prop :name, String
+						prop :age, Integer do |value|
+							prop :hidden, String
 						end
 
 						included do
@@ -298,17 +296,15 @@ class RubyLSPAddonTest < Quickdraw::Test
 			assert_equal index["age"].first.visibility, :private
 		end
 
-		test "indexes props in props and coercion blocks but not other blocks" do
+		test "indexes props in coercion blocks but not other blocks" do
 			index = index_source(<<~RUBY)
 				module M
 					A = Class.new(Literal::Data) { prop :hidden, String }
 
 					class B
-						props do
-							prop :name, String
-							prop :age, Integer do |value|
-								prop :hidden, String
-							end
+						prop :name, String
+						prop :age, Integer do |value|
+							prop :hidden, String
 						end
 
 						included do

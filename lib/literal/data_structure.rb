@@ -222,7 +222,7 @@ class Literal::DataStructure
 		SCHEMA_METHODS
 	end
 
-	def self.__generate_literal_methods__(new_property, buffer = +"")
+	def self.__generate_literal_methods__(buffer = +"")
 		super
 		literal_properties.generate_hash(buffer)
 		literal_properties.generate_eq(buffer)

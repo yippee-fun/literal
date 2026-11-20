@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Time to define a Literal::Struct, one prop at a time and as one batch.
+# Time to define a Literal::Struct and build its first instance.
 #
 #   bundle exec ruby -Ilib bench_definition.rb
 
@@ -15,28 +15,19 @@ def realtime
 	Process.clock_gettime(Process::CLOCK_MONOTONIC) - start
 end
 
-def define_classes(size, batched:)
+def define_classes(size)
 	CLASSES.times do
 		Class.new(Literal::Struct) do
-			declare = -> { size.times { |i| prop :"prop_#{i}", Integer } }
-			batched ? props(&declare) : declare.call
-		end
+			size.times { |i| prop :"prop_#{i}", Integer, default: 0 }
+		end.new
 	end
 end
 
 [5, 20, 80].each do |size|
-	unbatched, batched = [false, true].map do |batched|
-		3.times.map {
-			GC.start
-			realtime { define_classes(size, batched:) }
-		}.min
-	end
+	time = 3.times.map {
+		GC.start
+		realtime { define_classes(size) }
+	}.min
 
-	puts format(
-		"%2d props: %7.1fms unbatched, %6.1fms batched, %.1fx",
-		size,
-		unbatched * 1000,
-		batched * 1000,
-		unbatched / batched,
-	)
+	puts format("%2d props: %7.1fms", size, time * 1000)
 end

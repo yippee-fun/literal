@@ -88,6 +88,12 @@ class RactorTest < Quickdraw::Test
 		class RactorBareData < RactorParentData
 		end
 
+		class RactorLoaded < Literal::Data
+			prop :id, Integer
+		end
+
+		LOADED = Ractor.make_shareable(RactorLoaded.from_props(id: 1))
+
 		[RactorStruct, RactorData, RactorObject, RactorRange, RactorChild, RactorCoercedChild, RactorCoerced, RactorBare, RactorBareData].each do |shape|
 			Literal.make_shareable(shape)
 		end
@@ -229,6 +235,12 @@ class RactorTest < Quickdraw::Test
 			child = in_ractor { RactorChild.new(id: 1, name: "child") }
 
 			assert_equal child.to_h, { id: 1, name: "child" }
+		end
+
+		test "a shareable value loaded from props is read inside a Ractor" do
+			outcome = in_ractor { [LOADED.to_h, LOADED.hash == LOADED.hash] }
+
+			assert_equal outcome, [{ id: 1 }, true]
 		end
 
 		test "making a shape shareable materializes the deferred types it reaches" do
