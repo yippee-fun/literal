@@ -36,4 +36,14 @@ class SetTypeTest < Quickdraw::Test
 			      Actual (NilClass): nil
 		MSG
 	end
+
+	test "inline constraints" do
+		type = _Set(String, size: 1..)
+
+		assert type === Set["a"]
+		refute type === Set[]
+		refute type === Set[1]
+
+		assert_equal type, _Constraint(_Set(String), size: 1..)
+	end
 end
