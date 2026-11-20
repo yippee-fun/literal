@@ -188,10 +188,10 @@ module Literal::Properties
 	# The checks whose outcome depends on one property — what its writer
 	# enforces on every assignment.
 	def literal_checks_for(name)
-		# Complete since freezing, so it is only ever read.
-		return @literal_checks_for.fetch(name) if frozen?
-
 		table = (@literal_checks_for ||= {})
+		# Complete once the shape is finished, so it is only ever read.
+		return table.fetch(name, NO_CHECKS) if table.frozen?
+
 		table[name] ||= __literal_checks_for__(name)
 	end
 
@@ -364,34 +364,78 @@ module Literal::Properties
 		nil
 	end
 
-	# A frozen shape is finished: it is closed as if it had an instance, and
-	# everything it derives from its schema and checks is computed now, so
-	# building and reading it never writes to the class again.
 	def freeze
 		return super if frozen?
 
-		@literal_checks_for = literal_properties.to_h { |property| [property.name, __literal_checks_for__(property.name)] }.freeze
-		__literal_define_schema_methods__
-		__literal_used__
-		__literal_unwatch__
+		__literal_finish__
 		super
 	end
 
-	# For Literal.make_shareable, once the shape is frozen.
+	# Closed as if it had an instance, with everything derived from its schema
+	# and checks computed, so building and reading it never writes to the class
+	# again.
+	private def __literal_finish__
+		__literal_define_schema_methods__
+		__literal_used__
+		__literal_unwatch__
+
+		unless @literal_checks_for&.frozen?
+			@literal_checks_for = literal_properties.to_h { |property| [property.name, __literal_checks_for__(property.name)] }.freeze
+		end
+	end
+
+	# For Literal.make_shareable, once the shape is frozen. Its ancestors are
+	# shared too, because the methods they generated read their own schemas, but
+	# not frozen: having a subclass, they can't change anyway.
 	private def __literal_make_shareable__
+		shape = self
+
+		while Literal::Properties === shape
+			shape.__send__(:__literal_share__)
+			shape = shape.superclass
+		end
+	end
+
+	private def __literal_share__
+		__literal_finish__
+
 		seen = {}.compare_by_identity
 		literal_properties.each { |property| __literal_materialize__(property.type, seen) }
 
 		return unless defined?(Ractor)
 
 		literal_properties.each do |property|
-			Literal::Pipeline.make_shareable(property.coercion) if property.coercion
-			Literal::Pipeline.make_shareable(property.seal) if property.seal
+			__literal_make_proc_shareable__(property.coercion) if property.coercion
+			__literal_make_proc_shareable__(property.seal) if property.seal
 		end
 
 		Ractor.make_shareable(literal_properties)
 		Ractor.make_shareable(literal_checks)
 		Ractor.make_shareable(@literal_checks_for)
+	end
+
+	# Ruby only makes a proc shareable once what it captures is, and won't reach
+	# in to make it so. Literal's own procs capture other procs and objects — a
+	# composition's stages, a collection's coercer — so those go first.
+	private def __literal_make_proc_shareable__(proc)
+		# A shared proc has no binding to read, and a superclass's schema holds
+		# the same procs as its subclass's.
+		return proc if Ractor.shareable?(proc)
+
+		if proc.source_location&.first&.start_with?(LIBRARY)
+			binding = proc.binding
+
+			binding.local_variables.each do |name|
+				case (captured = binding.local_variable_get(name))
+				in ::Proc
+					__literal_make_proc_shareable__(captured)
+				else
+					Ractor.make_shareable(captured)
+				end
+			end
+		end
+
+		Ractor.make_shareable(proc)
 	end
 
 	# Walking a type's children materializes the deferred types among them, so a

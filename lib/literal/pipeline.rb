@@ -22,23 +22,4 @@ module Literal::Pipeline
 	def compose(first, second)
 		proc { |value| instance_exec(instance_exec(value, &first), &second) }
 	end
-
-	# Ruby only makes a proc shareable once what it captures is, and won't
-	# reach into it, so what a proc made here captures is shared first.
-	def make_shareable(proc)
-		if __FILE__ == proc.source_location&.first
-			binding = proc.binding
-
-			binding.local_variables.each do |name|
-				case (captured = binding.local_variable_get(name))
-				in ::Proc
-					make_shareable(captured)
-				else
-					Ractor.make_shareable(captured)
-				end
-			end
-		end
-
-		Ractor.make_shareable(proc)
-	end
 end

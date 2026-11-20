@@ -53,18 +53,41 @@ if RUBY_ENGINE == "ruby" && RUBY_VERSION >= "4.0"
 	end
 
 	module RactorPipelines
+		extend Literal::Types
+
 		Strip = Literal::Coercion(&:strip)
 		Downcase = Literal::Coercion { |value| value.downcase.tr(" ", "-") }
 		Immutable = Literal::Seal(&:freeze)
+		Codes = Literal::Array(_Pattern(/\A\d+\z/) { true })
 	end
 
 	class RactorCoerced < Literal::Struct
 		prop :code, _Pattern(/\A(\d+)\z/) { |digits| digits.size < 4 }
 		prop :slug, String, &(RactorPipelines::Strip >> RactorPipelines::Downcase >> RactorPipelines::Immutable)
 		prop :numbers, Literal::Array(Integer), &Literal::Array(Integer)
+		prop :codes, RactorPipelines::Codes, &RactorPipelines::Codes
 	end
 
-	[RactorStruct, RactorData, RactorObject, RactorRange, RactorChild, RactorCoerced].each do |shape|
+	class RactorCoercedChild < RactorCoerced
+		prop :extra, Integer
+	end
+
+	class RactorParent < Literal::Struct
+		prop :id, Integer
+		check(:id, "must be positive", &:positive?)
+	end
+
+	class RactorBare < RactorParent
+	end
+
+	class RactorParentData < Literal::Data
+		prop :id, Integer
+	end
+
+	class RactorBareData < RactorParentData
+	end
+
+	[RactorStruct, RactorData, RactorObject, RactorRange, RactorChild, RactorCoercedChild, RactorCoerced, RactorBare, RactorBareData].each do |shape|
 		Literal.make_shareable(shape)
 	end
 
@@ -177,11 +200,28 @@ if RUBY_ENGINE == "ruby" && RUBY_VERSION >= "4.0"
 
 	test "patterns, composed coercions and collection coercions run inside a Ractor" do
 		coerced = in_ractor do
-			value = RactorCoerced.new(code: "12", slug: "  Hello ", numbers: [1, 2])
-			[value.code, value.slug, value.slug.frozen?, value.numbers.class, value.numbers.to_a, RactorCoerced.literal_properties[:code].type === "12345"]
+			value = RactorCoerced.new(code: "12", slug: "  Hello ", numbers: [1, 2], codes: ["7"])
+			[value.code, value.slug, value.slug.frozen?, value.numbers.class, value.numbers.to_a, value.codes.to_a, RactorCoerced.literal_properties[:code].type === "12345"]
 		end
 
-		assert_equal coerced, ["12", "hello", true, Literal::Array, [1, 2], false]
+		assert_equal coerced, ["12", "hello", true, Literal::Array, [1, 2], ["7"], false]
+	end
+
+	test "methods a shape inherits work inside a Ractor" do
+		outcome = in_ractor do
+			bare = RactorBare.new(id: 1)
+			bare.id = 2
+
+			begin
+				bare.id = -1
+			rescue Literal::CheckError
+				nil
+			end
+
+			[bare.id, RactorBareData.new(id: 1).with(id: 3).id]
+		end
+
+		assert_equal outcome, [2, 3]
 	end
 
 	test "a shape whose superclass was never built can be built inside a Ractor" do
