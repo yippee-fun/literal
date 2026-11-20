@@ -1,0 +1,343 @@
+# frozen_string_literal: true
+
+# Runtime-checked method signatures, written on the line above the method in
+# the shape of an RBS inline annotation:
+#
+#   class Greeter
+#     extend Literal::Signatures
+#
+#     #: (String, ?greeting: String?) -> String
+#     sig(String, greeting: _Nilable(String)) >> String
+#     def greet(name, greeting: nil) = "#{greeting || "Hello"}, #{name}"
+#   end
+#
+# Positional types line up with the method's positional parameters, and
+# keyword types with its keywords by name; the type after `>>` is the return
+# type. The method stays a plain `def`, so editors, YARD, stack traces and
+# method cops all see it as written. Each argument the caller passes is checked
+# before the method runs and the return value after, raising
+# Literal::TypeError. A default is the author's own and is not checked.
+#
+# A signature binds to the next method defined, instance or singleton. One that
+# does not match that method's parameters fails when the class loads, as does
+# a `sig` with no `>>`, or two in a row.
+#
+# The checking method is compiled to the method's own parameter list, so Ruby
+# refuses a wrong number of arguments or an unknown keyword before anything is
+# checked, and checking allocates nothing, save a Hash to pass on the given
+# keywords when an optional one is omitted or the method is under a prepended
+# override.
+module Literal::Signatures
+	include Literal::Types
+
+	# @api private
+	class Signature
+		NO_RETURN_TYPE = Object.new.freeze
+		private_constant :NO_RETURN_TYPE
+
+		def initialize(positional, keywords, site)
+			@positional = positional
+			@keywords = keywords
+			@site = site
+			@returns = NO_RETURN_TYPE
+		end
+
+		attr_reader :positional, :keywords, :site, :returns
+
+		def >>(other)
+			@returns = other
+			self
+		end
+
+		def returns? = !NO_RETURN_TYPE.equal?(@returns)
+	end
+
+	SignedMethod = Data.define(:signature, :original, :checker)
+	private_constant :SignedMethod
+
+	POSITIONAL = [:req, :opt].freeze
+	KEYWORD = [:keyreq, :key].freeze
+
+	# The method names `def` can spell, so the checker can be compiled under its
+	# own name; it is compiled under a stand-in for any other.
+	IDENTIFIER = /\A[A-Za-z_][A-Za-z0-9_]*[?!=]?\z/
+	OPERATORS = [:[], :[]=, :+, :-, :*, :/, :%, :**, :==, :!=, :===, :=~, :!~, :<, :>, :<=, :>=, :<=>, :<<, :>>, :&, :|, :^, :~, :!, :+@, :-@, :`].freeze
+
+	OMITTED = Object.new.freeze
+	private_constant :OMITTED
+
+	def sig(*positional, **keywords)
+		if (pending = @__literal_signature__)
+			@__literal_signature__ = nil
+			raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{pending.site} has no method after it"
+		end
+
+		@__literal_signature__ = Signature.new(positional.freeze, keywords.freeze, caller_locations(1, 1).first)
+		__literal_hook_methods__
+		@__literal_signature__
+	end
+
+	# Prepended, so a class's own hooks cannot hide a method from its sig by not
+	# calling super. They see the method once it is signed, so one defining a
+	# method of its own cannot take the sig, and do not see the methods signing
+	# defines. Only the class's newest hooks act, so older ones further down
+	# its chain do not handle a method twice.
+	class MethodHooks < Module
+		def initialize
+			super
+
+			hooks = self
+
+			define_method(:method_added) do |name|
+				return if @__literal_signing__
+
+				if Literal::EQUAL.bind_call(hooks, @__literal_method_hooks__)
+					if @__literal_signature__
+						__literal_bind_signature__(self, name)
+					elsif @__literal_signed__&.key?(name)
+						@__literal_signed__ = @__literal_signed__.except(name)
+					end
+				end
+
+				super(name)
+			end
+
+			define_method(:singleton_method_added) do |name|
+				return if @__literal_signing__
+
+				if Literal::EQUAL.bind_call(hooks, @__literal_method_hooks__)
+					if @__literal_signature__
+						__literal_bind_signature__(Literal::SINGLETON_CLASS.bind_call(self), name)
+					else
+						__literal_sign_module_function__(name)
+					end
+				end
+
+				super(name)
+			end
+
+			private(:method_added, :singleton_method_added)
+		end
+	end
+	private_constant :MethodHooks
+
+	# A subclass inherits its parent's hooks behind its own singleton class, and
+	# a module prepended after them sits ahead of them, where hooks of its own
+	# could hide a method from them, so the class takes new hooks unless its
+	# newest are first.
+	private def __literal_hook_methods__
+		singleton = Literal::SINGLETON_CLASS.bind_call(self)
+		return if Literal::EQUAL.bind_call(Literal::ANCESTORS.bind_call(singleton).first, @__literal_method_hooks__)
+
+		@__literal_method_hooks__ = MethodHooks.new
+		Literal::PREPEND.bind_call(singleton, @__literal_method_hooks__)
+	end
+
+	private def __literal_bind_signature__(owner, name)
+		signature = @__literal_signature__ or return
+		@__literal_signature__ = nil
+		__literal_sign__(owner, name, signature)
+	end
+
+	# module_function copies a signed method to the singleton class: the method
+	# itself when it is on as the method is defined, else its checker.
+	private def __literal_sign_module_function__(name)
+		signed = @__literal_signed__&.[](name) or return
+		singleton = Literal::SINGLETON_CLASS.bind_call(self)
+		copy = __literal_own_method__(singleton, name) or return
+
+		if __literal_same_body__(copy, signed.original)
+			__literal_sign__(singleton, name, signed.signature)
+		elsif __literal_same_body__(copy, signed.checker)
+			__literal_sign__(singleton, name, signed.signature, exported: signed.original)
+		end
+	end
+
+	# The owner's own method under the name, past any prepended module.
+	private def __literal_own_method__(owner, name)
+		method = Literal::INSTANCE_METHOD.bind_call(owner, name)
+		method = method.super_method until method.nil? || Literal::EQUAL.bind_call(method.owner, owner)
+		method
+	end
+
+	# MRI's UnboundMethod#== also compares owners, though its #hash is of the
+	# body alone; JRuby's #hash collides.
+	if RUBY_ENGINE == "ruby"
+		private def __literal_same_body__(method, other) = method.hash == other.hash
+	else
+		private def __literal_same_body__(method, other) = method == other
+	end
+
+	# Signs the owner's own method under the name, or, where that is a copy of
+	# a checker, the method the checker was exported from.
+	private def __literal_sign__(owner, name, signature, exported: nil)
+		@__literal_signing__ = true
+		singleton = !Literal::EQUAL.bind_call(owner, self)
+		prepended = !Literal::EQUAL.bind_call(Literal::INSTANCE_METHOD.bind_call(owner, name).owner, owner)
+		original = exported || __literal_own_method__(owner, name)
+		parameters = original.parameters
+		__literal_refuse_mismatch__(signature, parameters, "#{__literal_label__}#{singleton ? '.' : '#'}#{name}")
+
+		visibility = __literal_visibility__(owner, name)
+		checker = Module.new
+
+		# alias_method resolves through prepended modules, so past one, call the
+		# class's own definition through bind_call. A copy would do on MRI, but
+		# JRuby names a copy's super calls after the copy.
+		if prepended
+			checker.const_set(:ORIGINAL, original)
+			callee = "ORIGINAL.bind_call(self, "
+		else
+			# Each signing aliases the method afresh, so a checker captured before a
+			# re-signing keeps calling the body it was signed with. The old alias
+			# stays, holding that body as the captured checker would.
+			@__literal_signings__ = (@__literal_signings__ || 0) + 1
+			unsigned = :"__literal_unsigned_#{Literal::OBJECT_ID.bind_call(owner)}_#{@__literal_signings__}__"
+			exported ? Literal::DEFINE_METHOD.bind_call(owner, unsigned, exported) : Literal::ALIAS_METHOD.bind_call(owner, unsigned, name)
+			Literal::PRIVATE.bind_call(owner, unsigned)
+			callee = "#{unsigned}("
+		end
+
+		keywords = signature.keywords.values_at(*__literal_keywords__(parameters))
+		checker.const_set(:TYPES, [*signature.positional, *keywords, signature.returns].freeze)
+		checker.const_set(:OMITTED, OMITTED)
+		compiled = (IDENTIFIER.match?(name) || OPERATORS.include?(name)) ? name : :__literal_checker__
+		code = __literal_checker_code__(compiled, callee, parameters, singleton ? "#{__literal_label__}.#{name}" : "##{name}", singleton)
+		# An explicit path, so every engine attributes these frames to Literal.
+		checker.module_eval(code, __FILE__, __LINE__)
+
+		Literal::DEFINE_METHOD.bind_call(owner, name, checker.instance_method(compiled))
+		visibility.bind_call(owner, name)
+
+		unless singleton || Class === self
+			# A clone shares the table, so it is replaced rather than changed.
+			@__literal_signed__ = (@__literal_signed__ || {}).merge(name => SignedMethod.new(signature, original, __literal_own_method__(owner, name)))
+		end
+	ensure
+		@__literal_signing__ = false
+	end
+
+	# The checking method, taking the parameters the method takes under the same
+	# names, so Method#parameters reads the same, save a block parameter. An
+	# optional parameter defaults to OMITTED, so an omitted argument is left out
+	# of the call and the method's own default applies. A keyword keeps its name,
+	# since it is part of the call, and any other parameter repeating an
+	# underscore name gets one of its own; a keyword named after a reserved word
+	# is read off the binding.
+	private def __literal_checker_code__(name, callee, parameters, method, singleton)
+		receiver = singleton ? "nil" : "self"
+		check = lambda do |value, index, label|
+			"::Literal.check(#{value}, TYPES[#{index}]) { |c| c.fill_receiver(receiver: #{receiver}, method: #{method.inspect}, label: #{label.inspect}) }"
+		end
+
+		taken = parameters.map { |_, param| param }
+		fresh = lambda do |local|
+			local = :"_#{local}" while taken.include?(local)
+			taken << local
+			local
+		end
+
+		positional = parameters.select { |kind, _| POSITIONAL.include?(kind) }
+		keywords = parameters.select { |kind, _| KEYWORD.include?(kind) }
+		claimed = keywords.map { |_, key| key }
+		locals = positional.map do |_, param|
+			local = claimed.include?(param) ? fresh.(param) : param
+			claimed << local
+			local
+		end
+		values = keywords.to_h { |_, key| [key, Literal::Property::RUBY_KEYWORDS.key?(key) ? fresh.(:"__literal_#{key}__") : key] }
+		options = fresh.(:__literal_options__)
+		returned = fresh.(:__literal_returned__)
+		block = parameters.find { |kind, param| :block == kind && :& != param && !claimed.include?(param) }&.last || fresh.(:block)
+
+		arguments = positional.zip(locals).map { |(kind, _), local| (:opt == kind) ? "#{local} = OMITTED" : local.name }
+		arguments.concat(keywords.map { |kind, key| (:key == kind) ? "#{key}: OMITTED" : "#{key}:" })
+		arguments << "**nil" if parameters.any? { |kind, _| :nokey == kind }
+		arguments << "&#{block}"
+
+		lines = values.filter_map { |key, value| "#{value} = ::Kernel.binding.local_variable_get(:#{key})" unless key == value }
+		positional.zip(locals).each_with_index do |((kind, param), local), index|
+			checked = check.(local, index, param.to_s)
+			lines << ((:opt == kind) ? "#{checked} unless OMITTED.equal?(#{local})" : checked)
+		end
+		keywords.each_with_index do |(kind, key), index|
+			checked = check.(values[key], positional.size + index, "#{key}:")
+			lines << ((:key == kind) ? "#{checked} unless OMITTED.equal?(#{values[key]})" : checked)
+		end
+
+		required = locals.first(positional.count { |kind, _| :req == kind })
+		optional = locals.drop(required.size)
+		dispatch = lambda do |keyword_arguments|
+			calls = (0..(optional.size)).map { |count| "#{callee}#{[*required, *optional.first(count), *keyword_arguments, "&#{block}"].join(', ')})" }
+			branches = optional.zip(calls).map { |local, call| "OMITTED.equal?(#{local}) then #{call}" }
+			branches.empty? ? calls.last : "if #{branches.join("\nelsif ")}\nelse #{calls.last}\nend"
+		end
+
+		given = keywords.map { |_, key| "#{key}: #{values[key]}" }
+		omittable = keywords.filter_map { |kind, key| key if :key == kind }
+		if omittable.empty?
+			lines << "#{returned} = #{dispatch.(given)}"
+		else
+			lines << "#{returned} = if #{omittable.map { |key| "OMITTED.equal?(#{values[key]})" }.join(' || ')}"
+			lines << "#{options} = {}"
+			omittable.each { |key| lines << "#{options}[:#{key}] = #{values[key]} unless OMITTED.equal?(#{values[key]})" }
+			lines << dispatch.([*keywords.filter_map { |kind, key| "#{key}: #{values[key]}" if :keyreq == kind }, "**#{options}"])
+			lines << "else"
+			lines << dispatch.(given)
+			lines << "end"
+		end
+		lines << check.(returned, positional.size + keywords.size, "return")
+
+		<<~RUBY
+			# frozen_string_literal: true
+			def #{name}(#{arguments.join(', ')})
+				#{lines.join("\n")}
+				#{returned}
+			end
+		RUBY
+	end
+
+	private def __literal_keywords__(parameters) = parameters.filter_map { |kind, param| param if KEYWORD.include?(kind) }
+
+	# Through core methods, so a class's own name, to_s or inspect cannot fail
+	# signing it.
+	private def __literal_label__
+		((Module === self) && Literal::MODULE_NAME.bind_call(self)) || Literal::TO_S.bind_call(self)
+	end
+
+	# Every mismatch here is a typo the class should not load with.
+	private def __literal_refuse_mismatch__(signature, parameters, label)
+		site = "#{label} (sig at #{signature.site})"
+
+		unless signature.returns?
+			raise Literal::ArgumentError, "#{site} has no return type; write sig(...) >> Type, or >> _Void"
+		end
+
+		if (unsupported = parameters.find { |kind, param| :rest == kind || :keyrest == kind || (:req == kind && !param) })
+			raise Literal::ArgumentError, "#{site} takes #{unsupported[1] || 'a destructured argument'} as a splat or pattern, which a sig cannot type yet"
+		end
+
+		positional = parameters.count { |kind, _| POSITIONAL.include?(kind) }
+		keywords = __literal_keywords__(parameters)
+
+		if parameters.drop_while { |kind, _| :opt != kind }.any? { |kind, _| :req == kind }
+			raise Literal::ArgumentError, "#{site} takes a required argument after an optional one, which a sig cannot type yet"
+		end
+
+		unless positional == signature.positional.size
+			raise Literal::ArgumentError,
+				"#{site} takes #{positional} positional #{(positional == 1) ? 'argument' : 'arguments'}, its sig types #{signature.positional.size}"
+		end
+
+		unless keywords.sort == signature.keywords.keys.sort
+			raise Literal::ArgumentError, "#{site} takes keywords #{keywords.inspect}, its sig types #{signature.keywords.keys.inspect}"
+		end
+	end
+
+	private def __literal_visibility__(owner, name)
+		if Literal::PRIVATE_METHOD_DEFINED.bind_call(owner, name, false) then Literal::PRIVATE
+		elsif Literal::PROTECTED_METHOD_DEFINED.bind_call(owner, name, false) then Literal::PROTECTED
+		else Literal::PUBLIC
+		end
+	end
+end

@@ -225,6 +225,30 @@ Dates/times: Date/Time load strict RFC 3339 (a leap second, `:60`, loads as the 
 
 Frozen: `_Frozen(T)` and `frozen?: true` constraints serialize as T (same schema); loaded plain data (strings, arrays, hashes, sets) is deep-frozen as copies, never mutating the input; any other object gets its own shallow `freeze`. Other serializers never claim a type requiring frozen values unless their values always are.
 
+## Signatures — `extend Literal::Signatures`
+
+Runtime-checked method signatures, on the line above a plain `def`, in the shape of an RBS inline annotation (`#: (String, ?greeting: String?) -> String`). `extend` brings `sig` and the type helpers.
+
+```ruby
+class Greeter
+	extend Literal::Signatures
+
+	sig(String, greeting: _Nilable(String)) >> String
+	def greet(name, greeting: nil) = "#{greeting || "Hello"}, #{name}"
+
+	sig(_Integer(1..)) >> _Array(String)
+	def self.cheers(times) = Array.new(times) { "Hip hip!" }
+end
+```
+
+Positional types line up with the positional parameters, keyword types match keywords by name, and `>>` gives the return type (`_Void` to check nothing). A signature binds to the **next method defined**, instance or singleton, and keeps its visibility (`private def` works). Each argument the caller **passes** is checked before the method runs and the return value after, raising `Literal::TypeError` labelled with the method and argument; a default is the author's and is not checked, and arity is left to Ruby.
+
+Refused **when the class loads**, as `Literal::ArgumentError`: types that don't match the parameters by count or keyword name, a `sig` with no `>>`, two `sig`s in a row, and parameters a sig cannot type yet — `*rest`, `**rest`, destructuring, a required argument after an optional one.
+
+The checking method is compiled to the method's own parameter list and calls the original through a private alias, so stack traces still read `Greeter#greet` and one taking only required parameters allocates nothing; optional parameters may cost the Array or Hash that carries them, depending on the Ruby.
+
+Inside a signed method, `__method__` reports the method's own name, but `__callee__` reports the private alias the checker calls (or the method's own name under a prepended override), so call back through `__method__`. A value returned by `break` from the caller's block isn't checked, since it's the caller's control flow, not the method's return.
+
 ## Rails
 
 Auto-loads with Rails. AM/AR attribute types `:literal_enum`/`:literal_flags` (`attribute :color, :literal_enum, type: Color`), equal only for the same enum/flags class (and format, or wrapped subtype); the Railtie also registers the Active Job enum serializer; `ActiveRecord.Relation(Model)` relation type.
