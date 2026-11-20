@@ -62,7 +62,7 @@ class Literal::Set
 			Literal::Set === value && Literal.subtype?(value.__type__, @type)
 		end
 
-		def >=(other, context: nil)
+		def literal_supertype_of?(other, context:)
 			case other
 			when Generic
 				Literal.structural_subtype?(other.type, @type, context:)

@@ -2,7 +2,6 @@
 
 class Literal::Result::Generic
 	include Literal::Type
-	include Literal::Types::Distributed
 
 	def initialize(success_type, failure_type)
 		@success_type = Literal::Freezing.frozen_member(success_type)
@@ -36,9 +35,9 @@ class Literal::Result::Generic
 		literal_hash(Literal::Result::Generic, @success_type, @failure_type)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
-		when Literal::Types::Distributed, Literal::Types::DeferredType
+		when Literal::Types::DeferredType
 			Literal.subtype?(other, self, context:)
 		when Literal::Success::Generic
 			Literal.structural_subtype?(other.type, @success_type, context:)

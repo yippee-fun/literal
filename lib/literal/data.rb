@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::Data < Literal::DataStructure
+	SCHEMA_METHODS = [*Literal::DataStructure::SCHEMA_METHODS, :with].freeze
+
 	class << self
 		def [](...) = new(...)
 
@@ -10,16 +12,30 @@ class Literal::Data < Literal::DataStructure
 			Literal::FREEZE.bind_call(super)
 		end
 
-		def define(**properties)
+		def define(**properties, &body)
 			Class.new(self) do
 				props do
 					properties.each { |name, type| prop(name, type) }
+				end
+
+				if block_given?
+					class_eval(&body)
 				end
 			end
 		end
 
 		def prop(name, type, kind = :keyword, reader: :public, predicate: false, default: nil, description: nil, &coercion)
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:, &coercion)
+		end
+
+		private def __literal_schema_methods__
+			SCHEMA_METHODS
+		end
+
+		private def __generate_literal_methods__(new_property, buffer = +"")
+			super
+			literal_properties.generate_with(buffer, checked: literal_checks.any?)
+			buffer
 		end
 
 		def literal_properties
@@ -37,5 +53,12 @@ class Literal::Data < Literal::DataStructure
 	private def initialize_copy(source)
 		super
 		Literal::FREEZE.bind_call(self)
+	end
+
+	# Generated per shape once it has properties; see DataSchema#generate_with.
+	def with(**changes)
+		return self if changes.empty?
+
+		raise NameError.new("unknown attribute: #{changes.each_key.first.inspect} for #{Literal::CLASS.bind_call(self)}")
 	end
 end

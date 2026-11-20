@@ -2,7 +2,6 @@
 
 class Literal::Types::TaggedUnionType
 	include Literal::Type
-	include Literal::Types::Distributed
 
 	def initialize(**members)
 		raise Literal::ArgumentError.new("_TaggedUnion type must have at least one member.") if members.empty?
@@ -145,9 +144,9 @@ class Literal::Types::TaggedUnionType
 		Literal::Types::UnionType.most_specific(matches) { |(_tag, type)| type }
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
-		when Literal::Types::Distributed, Literal::Types::DeferredType
+		when Literal::Types::DeferredType
 			Literal.subtype?(other, self, context:)
 		else
 			@members.each_value.any? { |type| Literal.subtype?(other, type, context:) }

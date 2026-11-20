@@ -381,3 +381,85 @@ test "a value re-entering a union through its own methods does not match" do
 		refute union === value_class.new
 	end
 end
+
+test "#=== does not hash a value that cannot be one of its primitives" do
+	hashed = []
+	value = Object.new
+	value.define_singleton_method(:hash) { hashed << self; object_id }
+
+	refute _Union(:a, 1, String) === value
+	refute _Union(String, Integer) === value
+	assert _Union(Object) === value
+	assert_equal _Union(:a, Object).resolve(value), Object
+
+	assert_equal hashed, []
+end
+
+test "#=== matches a primitive given an instance of a subclass of its class" do
+	subclass = Class.new(String)
+
+	assert _Union("a", Integer) === subclass.new("a")
+	refute _Union("a", Integer) === subclass.new("b")
+end
+
+test "#=== matches a primitive given a delegator to it" do
+	assert _Union("a", Integer) === SimpleDelegator.new("a")
+	assert _Union(:a, Integer) === SimpleDelegator.new(:a)
+	refute _Union(:a, Integer) === SimpleDelegator.new(:b)
+end
+
+test "#=== and #resolve treat a literal member as one the value is eql? to or that is == to the value" do
+	equal_to = -> (expected) { Class.new { define_method(:==) { |other| expected == other } } }
+	coercible = -> (method, expected) { Class.new(equal_to.(expected)) { define_method(method) { expected } } }
+
+	big = 2 ** 70
+	numbers = [0, 1, 2, big, 1.0, -0.0, 1.5, big.to_f, Float::NAN, 1r, 1.5r, Complex(1, 0), Complex(1, 1), BigDecimal("1")]
+	strings = ["a", "b", "", "a".b, "a".encode("UTF-16LE"), Class.new(String).new("a")]
+	collections = [[], [1], [1.0], [[1]], Class.new(Array).new([1]), {}, { a: 1 }, { a: 1.0 }, Class.new(Hash)[a: 1]]
+	objects = [Object.new, Struct.new(:a).new(1), Data.define(:a).new(a: 1), Set[1], 1..2]
+	delegators = [SimpleDelegator.new(:a), SimpleDelegator.new("a"), SimpleDelegator.new(1.0), SimpleDelegator.new(nil), Literal::Delegator(String).new("a")]
+	impostors = [equal_to.(1).new, Class.new { def ==(_) = true }.new, coercible.(:to_str, "a").new, coercible.(:to_ary, [1]).new, coercible.(:to_hash, { a: 1 }).new]
+	basic = [Class.new { def hash = raise }.new, BasicObject.new, Class.new(BasicObject) { def ==(other) = other.equal?(1) }.new]
+	values = [*numbers, *strings, :a, :b, nil, true, false, *collections, *objects, *delegators, *impostors, *basic]
+
+	literals = [1, 1.0, 2, 1r, Complex(1, 0), big, "a", "", :a, nil, true, false, [1], [], { a: 1 }, {}]
+	literals += [Class.new(String).new("a"), Class.new(Array).new([1]), Class.new(Hash)[a: 1]]
+	types = [[], [String], [Integer], [Float], [Numeric], [Object], [String, Integer]]
+
+	eql = -> (value, literal) do
+		value.hash == literal.hash && value.eql?(literal)
+	rescue NoMethodError, RuntimeError
+		false
+	end
+
+	# JRuby's Array#== and Hash#== call a BasicObject's missing respond_to?.
+	outcome = -> (&block) do
+		block.call
+	rescue NoMethodError => error
+		error.class
+	end
+
+	mismatches = (1..2).flat_map { |n| literals.combination(n).to_a }.product(types).flat_map do |members, member_types|
+		union = Literal::Types::UnionType.new([*members, *member_types])
+
+		values.reject do |value|
+			matching_types = member_types.select { |type| type === value }
+			match = outcome.() do
+				members.any? { |literal| eql.(value, literal) } || members.any? { |literal| literal == value } || matching_types.any?
+			end
+
+			next false unless outcome.() { union === value } == match
+			next true unless match == true
+
+			if members.any? { |literal| eql.(value, literal) }
+				union.resolve(value).equal?(value)
+			elsif matching_types.any?
+				union.resolve(value) == Literal::Types::UnionType.most_specific(matching_types, &:itself)
+			else
+				union.resolve(value).eql?(members.find { |literal| literal == value })
+			end
+		end.map { |value| [union, value] }
+	end
+
+	assert_equal mismatches, []
+end

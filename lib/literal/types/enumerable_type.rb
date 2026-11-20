@@ -53,7 +53,7 @@ class Literal::Types::EnumerableType
 		false
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::EnumerableType
 			Literal.structural_subtype?(other.type, @type, context:)

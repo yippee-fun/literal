@@ -14,7 +14,7 @@ class Literal::Types::NeverType
 		false
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::NeverType
 			true
@@ -23,7 +23,7 @@ class Literal::Types::NeverType
 		end
 	end
 
-	def <=(_other, context: nil)
+	def literal_subtype_of?(_other, context:)
 		true
 	end
 

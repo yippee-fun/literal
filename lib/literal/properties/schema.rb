@@ -80,7 +80,7 @@ class Literal::Properties::Schema
 		generate_initializer_body(buffer, locals, property_local)
 		buffer << "" \
 			"rescue ::Literal::TypeError => error\n" \
-			"  error.set_backtrace(::Kernel.caller(2))\n" \
+			"  error.set_backtrace(::Literal::Error.trim(::Kernel.caller_locations(1)))\n" \
 			"  ::Kernel.raise\n" \
 			"else\n"
 		generate_after_initializer(buffer)

@@ -25,7 +25,7 @@ class Literal::JSONSchema::IntegerType < Literal::Data
 		number_matches?(value)
 	end
 
-	def <=(other, context: nil)
+	def literal_subtype_of?(other, context:)
 		Literal.subtype?(::Integer, other, context:)
 	end
 

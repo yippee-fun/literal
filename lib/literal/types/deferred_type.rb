@@ -85,8 +85,12 @@ class Literal::Types::DeferredType
 		Literal.with_match_guard(self, other) { !!(materialize === other) }
 	end
 
-	def >=(other, context: nil)
-		Literal.subtype?(other, self, context:)
+	# Unfolds this side first, so an alias of a chain matches it without
+	# forcing their shared tail. Two alias cycles have no values, so failing
+	# that, unfolding the other side lets the cycle there prove it.
+	def literal_supertype_of?(other, context:)
+		Literal.subtype?(other, materialize, context:) ||
+			(Literal::Types::DeferredType === other && context.left_unfolded_subtype?(other, self))
 	end
 
 	freeze

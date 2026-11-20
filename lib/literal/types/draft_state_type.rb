@@ -49,7 +49,7 @@ class Literal::Types::DraftStateType
 		@relaxed.record_literal_type_errors(ctx) if @relaxed.respond_to?(:record_literal_type_errors)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::DraftStateType
 			Literal.subtype?(other.__relaxed__, @relaxed, context:)

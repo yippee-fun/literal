@@ -34,11 +34,11 @@ class Literal::Types::NotType
 		!(@type === value)
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::NotType
 			# Contravariant: _Not(A) <= _Not(B) iff B <= A. Excluding more makes you narrower.
-			Literal.contravariant_subtype?(@type, other.type, context:)
+			context.contravariant_subtype?(@type, other.type)
 		when Literal::Types::ConstraintType
 			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		else

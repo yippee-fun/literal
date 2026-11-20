@@ -25,6 +25,7 @@ Subtyping:
 - A literal admits every value its `===` matches, so it is bounded by the type closed under that match (`Literal.literal_bound`): String/Array/Hash by their class; numerics by the core numerics plus their own class (`10 == 10.0 == 10r`, so `10` is not `<= Integer`); a Date by Date or a number (a Date literal also matches DateTimes on the same day); Symbol/true/false/nil stand for themselves. A property constraint holds for a literal only if its bound entails it (`"ab"` is not `<= _String(size: 2)`; `:a` is `<= _Symbol(size: 1)`). Anchor with `_Integer(10)`, `_SameObject(x)` or a constraint.
 - Subtyping is sound against honest core types, not exact numerics: a numeric literal is compared with a range by its own value, so `1.0 <= 0..1` even though `1.0 == 1 + 1r/10**30`, which is outside the range. Float comparisons collapse that precision.
 - Literal types are subtypes of modules via their upper bound (`_Array(String) <= Array`), so a prop redefinition can narrow a class to a literal type; collection generics are subtypes of their class (`Literal::Array(String) <= Literal::Array`).
+- Every Literal type's `a >= b` and `b <= a` is `Literal.subtype?(b, a)`. A custom type includes `Literal::Type` and implements its own rule as `literal_supertype_of?(other, context:)`: `subtype?` calls it after taking apart unions, nilables, tagged unions, results and deferred types on the left and checking equality, so `other` is never one of those; recurse with `Literal.subtype?(x, y, context:)`. `literal_subtype_of?(other, context:)` is the left type's own rule, asked when the right side's rule fails, so `other` may be any type (default: against a module or range, the type's `literal_upper_bound` is a subtype of it; against a Literal type, false). A type that includes `Literal::Type` and overrides `>=`/`<=` instead (calling `super` or not) still answers `subtype?`, but its direct comparisons skip `subtype?`'s rules; a subclass of a built-in type inherits that type's hooks, so it overrides those.
 
 ## Properties — `extend Literal::Properties`
 
@@ -41,7 +42,7 @@ end
 
 Options `reader:/writer:/predicate:`: `false | :public | :protected | :private`; `predicate` generates `a?` (false for unset/Undefined); `description:` string → JSON Schema. Generates `initialize` (kind-aware signature), `to_h`, per-prop methods; `after_initialize` hook if defined. Store order: **coerce → seal → check → assign**.
 
-Prop names: any valid Ruby local-variable name, keywords included (`class`, `end`, `__FILE__`); non-Symbols and invalid identifiers raise `Literal::ArgumentError`. A reader/predicate is refused only where it would replace a method Literal generates or defines for the shape (`to_h`, `hash`, `==`, `eql?`, `initialize`, `deconstruct`, …): declare those with `reader: false`/`predicate: false` and read via `[:name]`/`to_h`. Ruby's own methods (`class`, `method`) may be replaced, at your own risk. Positional orderings Ruby can't compile (an optional positional after a required one that follows an optional) and a second `:*`/`:**`/`:&` prop raise `Literal::ArgumentError` at declaration.
+Prop names: any valid Ruby local-variable name, keywords included (`class`, `end`, `__FILE__`); non-Symbols and invalid identifiers raise `Literal::ArgumentError`. A reader/predicate is refused only where it would replace a method Literal generates or defines for the shape (`to_h`, `hash`, `==`, `eql?`, `initialize`, `deconstruct`, `Data#with`, …): declare those with `reader: false`/`predicate: false` and read via `[:name]`/`to_h`. Ruby's own methods (`class`, `method`) may be replaced, at your own risk. Positional orderings Ruby can't compile (an optional positional after a required one that follows an optional) and a second `:*`/`:**`/`:&` prop raise `Literal::ArgumentError` at declaration.
 
 `_Deferred { Fwd }` at the top of a prop's type is required and not materialized at declaration (forward references work); make it optional with `_Nilable(_Deferred { Fwd })` or `prop?`. `_Deferred { _Nilable(X) }` is not omittable.
 
@@ -67,7 +68,7 @@ Composable pipelines for `prop` blocks (`&x` via `to_proc`):
 
 ## Data structures
 
-`DataStructure` → `Struct` (mutable, public readers+writers, `[]=`) → `Draft`; `DataStructure` → `Data` (frozen instances, readers only, `Data.define(a: String)` shorthand); `Object` = bare Properties (no readers by default).
+`DataStructure` → `Struct` (mutable, public readers+writers, `[]=`) → `Draft`; `DataStructure` → `Data` (frozen instances, readers only, `Data.define(a: String) { … }` shorthand, the optional block running as the class body after the props); `Object` = bare Properties (no readers by default).
 
 All get structural `==`/`eql?`/`hash`, `to_h`, `[](key)` (reads the stored value of any prop, readerless or private included), `deconstruct`/`deconstruct_keys`, Marshal (`as_pack`/`from_pack`, restores frozen state), and:
 
@@ -78,6 +79,8 @@ K.from(other)         # from_props(other.to_h.slice(*own props)) — e.g. rehydr
 ```
 
 `Struct#[]=` behaves exactly like calling the writer publicly: a private or missing writer raises `NoMethodError`.
+
+`Data#with(**changes)` → frozen copy with the named props replaced (`self` when given none; an unknown name → `NameError`). Changed values take the initializer's path against the copy, in property order: `Literal::Undefined` resolves the default (or unsets a `prop?`), then coerce → seal → check. As with `new`, a `:&` prop resolves its default on `nil` instead, and `:*`/`:**` props have no sentinel: the value is taken as given (`[]`/`{}` is what `new` gets without arguments). Carried-over values are type checked, never coerced or resealed. Then `after_initialize`, freeze and the shape's checks, as `new`; `initialize` itself isn't called. A `with` reader is refused — declare it with `reader: false` and replace it via `with(with: …)`.
 
 ### Draft — `Literal::Draft(P)`
 

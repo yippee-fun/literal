@@ -1,64 +1,136 @@
 # frozen_string_literal: true
 
+# Pairs are keyed by the object ids of each side, so a type's own == and
+# hash are never consulted. A pair's entry is its memoized result, or the
+# index of its frame while it is being proven.
 class Literal::SubtypeContext
-	Frame = Struct.new(:structural_depth, :left_unfolds, :right_unfolds, :contravariant, :index, :outer_assumption_floor, :unfold_assumptions)
+	# Progress is one Integer, so a frame records it in one slot: the
+	# structural depth in its low bits and the left unfold count above them.
+	LeftUnfold = 1 << 24
+	StructuralDepth = LeftUnfold - 1
+
+	# Far more unfolds than any check makes, so lowering the count by it puts
+	# it below every outer frame's.
+	SwappedSides = LeftUnfold << 24
 
 	def initialize
-		@memo = {}
-		@in_progress = {}
-		@structural_depth = 0
-		@left_unfolds = 0
-		@right_unfolds = 0
-		@contravariant = false
+		@pairs = {}
+		@frames = []
+		@progress = 0
 		@assumption_floor = Float::INFINITY
+		@unfold_assumptions = nil
 	end
 
-	attr_reader :memo, :in_progress
-
-	def memoized?(key)
-		@memo.key?(key)
+	# The memoized result for a pair, the assumption for a pair still being
+	# proven, or nil for a pair not yet visited.
+	def recall(subtype_id, supertype_id, subtype)
+		case @pairs[subtype_id]&.[](supertype_id)
+		in Integer => frame then assume(frame, subtype)
+		in entry then entry
+		end
 	end
 
-	def fetch(key)
-		@memo[key]
+	# Returns the new frame's index. Each frame holds the progress it started
+	# at and the assumption floor of the frame around it.
+	def acquire(subtype_id, supertype_id)
+		frame = @frames.size / 2
+		(@pairs[subtype_id] ||= {})[supertype_id] = frame
+		@frames.push(@progress, @assumption_floor)
+		@assumption_floor = Float::INFINITY
+		frame
 	end
 
 	# A result that relied on an assumption about a pair still being proven
 	# further up the stack is provisional: that pair may yet fail, so it is
-	# not memoized. A failed proof supports nothing, so the unfold assumptions
-	# made during it need no confirmation.
-	def store(key, result)
-		frame = @in_progress.fetch(key)
-		@memo[key] = result unless @assumption_floor < frame.index
-		return if result || @unfold_assumptions.nil?
+	# not memoized. A proof resting on an unfold assumption its type turned
+	# out not to support stores nothing and answers nil, to be tried again
+	# refusing it.
+	def store(subtype_id, supertype_id, frame, result)
+		if @unfold_assumptions && !@unfold_assumptions.empty?
+			if result && !confirmed?(frame)
+				settle_unfold_assumptions(frame, false)
+				return nil
+			end
 
-		@unfold_assumptions.pop while @unfold_assumptions.size > frame.unfold_assumptions
-	end
+			settle_unfold_assumptions(frame, result)
+		end
 
-	def acquire(key)
-		return false if @in_progress.key?(key)
-
-		@in_progress[key] = Frame.new(
-			@structural_depth,
-			@left_unfolds,
-			@right_unfolds,
-			@contravariant,
-			@in_progress.size,
-			@assumption_floor,
-			@unfold_assumptions ? @unfold_assumptions.size : 0,
-		)
-
-		@assumption_floor = Float::INFINITY
-		true
+		@pairs[subtype_id][supertype_id] = result unless @assumption_floor < frame
+		result
 	end
 
 	# Unfolds made while proving a pair end with it.
-	def release(key)
-		frame = @in_progress.delete(key)
-		@left_unfolds = frame.left_unfolds
-		@right_unfolds = frame.right_unfolds
-		@assumption_floor = Float::INFINITY if @assumption_floor >= frame.index
-		@assumption_floor = frame.outer_assumption_floor if frame.outer_assumption_floor < @assumption_floor
+	def release(subtype_id, supertype_id, frame)
+		supertypes = @pairs[subtype_id]
+
+		if Integer === supertypes[supertype_id]
+			supertypes.delete(supertype_id)
+			@pairs.delete(subtype_id) if supertypes.empty?
+		end
+
+		outer_assumption_floor = @frames.pop
+		@progress = @frames.pop
+		@assumption_floor = Float::INFINITY if @assumption_floor >= frame
+		@assumption_floor = outer_assumption_floor if outer_assumption_floor < @assumption_floor
+	end
+
+	# An unfold lasts until the pair being proven is released.
+	def unfold_left(type)
+		@progress += LeftUnfold
+		type.materialize
+	end
+
+	# Whether a deferred type's materialization is a subtype of the given
+	# type, counting the step as a left unfold for that check alone.
+	def left_unfolded_subtype?(type, supertype)
+		@progress += LeftUnfold
+		result = Literal.subtype?(type.materialize, supertype, context: self)
+		@progress -= LeftUnfold
+		result
+	end
+
+	# Marks descent into a component of a structural constructor (array element,
+	# hash key/value, tuple slot, etc.) for the duration of the block.
+	def structural
+		@progress += 1
+		yield
+	ensure
+		@progress -= 1
+	end
+
+	# A check whose sides are swapped relative to the caller's, as _Not(A) <=
+	# _Not(B) asks B <= A. Its left side was the caller's right, so no cycle
+	# through it counts as unfolding the left. If it raises, the count stays
+	# lowered only until the caller's pair is released.
+	def contravariant_subtype?(type, supertype)
+		@progress -= SwappedSides
+		result = Literal.subtype?(type, supertype, context: self)
+		@progress += SwappedSides
+		result
+	end
+
+	# Park induction needs the left type's least fixpoint, so a pair proven by
+	# assuming it through a left unfold holds only if that type refers to
+	# itself positively. This is checked once the pair is otherwise proven, so
+	# a failing check never forces deferred types it doesn't need.
+	# The only frame still open after this one is that of the pair it
+	# resolved to, so the assumptions on frames from this one on rest on
+	# this proof.
+	private def confirmed?(frame)
+		assumptions = @unfold_assumptions
+		confirmed = true
+		i = 0
+
+		while i < assumptions.size
+			if assumptions[i] >= frame
+				confirmed &&= positive?(assumptions[i + 1])
+				assumptions.slice!(i, 3)
+			else
+				i += 3
+			end
+		end
+
+		confirmed
 	end
 
 	# Coinductive assumption for a pair we are already in the middle of proving.
@@ -67,73 +139,35 @@ class Literal::SubtypeContext
 	# type on the left stands for its least fixpoint, which is a subtype of
 	# whatever its unfolding is (Park induction). Unfolding only the right
 	# side, like String against μY.Y, proves nothing.
-	def assume(key, left)
-		frame = @in_progress[key]
-		@assumption_floor = frame.index if frame.index < @assumption_floor
+	private def assume(frame, left)
+		@assumption_floor = frame if frame < @assumption_floor
+		started = @frames[frame * 2]
 
-		return true if @structural_depth > frame.structural_depth
-		return false unless @left_unfolds > frame.left_unfolds && @contravariant == frame.contravariant
+		return true if (@progress & StructuralDepth) > (started & StructuralDepth)
+		return false unless @progress / LeftUnfold > started / LeftUnfold
 		return false if known_negative?(left)
 
-		(@unfold_assumptions ||= []).push(frame, left)
+		(@unfold_assumptions ||= []).push(frame, left, @frames.size / 2)
 		true
 	end
 
-	# Park induction needs the left type's least fixpoint, so a pair proven by
-	# assuming it through a left unfold holds only if that type refers to
-	# itself positively. This is checked once the pair is otherwise proven, so
-	# a failing check never forces deferred types it doesn't need.
-	def confirmed?(raw_key, resolved_key)
+	# Each unfold assumption records how many frames were open when it was
+	# made. A failed proof supports nothing, so the assumptions made during it
+	# need no confirmation; a successful one hands them to the frame around it.
+	private def settle_unfold_assumptions(frame, result)
 		assumptions = @unfold_assumptions
-		return true if assumptions.nil? || assumptions.empty?
-
-		raw = @in_progress[raw_key]
-		resolved = @in_progress[resolved_key]
-		confirmed = true
 		i = 0
 
 		while i < assumptions.size
-			frame = assumptions[i]
-
-			if frame.equal?(raw) || frame.equal?(resolved)
-				confirmed &&= positive?(assumptions[i + 1])
-				assumptions.delete_at(i)
-				assumptions.delete_at(i)
+			if assumptions[i + 2] <= frame
+				i += 3
+			elsif result
+				assumptions[i + 2] = frame
+				i += 3
 			else
-				i += 2
+				assumptions.slice!(i, 3)
 			end
 		end
-
-		confirmed
-	end
-
-	# An unfold lasts until the pair being proven is released.
-	def unfold_left(type)
-		@left_unfolds += 1
-		type.materialize
-	end
-
-	def unfold_right(type)
-		@right_unfolds += 1
-		type.materialize
-	end
-
-	# Marks descent into a component of a structural constructor (array element,
-	# hash key/value, tuple slot, etc.) for the duration of the block.
-	def structural
-		@structural_depth += 1
-		yield
-	ensure
-		@structural_depth -= 1
-	end
-
-	# Marks a check whose sides are swapped relative to the caller's, like the
-	# types inside two _Nots, for the duration of the block.
-	def contravariant
-		swap_sides
-		yield
-	ensure
-		swap_sides
 	end
 
 	# A type that refers to itself under _Not, like t = _Deferred { _Not(t) },
@@ -193,10 +227,5 @@ class Literal::SubtypeContext
 		else
 			nil
 		end
-	end
-
-	private def swap_sides
-		@left_unfolds, @right_unfolds = @right_unfolds, @left_unfolds
-		@contravariant = !@contravariant
 	end
 end

@@ -38,7 +38,7 @@ class Literal::Types::ClassType
 		Class === value && (value == @type || !!(value < @type))
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::ClassType
 			Literal.subtype?(other.type, @type, context:)

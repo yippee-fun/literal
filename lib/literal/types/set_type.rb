@@ -54,12 +54,12 @@ class Literal::Types::SetType
 		end
 	end
 
-	def >=(other, context: nil)
+	def literal_supertype_of?(other, context:)
 		case other
 		when Literal::Types::SetType
 			Literal.structural_subtype?(other.type, @type, context:)
 		when Literal::Types::ConstraintType
-			other.object_constraints.any? { |constraint| self.>=(constraint, context:) }
+			other.object_constraints.any? { |constraint| Literal.subtype?(constraint, self, context:) }
 		else
 			false
 		end
