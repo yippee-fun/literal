@@ -539,19 +539,19 @@ module Literal::Properties
 			raise Ractor::IsolationError.new("#{self} can't be built outside the main Ractor until it is passed to Literal.make_shareable.")
 		end
 
-		# Before any instance exists, so none can reach a stand-in from another
-		# Ractor, however it was built.
-		shape = self
-
-		while Literal::Properties === shape
-			shape.__send__(:__literal_define_schema_methods__)
-			shape = shape.superclass
-		end
-
 		__literal_count_constructions__(1)
 		finished = false
 
 		begin
+			# Once the shape is closed, but before any instance exists, so none can
+			# reach a stand-in from another Ractor, however it was built.
+			shape = self
+
+			while Literal::Properties === shape
+				shape.__send__(:__literal_define_schema_methods__)
+				shape = shape.superclass
+			end
+
 			instance = yield
 			finished = true
 		ensure
@@ -646,6 +646,8 @@ module Literal::Properties
 		end
 
 		__literal_defer_schema_methods__
+		# A check can reach a shape with instances, whose later ones skip generating.
+		__literal_define_schema_methods__ if @__literal_used__
 	end
 
 	SCHEMA_METHODS = [:initialize, :to_h, :to_hash].freeze

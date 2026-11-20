@@ -262,6 +262,23 @@ class PropertiesDeferredSchemaMethodsTest < Quickdraw::Test
 		assert CountedColor::Red.warm?
 	end
 
+	test "a check declared after Literal::Enum members compiles at once" do
+		compilations = nil
+
+		example = Class.new(Literal::Enum(Integer)) do
+			extend CountsSchemaCompilations
+
+			prop :hex, String
+
+			const_set(:Red, new(1, hex: "#f00"))
+
+			compilations = schema_compilations
+			check(:hex, "must start with #") { it.start_with?("#") }
+		end
+
+		assert_equal example.schema_compilations, compilations + 1
+	end
+
 	test "Literal::Enum.defined finishes an anonymous enum" do
 		example = Class.new(Literal::Enum(String)) do
 			prop :label, String
