@@ -273,7 +273,7 @@ class PropertiesDeferredSchemaMethodsTest < Quickdraw::Test
 			const_set(:Red, new(1, hex: "#f00"))
 
 			compilations = schema_compilations
-			check(:hex, "must start with #") { it.start_with?("#") }
+			check(:hex, "must start with #") { |hex:| hex.start_with?("#") }
 		end
 
 		assert_equal example.schema_compilations, compilations + 1
