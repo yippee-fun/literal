@@ -384,6 +384,11 @@ module Literal::Properties
 
 		return unless defined?(Ractor)
 
+		literal_properties.each do |property|
+			Literal::Pipeline.make_shareable(property.coercion) if property.coercion
+			Literal::Pipeline.make_shareable(property.seal) if property.seal
+		end
+
 		Ractor.make_shareable(literal_properties)
 		Ractor.make_shareable(literal_checks)
 		Ractor.make_shareable(@literal_checks_for)

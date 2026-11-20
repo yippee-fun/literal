@@ -52,7 +52,19 @@ if RUBY_ENGINE == "ruby" && RUBY_VERSION >= "4.0"
 		prop :name, String
 	end
 
-	[RactorStruct, RactorData, RactorObject, RactorRange, RactorChild].each do |shape|
+	module RactorPipelines
+		Strip = Literal::Coercion(&:strip)
+		Downcase = Literal::Coercion { |value| value.downcase.tr(" ", "-") }
+		Immutable = Literal::Seal(&:freeze)
+	end
+
+	class RactorCoerced < Literal::Struct
+		prop :code, _Pattern(/\A(\d+)\z/) { |digits| digits.size < 4 }
+		prop :slug, String, &(RactorPipelines::Strip >> RactorPipelines::Downcase >> RactorPipelines::Immutable)
+		prop :numbers, Literal::Array(Integer), &Literal::Array(Integer)
+	end
+
+	[RactorStruct, RactorData, RactorObject, RactorRange, RactorChild, RactorCoerced].each do |shape|
 		Literal.make_shareable(shape)
 	end
 
@@ -161,6 +173,15 @@ if RUBY_ENGINE == "ruby" && RUBY_VERSION >= "4.0"
 		end
 
 		assert_equal message, "#{RactorUnshared} can't be built outside the main Ractor until it is passed to Literal.make_shareable."
+	end
+
+	test "patterns, composed coercions and collection coercions run inside a Ractor" do
+		coerced = in_ractor do
+			value = RactorCoerced.new(code: "12", slug: "  Hello ", numbers: [1, 2])
+			[value.code, value.slug, value.slug.frozen?, value.numbers.class, value.numbers.to_a, RactorCoerced.literal_properties[:code].type === "12345"]
+		end
+
+		assert_equal coerced, ["12", "hello", true, Literal::Array, [1, 2], false]
 	end
 
 	test "a shape whose superclass was never built can be built inside a Ractor" do
