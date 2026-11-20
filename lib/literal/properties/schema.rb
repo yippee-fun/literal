@@ -7,12 +7,6 @@ class Literal::Properties::Schema
 	EQL_INTERFACE = Literal::Types::InterfaceType.new([:eql?])
 	HASH_INTERFACE = Literal::Types::InterfaceType.new([:hash])
 
-	# One lock for every schema rather than one each: a Mutex can never be
-	# Ractor-shareable, and a schema must be for its class to be built in another
-	# Ractor. Properties are only added while classes are defined, so it is
-	# never contended.
-	MUTEX = Mutex.new
-
 	def initialize(properties_index: {}, sorted_properties: [])
 		@properties_index = properties_index
 		@sorted_properties = sorted_properties
@@ -32,13 +26,12 @@ class Literal::Properties::Schema
 		@properties_index[key]
 	end
 
+	# Only under the lock of the shape that owns the schema.
 	def <<(value)
-		MUTEX.synchronize do
-			@properties_index[value.name] = value
-			# Replacing (not mutating) the array is a contract: `snapshot`
-			# relies on its identity changing with every schema change.
-			@sorted_properties = sort(@properties_index)
-		end
+		@properties_index[value.name] = value
+		# Replacing (not mutating) the array is a contract: `snapshot`
+		# relies on its identity changing with every schema change.
+		@sorted_properties = sort(@properties_index)
 
 		self
 	end
