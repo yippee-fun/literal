@@ -38,6 +38,10 @@ class Literal::Data < Literal::DataStructure
 			buffer
 		end
 
+		def const(name, value, reader: :public, description: nil, &)
+			prop(name, value, :const, reader:, default: value, description:, &)
+		end
+
 		def literal_properties
 			return @literal_properties if defined?(@literal_properties)
 

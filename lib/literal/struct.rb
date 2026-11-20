@@ -5,6 +5,10 @@ class Literal::Struct < Literal::DataStructure
 		def prop(name, type, kind = :keyword, reader: :public, writer: :public, predicate: false, default: nil, description: nil)
 			super
 		end
+
+		def const(name, value, reader: :public, description: nil, &)
+			super
+		end
 	end
 
 	def []=(key, value)

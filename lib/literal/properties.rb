@@ -214,6 +214,10 @@ module Literal::Properties
 		prop(name, _Union(type, Literal::Undefined), kind, **options, &coercion)
 	end
 
+	def const(name, value, reader: false, description: nil, &)
+		prop(name, value, :const, reader:, writer: false, default: value, description:, &)
+	end
+
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		unless Literal::Property.valid_name?(name)
 			raise Literal::ArgumentError.new("The property name #{name.inspect} must be a Symbol that Ruby accepts as a local variable name.")
@@ -229,7 +233,40 @@ module Literal::Properties
 			seal = pipeline.seal_proc
 		end
 
-		if default && !(Proc === default || Literal::FROZEN.bind_call(default))
+		if :const == kind
+			if nil == default || Proc === default
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be a frozen object, not nil or a Proc.")
+			end
+
+			unless type.equal?(default)
+				raise Literal::ArgumentError.new("A const's type is its value, so #{name.inspect} must be given its value as both.")
+			end
+
+			if writer
+				raise Literal::ArgumentError.new("A const cannot have a writer.")
+			end
+
+			if coercion || seal
+				raise Literal::ArgumentError.new("A const cannot have a coercion or a seal.")
+			end
+
+			# Interned, so a string const needs no `frozen_string_literal` comment.
+			default = -default if String === default
+
+			# A module is shared by identity, so it needs no freezing.
+			unless Literal::FROZEN.bind_call(default) || Module === default
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be frozen.")
+			end
+
+			# A literal, or a value matched with Kernel#===, is its own type. A value
+			# with its own `===`, such as a module, a Regexp or a type, would match
+			# other values, so it's matched by identity.
+			type = if Literal.literal_bound(default) || (Kernel === default && Kernel == Literal::METHOD.bind_call(default, :===).owner)
+				default
+			else
+				Literal::Types::SameObjectType.new(default)
+			end
+		elsif default && !(Proc === default || Literal::FROZEN.bind_call(default))
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 

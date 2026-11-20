@@ -455,4 +455,37 @@ class DraftTest < Quickdraw::Test
 
 		assert_equal value.to_h, { __context__: "ctx", count: 3 }
 	end
+
+	class DraftConstExample < Literal::Data
+		const :kind, "example"
+		prop :name, String
+	end
+
+	test "drafts carry consts as consts" do
+		draft = Literal::Draft(DraftConstExample).new
+
+		assert_equal draft.kind, "example"
+		refute draft.respond_to?(:kind=)
+		assert_equal draft.finalize(name: "Joel").kind, "example"
+	end
+
+	test "checking reports a const given a different value" do
+		assert Literal::Draft(DraftConstExample).check({ name: "Joel" }).success?
+		assert Literal::Draft(DraftConstExample).check({ name: "Joel", kind: "example" }).success?
+		refute Literal::Draft(DraftConstExample).check({ name: "Joel", kind: "other" }).success?
+	end
+
+	test "a const keeps its reader visibility and leaves the draft's own methods alone" do
+		shape = Class.new(Literal::Data) do
+			const :finalize, :value
+			const :secret, "hidden", reader: :private
+			prop :enabled, true, :const, default: true, predicate: :public
+		end
+
+		draft = Literal::Draft(shape).new
+
+		assert shape === draft.finalize
+		refute draft.respond_to?(:secret)
+		assert draft.enabled?
+	end
 end

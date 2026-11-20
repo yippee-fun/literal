@@ -115,6 +115,19 @@ class Literal::Draft < Literal::Struct
 		end
 
 		private def __draft_property__(property)
+			if property.const?
+				return prop(
+					property.name,
+					property.default,
+					:const,
+					reader: __draft_api_method__?(property.name) ? false : property.reader,
+					writer: false,
+					predicate: __draft_api_method__?(:"#{property.name.name}?") ? false : property.predicate,
+					default: property.default,
+					description: property.description,
+				)
+			end
+
 			original_coercion = property.coercion
 
 			prop(
