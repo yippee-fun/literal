@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
-include Literal::Types
+class LambdaTypeTest < Quickdraw::Test
+	include Literal::Types
 
-test "===" do
-	assert _Lambda === -> {}
-	assert _Lambda === -> (arg) { arg }
-	assert _Lambda === lambda {}
+	test "===" do
+		assert _Lambda === -> {}
+		assert _Lambda === -> (arg) { arg }
+		assert _Lambda === lambda {}
 
-	refute _Lambda === proc {}
+		refute _Lambda === proc {}
+	end
 end

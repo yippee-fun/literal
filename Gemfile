@@ -4,7 +4,7 @@ source "https://gem.coop"
 
 gemspec
 
-gem "quickdraw", git: "https://github.com/joeldrapper/quickdraw.git", ref: "06615ef2554dabec4fbf6cf2848fb9493842fd05"
+gem "quickdraw", git: "https://github.com/joeldrapper/quickdraw.git", ref: "8f2ab5b7d8f0d4a9edb0e9297403326de57d5825"
 gem "benchmark-ips"
 gem "rails"
 gem "sqlite3", platforms: :ruby

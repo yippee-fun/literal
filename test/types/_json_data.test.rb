@@ -1,156 +1,158 @@
 # frozen_string_literal: true
 
-include Literal::Types
+class JSONDataTypeTest < Quickdraw::Test
+	include Literal::Types
 
-test "===" do
-	assert _JSONData === "string"
-	assert _JSONData === 42
-	assert _JSONData === 3.14
-	assert _JSONData === true
-	assert _JSONData === false
-	assert _JSONData === nil
-	assert _JSONData === { "key" => "value", "number" => 42 }
-	assert _JSONData === [1, "two", 3.0, true, false, nil]
+	test "===" do
+		assert _JSONData === "string"
+		assert _JSONData === 42
+		assert _JSONData === 3.14
+		assert _JSONData === true
+		assert _JSONData === false
+		assert _JSONData === nil
+		assert _JSONData === { "key" => "value", "number" => 42 }
+		assert _JSONData === [1, "two", 3.0, true, false, nil]
 
-	assert _JSONData === { "nested_array" => [1, "two", { "key" => "value" }] }
-	assert _JSONData === { "nested_hash" => { "key1" => "value1", "key2" => [1, 2, 3] } }
-	assert _JSONData === [{ "key" => "value" }, [1, 2, 3], "string"]
+		assert _JSONData === { "nested_array" => [1, "two", { "key" => "value" }] }
+		assert _JSONData === { "nested_hash" => { "key1" => "value1", "key2" => [1, 2, 3] } }
+		assert _JSONData === [{ "key" => "value" }, [1, 2, 3], "string"]
 
-	refute _JSONData === Object.new
-	refute _JSONData === Set.new
-	refute _JSONData === Float::INFINITY
-	refute _JSONData === -Float::INFINITY
-	refute _JSONData === Float::NAN
-	refute _JSONData === { key: "value" }
-	refute _JSONData === [1, :symbol, "three"]
-	refute _JSONData === { "nested_array" => [1, :symbol, { "key" => "value" }] }
-	refute _JSONData === { "nested_hash" => { "key1" => "value1", "key2" => [1, :symbol, 3] } }
-	refute _JSONData === [{ "key" => :value }, [1, 2, 3], "string"]
-end
-
-test "nilable" do
-	assert _JSONData? === nil
-	assert _JSONData? === {}
-	assert _JSONData? === { "key" => [1, "two"] }
-	refute _JSONData? === { key: "value" }
-
-	assert NilableJSONDataType === nil
-	assert NilableJSONDataType === {}
-	assert NilableJSONDataType === []
-	assert NilableJSONDataType === "string"
-	assert NilableJSONDataType === { "key" => [1, "two"] }
-	refute NilableJSONDataType === { key: "value" }
-	refute NilableJSONDataType === Object.new
-end
-
-test "with params" do
-	assert _JSONData(Array) === [1, 2, 3]
-	refute _JSONData(Array) === ["a", 1, 2, Object.new]
-end
-
-test "hierarchy" do
-	assert_subtype _JSONData, _JSONData
-
-	assert_subtype nil, _JSONData
-	assert_subtype false, _JSONData
-	assert_subtype true, _JSONData
-	assert_subtype _Float(finite?: _Truthy), _JSONData
-	assert_subtype _Float(finite?: true), _JSONData
-	assert_subtype String, _JSONData
-	assert_subtype Integer, _JSONData
-
-	assert_subtype _Array(_JSONData), _JSONData
-	assert_subtype _Array(nil), _JSONData
-	assert_subtype _Array(false), _JSONData
-	assert_subtype _Array(true), _JSONData
-	assert_subtype _Array(_Float(finite?: _Truthy)), _JSONData
-	assert_subtype _Array(_Float(finite?: true)), _JSONData
-	assert_subtype _Array(String), _JSONData
-	assert_subtype _Array(Integer), _JSONData
-
-	assert_subtype _Hash(String, _JSONData), _JSONData
-	assert_subtype _Hash(_String(length: 10), _JSONData), _JSONData
-
-	# JSON object keys must be strings
-	refute_subtype _Hash(_JSONData, _JSONData), _JSONData
-	refute_subtype _Hash(nil, _JSONData), _JSONData
-	refute_subtype _Hash(false, _JSONData), _JSONData
-	refute_subtype _Hash(true, _JSONData), _JSONData
-	refute_subtype _Hash(_Float(finite?: _Truthy), _JSONData), _JSONData
-	refute_subtype _Hash(_Float(finite?: true), _JSONData), _JSONData
-	refute_subtype _Hash(Integer, _JSONData), _JSONData
-	refute_subtype _Hash(Integer, String), _JSONData
-	refute_subtype _Hash(Symbol, String), _JSONData
-
-	assert_subtype _Hash(String, nil), _JSONData
-	assert_subtype _Hash(String, false), _JSONData
-	assert_subtype _Hash(String, true), _JSONData
-	assert_subtype _Hash(String, _Float(finite?: _Truthy)), _JSONData
-	assert_subtype _Hash(String, _Float(finite?: true)), _JSONData
-	assert_subtype _Hash(String, String), _JSONData
-	assert_subtype _Hash(String, Integer), _JSONData
-
-	assert_subtype _Float(5..10), _JSONData
-	assert_subtype _String(length: 10), _JSONData
-	assert_subtype _Integer(5..10), _JSONData
-
-	# not compatible since we don’t know what’s inside the array
-	refute_subtype Array, _JSONData
-
-	# not compatible since we don’t know what’s inside the hash
-	refute_subtype Hash, _JSONData
-
-	# not compatible since we know the array contains symbols
-	refute_subtype _Array(Symbol), _JSONData
-end
-
-test "error message" do
-	error = assert_raises(Literal::TypeError) do
-		Literal.check(
-			{ :key => "value", "string" => "string", "symbol" => :symbol, "array" => [1, 2, 3, :symbol], "hash" => { "key" => "value", "symbol" => :symbol } },
-			_JSONData
-		)
+		refute _JSONData === Object.new
+		refute _JSONData === Set.new
+		refute _JSONData === Float::INFINITY
+		refute _JSONData === -Float::INFINITY
+		refute _JSONData === Float::NAN
+		refute _JSONData === { key: "value" }
+		refute _JSONData === [1, :symbol, "three"]
+		refute _JSONData === { "nested_array" => [1, :symbol, { "key" => "value" }] }
+		refute _JSONData === { "nested_hash" => { "key1" => "value1", "key2" => [1, :symbol, 3] } }
+		refute _JSONData === [{ "key" => :value }, [1, 2, 3], "string"]
 	end
 
-	assert_equal error.message, <<~MSG
-		Type mismatch
+	test "nilable" do
+		assert _JSONData? === nil
+		assert _JSONData? === {}
+		assert _JSONData? === { "key" => [1, "two"] }
+		refute _JSONData? === { key: "value" }
 
-		    []
-		      Expected: String
-		      Actual (Symbol): :key
-		    ["symbol"]
-		      Expected: _JSONData
-		      Actual (Symbol): :symbol
-		    ["array"]
-		      [3]
-		        Expected: _JSONData
-		        Actual (Symbol): :symbol
-		    ["hash"]
-		      ["symbol"]
-		        Expected: _JSONData
-		        Actual (Symbol): :symbol
-	MSG
-end
+		assert NilableJSONDataType === nil
+		assert NilableJSONDataType === {}
+		assert NilableJSONDataType === []
+		assert NilableJSONDataType === "string"
+		assert NilableJSONDataType === { "key" => [1, "two"] }
+		refute NilableJSONDataType === { key: "value" }
+		refute NilableJSONDataType === Object.new
+	end
 
-test "self-referential values do not match" do
-	array = []
-	array << array
+	test "with params" do
+		assert _JSONData(Array) === [1, 2, 3]
+		refute _JSONData(Array) === ["a", 1, 2, Object.new]
+	end
 
-	hash = {}
-	hash["self"] = hash
+	test "hierarchy" do
+		assert_subtype _JSONData, _JSONData
 
-	refute _JSONData === array
-	refute _JSONData === hash
-	refute _JSONData === { "wrapped" => [array] }
-end
+		assert_subtype nil, _JSONData
+		assert_subtype false, _JSONData
+		assert_subtype true, _JSONData
+		assert_subtype _Float(finite?: _Truthy), _JSONData
+		assert_subtype _Float(finite?: true), _JSONData
+		assert_subtype String, _JSONData
+		assert_subtype Integer, _JSONData
 
-test "self-referential values are diagnosed without recursing forever" do
-	array = []
-	array << array
+		assert_subtype _Array(_JSONData), _JSONData
+		assert_subtype _Array(nil), _JSONData
+		assert_subtype _Array(false), _JSONData
+		assert_subtype _Array(true), _JSONData
+		assert_subtype _Array(_Float(finite?: _Truthy)), _JSONData
+		assert_subtype _Array(_Float(finite?: true)), _JSONData
+		assert_subtype _Array(String), _JSONData
+		assert_subtype _Array(Integer), _JSONData
 
-	hash = {}
-	hash["self"] = hash
+		assert_subtype _Hash(String, _JSONData), _JSONData
+		assert_subtype _Hash(_String(length: 10), _JSONData), _JSONData
 
-	assert_raises(Literal::TypeError) { Literal.check(array, _JSONData) }
-	assert_raises(Literal::TypeError) { Literal.check(hash, _JSONData) }
+		# JSON object keys must be strings
+		refute_subtype _Hash(_JSONData, _JSONData), _JSONData
+		refute_subtype _Hash(nil, _JSONData), _JSONData
+		refute_subtype _Hash(false, _JSONData), _JSONData
+		refute_subtype _Hash(true, _JSONData), _JSONData
+		refute_subtype _Hash(_Float(finite?: _Truthy), _JSONData), _JSONData
+		refute_subtype _Hash(_Float(finite?: true), _JSONData), _JSONData
+		refute_subtype _Hash(Integer, _JSONData), _JSONData
+		refute_subtype _Hash(Integer, String), _JSONData
+		refute_subtype _Hash(Symbol, String), _JSONData
+
+		assert_subtype _Hash(String, nil), _JSONData
+		assert_subtype _Hash(String, false), _JSONData
+		assert_subtype _Hash(String, true), _JSONData
+		assert_subtype _Hash(String, _Float(finite?: _Truthy)), _JSONData
+		assert_subtype _Hash(String, _Float(finite?: true)), _JSONData
+		assert_subtype _Hash(String, String), _JSONData
+		assert_subtype _Hash(String, Integer), _JSONData
+
+		assert_subtype _Float(5..10), _JSONData
+		assert_subtype _String(length: 10), _JSONData
+		assert_subtype _Integer(5..10), _JSONData
+
+		# not compatible since we don’t know what’s inside the array
+		refute_subtype Array, _JSONData
+
+		# not compatible since we don’t know what’s inside the hash
+		refute_subtype Hash, _JSONData
+
+		# not compatible since we know the array contains symbols
+		refute_subtype _Array(Symbol), _JSONData
+	end
+
+	test "error message" do
+		error = assert_raises(Literal::TypeError) do
+			Literal.check(
+				{ :key => "value", "string" => "string", "symbol" => :symbol, "array" => [1, 2, 3, :symbol], "hash" => { "key" => "value", "symbol" => :symbol } },
+				_JSONData
+			)
+		end
+
+		assert_equal error.message, <<~MSG
+			Type mismatch
+
+			    []
+			      Expected: String
+			      Actual (Symbol): :key
+			    ["symbol"]
+			      Expected: _JSONData
+			      Actual (Symbol): :symbol
+			    ["array"]
+			      [3]
+			        Expected: _JSONData
+			        Actual (Symbol): :symbol
+			    ["hash"]
+			      ["symbol"]
+			        Expected: _JSONData
+			        Actual (Symbol): :symbol
+		MSG
+	end
+
+	test "self-referential values do not match" do
+		array = []
+		array << array
+
+		hash = {}
+		hash["self"] = hash
+
+		refute _JSONData === array
+		refute _JSONData === hash
+		refute _JSONData === { "wrapped" => [array] }
+	end
+
+	test "self-referential values are diagnosed without recursing forever" do
+		array = []
+		array << array
+
+		hash = {}
+		hash["self"] = hash
+
+		assert_raises(Literal::TypeError) { Literal.check(array, _JSONData) }
+		assert_raises(Literal::TypeError) { Literal.check(hash, _JSONData) }
+	end
 end

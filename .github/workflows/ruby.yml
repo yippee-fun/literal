@@ -34,7 +34,7 @@ jobs:
           ruby-version: ${{ matrix.ruby-version }}
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
       - name: Quickdraw tests
-        run: bundle exec qt -t 1 "./test/**/*.test.rb"
+        run: bundle exec qd "./test/**/*.test.rb"
   allocations_test:
     runs-on: ubuntu-latest
     strategy:
