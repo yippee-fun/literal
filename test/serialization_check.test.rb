@@ -62,6 +62,20 @@ class SerializationCheckTest < Quickdraw::Test
 		def decode(value) = Slug.new(text: value)
 	end
 
+	class Stay < Literal::Data
+		prop :address, _Nilable(Address)
+	end
+
+	# Writes a nilable address as its city alone, under a key of its own.
+	class CityOnlySerializer < Literal::Serializer
+		def type = _Nilable(Address)
+		def handles_type?(type) = _Nilable(Address) == type
+		def child_types(type) = [String]
+		def json_type(type) = "object"
+		def serialize(value, type:) = value && { "city_name" => value.city }
+		def deserialize(raw, type:) = raw && Address.new(city: raw.fetch("city_name"), since: Date.new(2000, 1, 1))
+	end
+
 	class Unserializable < Literal::Data
 		prop :callback, Proc
 	end
@@ -170,6 +184,33 @@ class SerializationCheckTest < Quickdraw::Test
 		context = Literal::SerializationContext.new(SlugCodec)
 
 		assert_raises(Literal::ArgumentError) { context.check("hello", type: Slug) }
+	end
+
+	test "reports a self-referential value as nested too deeply" do
+		dates = []
+		dates << dates
+
+		result = Context.check({ "guest" => "Ada", "date" => "2026-01-02", "dates" => dates }, type: Booking)
+
+		assert_equal [[[:dates], "is nested too deeply"]], errors_for(result)
+	end
+
+	test "reports a value its seal cannot handle instead of raising" do
+		assert_equal [[[:code], "must be a string"]], errors_for(Context.check({ "code" => 1 }, type: Sealed))
+	end
+
+	test "reports a value that is not JSON data" do
+		result = Context.check({ "guest" => "Ada", "date" => "2026-01-02", "note" => Literal::Undefined }, type: Booking)
+
+		refute result.success?
+		assert_equal [[:note]], result.error!.errors.map(&:path)
+	end
+
+	test "decodes a nilable shape whole when a custom serializer handles it" do
+		context = Literal::SerializationContext.new(CityOnlySerializer)
+		stay = context.check({ "address" => { "city_name" => "Paris" } }, type: Stay).value!
+
+		assert_equal "Paris", stay.address.city
 	end
 
 	test "raises for a type the context cannot serialize" do

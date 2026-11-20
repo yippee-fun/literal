@@ -17,6 +17,9 @@ module Literal::Checks::Checker
 	NO_DUPLICATES = {}.freeze
 	private_constant :NO_DUPLICATES
 
+	JSON_DATA = Literal::Types._JSONData
+	private_constant :JSON_DATA
+
 	# Answers a Literal::Result carrying the built value or every error found.
 	# `input` is a draft of the shape or a Hash of props from outside. With a
 	# serialization context, `input` is serialized and comes from outside, so
@@ -223,10 +226,22 @@ module Literal::Checks::Checker
 			# own depth bound cannot reach.
 			errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
 			false
+		elsif !(JSON_DATA === value)
+			errors.add(property.name, Literal::Checks::Message.for(property.type, value))
+			false
 		else
 			value = decode(property, value, errors, serialization_context)
-			!REJECTED.equal?(value) && store(draft, property, value, errors)
+			!REJECTED.equal?(value) && store_serialized(draft, property, value, errors)
 		end
+	end
+
+	# A seal assumes its prop's domain, so a wrong value from outside can make
+	# it raise; that is the input's fault, reported like a wrong type.
+	private def store_serialized(draft, property, value, errors)
+		store(draft, property, value, errors)
+	rescue NoMethodError, TypeError, ArgumentError
+		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
+		false
 	end
 
 	# Iterative, so the check cannot itself exhaust the stack.
@@ -259,7 +274,7 @@ module Literal::Checks::Checker
 		case type
 		in Literal::Types::DeferredType
 			serialized_shape(type.resolve, serialization_context, seen)
-		in Literal::Types::NilableType
+		in Literal::Types::NilableType if serialization_context.serializer_for_type(type).instance_of?(Literal::NilableSerializer)
 			serialized_shape(type.type, serialization_context, seen)
 		in Literal::Types::UnionType if type.optional?
 			serialized_shape(without_undefined(type), serialization_context, seen)
