@@ -14,9 +14,7 @@ class Literal::Data < Literal::DataStructure
 
 		def define(**properties, &body)
 			Class.new(self) do
-				props do
-					properties.each { |name, type| prop(name, type) }
-				end
+				properties.each { |name, type| prop(name, type) }
 
 				if block_given?
 					class_eval(&body)
@@ -32,7 +30,7 @@ class Literal::Data < Literal::DataStructure
 			SCHEMA_METHODS
 		end
 
-		private def __generate_literal_methods__(new_property, buffer = +"")
+		private def __generate_literal_methods__(buffer = +"")
 			super
 			literal_properties.generate_with(buffer, checked: literal_checks.any?)
 			buffer

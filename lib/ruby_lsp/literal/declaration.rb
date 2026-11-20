@@ -8,7 +8,7 @@ module RubyLsp
 			# `Class.new(Literal::Data) { prop :name, String }`, so the props inside it
 			# can't be attributed to the enclosing namespace.
 			def self.hides_declarations?(call)
-				(call.block in Prism::BlockNode) && :props != call.name
+				call.block in Prism::BlockNode
 			end
 
 			def self.parse(call)

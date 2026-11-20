@@ -318,52 +318,6 @@ module Literal::Properties
 		name
 	end
 
-	# Declare several properties as one batch. Each property is recorded, and its
-	# reader, writer and predicate defined, as it is declared; the methods
-	# generated from the whole schema — the initializer and to_h — are generated
-	# once when the block ends rather than once per property.
-	#
-	#   props do
-	#     prop :name, String
-	#     prop :age, Integer
-	#   end
-	def props
-		raise Literal::ArgumentError.new("props requires a block") unless block_given?
-
-		begin_props
-
-		begin
-			yield
-		ensure
-			commit_props
-		end
-
-		nil
-	end
-
-	# The two halves of `props`, for a caller that cannot wrap the declarations
-	# in a block. Batches nest: the schema-wide methods are generated when the
-	# outermost one is committed, or sooner if something needs them.
-	def begin_props
-		@__literal_open_batches__ = __literal_open_batches__ + 1
-		nil
-	end
-
-	def commit_props
-		# Freezing generated whatever was deferred.
-		return if frozen?
-
-		open_batches = __literal_open_batches__
-
-		unless open_batches > 0
-			raise Literal::ArgumentError.new("Cannot commit props on #{self}, because no batch is open.")
-		end
-
-		@__literal_open_batches__ = open_batches - 1
-		__literal_define_schema_methods__ if open_batches == 1
-		nil
-	end
-
 	def freeze
 		return super if frozen?
 
@@ -479,7 +433,7 @@ module Literal::Properties
 				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
 			end
 
-			props do
+			__literal_copy_properties__ do
 				sliced.each { |property| __literal_add_property__(property) }
 			end
 		end.tap { |projection| projection.__send__(:__literal_slice_checks__, self, names) }
@@ -585,6 +539,15 @@ module Literal::Properties
 			raise Ractor::IsolationError.new("#{self} can't be built outside the main Ractor until it is passed to Literal.make_shareable.")
 		end
 
+		# Before any instance exists, so none can reach a stand-in from another
+		# Ractor, however it was built.
+		shape = self
+
+		while Literal::Properties === shape
+			shape.__send__(:__literal_define_schema_methods__)
+			shape = shape.superclass
+		end
+
 		__literal_count_constructions__(1)
 		finished = false
 
@@ -650,10 +613,10 @@ module Literal::Properties
 
 			schema = literal_properties
 
-			# A batch is judged whole when it commits: a declaration part way through
-			# it may pass through an order Ruby can't compile, or name a deferred type
-			# whose constant is still to come.
-			schema.check_signature(schema.sorted_with(property)) unless __literal_open_batches__ > 0
+			# A keyword can't break the signature.
+			unless :keyword == property.kind || @__literal_copying_properties__
+				schema.check_signature(schema.sorted_with(property))
+			end
 
 			schema << property
 			# After the change, so an entry labelled with the new generation was
@@ -664,27 +627,25 @@ module Literal::Properties
 		end
 	end
 
+	# Properties copied from a sound schema may pass through orders that aren't,
+	# so the signature is judged once they are all in.
+	private def __literal_copy_properties__
+		@__literal_copying_properties__ = true
+		yield
+		literal_properties.check_signature
+	ensure
+		@__literal_copying_properties__ = false
+	end
+
 	private def __define_literal_methods__(new_property)
-		batching = __literal_open_batches__ > 0
-
-		if batching
-			code = new_property && __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
-		else
-			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
-			code = __generate_literal_methods__(new_property)
-		end
-
-		if code
-			__literal_silence_redefinitions__(new_property) if new_property
+		if new_property
+			code = __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
+			__literal_silence_redefinitions__(new_property)
 			# An explicit path, so every engine attributes these frames to Literal.
 			__literal_extension__.module_eval(code, __FILE__, __LINE__)
 		end
 
-		__literal_defer_schema_methods__ if batching
-	end
-
-	private def __literal_open_batches__
-		@__literal_open_batches__ || 0
+		__literal_defer_schema_methods__
 	end
 
 	SCHEMA_METHODS = [:initialize, :to_h, :to_hash].freeze
@@ -694,9 +655,9 @@ module Literal::Properties
 		SCHEMA_METHODS
 	end
 
-	# The schema-wide methods are stale while a batch is open. Anything that
-	# calls one before the batch is committed — a Literal::Enum building its
-	# members in the class body — reaches a stand-in that generates the real
+	# Generating the schema-wide methods on every prop would make defining a
+	# shape quadratic in its size, so each change replaces them with stand-ins.
+	# The first call to one — usually the first instance — generates the real
 	# methods and hands over to them.
 	private def __literal_defer_schema_methods__
 		return if @__literal_schema_methods_deferred__
@@ -720,11 +681,12 @@ module Literal::Properties
 
 		# A second thread reaching a stand-in waits here, then finds the real
 		# methods in place. Re-entrant, because generating can materialize a
-		# deferred type whose block defines another shape with a batch of its own.
-		SCHEMA_METHODS_LOCK.synchronize do
+		# deferred type whose block defines another shape. The shape's own lock,
+		# since generating can run user code that waits on another shape's.
+		__literal_lock__.synchronize do
 			next unless @__literal_schema_methods_deferred__
 
-			code = __generate_literal_methods__(nil)
+			code = __generate_literal_methods__
 
 			extension = __literal_extension__
 			__literal_schema_methods__.each { |name| extension.alias_method(name, name) }
@@ -781,12 +743,10 @@ module Literal::Properties
 		end
 	end
 
-	private def __generate_literal_methods__(new_property, buffer = +"")
+	private def __generate_literal_methods__(buffer = +"")
 		buffer << "# frozen_string_literal: true\n"
 		literal_properties.generate_initializer(buffer, checked: literal_checks.any?)
 		literal_properties.generate_to_h(buffer)
-		# Nil when re-emitting for a new check rather than a new property.
-		__generate_literal_property_methods__(new_property, buffer) if new_property
 		buffer
 	end
 

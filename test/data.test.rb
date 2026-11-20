@@ -879,16 +879,13 @@ class DataTest < Quickdraw::Test
 		assert_same copy.block, other
 	end
 
-	test "with is generated in full within a batch" do
+	test "with is generated in full before the first instance" do
 		klass = Class.new(Literal::Data) do
 			prop :a, Integer
+			prop :b, String
+			prop :c, Integer, default: 0
 
-			props do
-				prop :b, String
-				prop :c, Integer, default: 0
-
-				@copy = from_props(a: 1, b: "x", c: 2).with(b: "y")
-			end
+			@copy = from_props(a: 1, b: "x", c: 2).with(b: "y")
 		end
 
 		assert_equal klass.instance_variable_get(:@copy).to_h, { a: 1, b: "y", c: 2 }
@@ -990,9 +987,8 @@ class DataTest < Quickdraw::Test
 		assert system(
 			RbConfig.ruby, "-I", File.expand_path("../lib", __dir__), "-r", "literal",
 			"-e", <<~RUBY
-				direct = Class.new(Literal::Data) { prop :a, Integer }
-				batched = Class.new(Literal::Data) { props { prop :a, Integer } }
-				exit !Object.method_defined?(:with) && [direct, batched].all? { |shape| shape.new(a: 1).with(a: 2).a == 2 }
+				shape = Class.new(Literal::Data) { prop :a, Integer }
+				exit !Object.method_defined?(:with) && shape.new(a: 1).with(a: 2).a == 2
 			RUBY
 		) do
 			"Expected with to be generated without Object#with to alias."
