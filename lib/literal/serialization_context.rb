@@ -146,6 +146,24 @@ class Literal::SerializationContext
 		deserialized
 	end
 
+	# The soft path for deserialize, for serialized props from outside: what
+	# `Literal::Draft(type).check(props)` answers once each value is decoded for
+	# its prop. Nothing about the input raises; a value that cannot be decoded
+	# is reported like one of the wrong type, and unknown keys are reported too.
+	def check(value, type:)
+		type = type.resolve if type in Literal::Types::DeferredType
+
+		raise unserializable_type_error(type) unless serializable_type?(type)
+
+		# Checking walks the payload as props, which is only what a plain
+		# structure serializer writes.
+		unless serializer_for_type(type).instance_of?(Literal::StructureSerializer)
+			raise Literal::ArgumentError, "#{type.inspect} cannot be checked, because it is not serialized as its props"
+		end
+
+		Literal::Checks::Checker.check(type, value, serialization_context: self)
+	end
+
 	# The serializer handling the given type. With after, the search resumes
 	# from the serializer following it in the chain, giving a custom serializer
 	# super-like access to the serializer it shadowed.
