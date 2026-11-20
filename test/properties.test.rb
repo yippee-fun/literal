@@ -1,1245 +1,1343 @@
 # frozen_string_literal: true
 
-Example = Literal::Object
+class PropertiesTest < Quickdraw::Test
+	Example = Literal::Object
 
-test "positional params are required by default" do
-	example = Class.new(Example) do
-		prop :example, String, :positional
-	end
-
-	assert_raises(ArgumentError) { example.new }
-	refute_raises { example.new("Hello") }
-end
-
-test "keyword params are required by default" do
-	example = Class.new(Example) do
-		prop :example, String
-	end
-
-	assert_raises(ArgumentError) { example.new }
-	refute_raises { example.new(example: "Hello") }
-end
-
-test "nilable positional params are optional" do
-	example = Class.new(Example) do
-		prop :example, _Nilable(String), :positional
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new("Hello") }
-end
-
-test "nilable keyword params are optional" do
-	example = Class.new(Example) do
-		prop :example, _Nilable(String)
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new(example: "Hello") }
-end
-
-test "properties can be redefined with a subtype of the inherited type" do
-	parent = Class.new(Example) do
-		prop :id, _Union(Integer, String)
-	end
-
-	example = Class.new(parent) do
-		prop :id, Integer
-	end
-
-	refute_raises { example.new(id: 1) }
-	assert_raises(Literal::TypeError) { example.new(id: "1") }
-end
-
-test "properties cannot be redefined with a type incompatible with the inherited type" do
-	parent = Class.new(Example) do
-		prop :name, String
-	end
-
-	error = assert_raises(Literal::ArgumentError) do
-		Class.new(parent) do
-			prop :name, Symbol
+	test "positional params are required by default" do
+		example = Class.new(Example) do
+			prop :example, String, :positional
 		end
+
+		assert_raises(ArgumentError) { example.new }
+		refute_raises { example.new("Hello") }
 	end
 
-	assert error.message.include?("must be a subtype of the inherited type")
-end
+	test "keyword params are required by default" do
+		example = Class.new(Example) do
+			prop :example, String
+		end
 
-test "properties cannot be redefined with a different kind" do
-	parent = Class.new(Example) do
-		prop :name, String, :positional
+		assert_raises(ArgumentError) { example.new }
+		refute_raises { example.new(example: "Hello") }
 	end
 
-	error = assert_raises(Literal::ArgumentError) do
-		Class.new(parent) do
+	test "nilable positional params are optional" do
+		example = Class.new(Example) do
+			prop :example, _Nilable(String), :positional
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new("Hello") }
+	end
+
+	test "nilable keyword params are optional" do
+		example = Class.new(Example) do
+			prop :example, _Nilable(String)
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new(example: "Hello") }
+	end
+
+	test "properties can be redefined with a subtype of the inherited type" do
+		parent = Class.new(Example) do
+			prop :id, _Union(Integer, String)
+		end
+
+		example = Class.new(parent) do
+			prop :id, Integer
+		end
+
+		refute_raises { example.new(id: 1) }
+		assert_raises(Literal::TypeError) { example.new(id: "1") }
+	end
+
+	test "properties cannot be redefined with a type incompatible with the inherited type" do
+		parent = Class.new(Example) do
 			prop :name, String
 		end
+
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(parent) do
+				prop :name, Symbol
+			end
+		end
+
+		assert error.message.include?("must be a subtype of the inherited type")
 	end
 
-	assert error.message.include?("must match the inherited kind :positional")
-end
+	test "properties cannot be redefined with a different kind" do
+		parent = Class.new(Example) do
+			prop :name, String, :positional
+		end
 
-test "properties can be redefined to add a reader" do
-	parent = Class.new(Example) do
-		prop :name, String
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(parent) do
+				prop :name, String
+			end
+		end
+
+		assert error.message.include?("must match the inherited kind :positional")
 	end
 
-	example = Class.new(parent) do
-		prop :name, String, reader: :public
+	test "properties can be redefined to add a reader" do
+		parent = Class.new(Example) do
+			prop :name, String
+		end
+
+		example = Class.new(parent) do
+			prop :name, String, reader: :public
+		end
+
+		assert_equal example.new(name: "John").name, "John"
 	end
 
-	assert_equal example.new(name: "John").name, "John"
-end
+	test "properties cannot be redefined to remove or hide a reader" do
+		parent = Class.new(Example) do
+			prop :name, String, reader: :public
+		end
 
-test "properties cannot be redefined to remove or hide a reader" do
-	parent = Class.new(Example) do
-		prop :name, String, reader: :public
+		assert_raises(Literal::ArgumentError) do
+			Class.new(parent) { prop :name, String }
+		end
+
+		error = assert_raises(Literal::ArgumentError) do
+			Class.new(parent) { prop :name, String, reader: :private }
+		end
+
+		assert error.message.include?("must be at least as visible as the inherited reader")
 	end
 
-	assert_raises(Literal::ArgumentError) do
-		Class.new(parent) { prop :name, String }
+	test "properties with an inherited writer can be redefined with a narrower type" do
+		parent = Class.new(Example) do
+			prop :id, _Union(Integer, String), writer: :public
+		end
+
+		example = Class.new(parent) do
+			prop :id, Integer, writer: :public, reader: :public
+		end
+
+		instance = example.new(id: 1)
+		instance.id = 2
+
+		assert_equal instance.id, 2
+
+		# The narrowed writer rejects values the inherited writer accepted, failing
+		# loudly at the assignment site.
+		assert_raises(Literal::TypeError) { instance.id = "3" }
 	end
 
-	error = assert_raises(Literal::ArgumentError) do
-		Class.new(parent) { prop :name, String, reader: :private }
+	test "narrowed redefinitions can add a writer when the inherited property had none" do
+		parent = Class.new(Example) do
+			prop :id, _Union(Integer, String)
+		end
+
+		example = Class.new(parent) do
+			prop :id, Integer, reader: :public, writer: :public
+		end
+
+		instance = example.new(id: 1)
+		instance.id = 2
+
+		assert_equal instance.id, 2
 	end
 
-	assert error.message.include?("must be at least as visible as the inherited reader")
-end
+	test "properties cannot be added after a descendant has inherited the schema" do
+		parent = Class.new(Example) do
+			prop :a, String
+		end
 
-test "properties with an inherited writer can be redefined with a narrower type" do
-	parent = Class.new(Example) do
-		prop :id, _Union(Integer, String), writer: :public
+		grandchild = Class.new(Class.new(parent))
+		grandchild.literal_properties
+
+		error = assert_raises(Literal::ArgumentError) do
+			parent.class_eval do
+				prop :b, String
+			end
+		end
+
+		assert error.message.include?("already inherited its properties")
 	end
 
-	example = Class.new(parent) do
-		prop :id, Integer, writer: :public, reader: :public
-	end
+	test "properties can be added while no descendant has inherited the schema" do
+		parent = Class.new(Example) do
+			prop :a, String
+		end
 
-	instance = example.new(id: 1)
-	instance.id = 2
+		child = Class.new(parent)
 
-	assert_equal instance.id, 2
-
-	# The narrowed writer rejects values the inherited writer accepted, failing
-	# loudly at the assignment site.
-	assert_raises(Literal::TypeError) { instance.id = "3" }
-end
-
-test "narrowed redefinitions can add a writer when the inherited property had none" do
-	parent = Class.new(Example) do
-		prop :id, _Union(Integer, String)
-	end
-
-	example = Class.new(parent) do
-		prop :id, Integer, reader: :public, writer: :public
-	end
-
-	instance = example.new(id: 1)
-	instance.id = 2
-
-	assert_equal instance.id, 2
-end
-
-test "properties cannot be added after a descendant has inherited the schema" do
-	parent = Class.new(Example) do
-		prop :a, String
-	end
-
-	grandchild = Class.new(Class.new(parent))
-	grandchild.literal_properties
-
-	error = assert_raises(Literal::ArgumentError) do
 		parent.class_eval do
 			prop :b, String
 		end
+
+		instance = child.new(a: "1", b: "2")
+
+		assert_equal instance.to_h, { a: "1", b: "2" }
 	end
 
-	assert error.message.include?("already inherited its properties")
-end
+	test "prop refuses a frozen class without changing it" do
+		klass = Class.new(Literal::Data) { prop :a, Integer }
+		klass.freeze
 
-test "properties can be added while no descendant has inherited the schema" do
-	parent = Class.new(Example) do
-		prop :a, String
+		error = assert_raises(Literal::ArgumentError) { klass.prop(:b, Integer) }
+
+		assert error.message.include?("frozen")
+		assert_equal klass.literal_properties.map(&:name), [:a]
+		assert_equal klass.new(a: 1).to_h, { a: 1 }
 	end
 
-	child = Class.new(parent)
-
-	parent.class_eval do
-		prop :b, String
-	end
-
-	instance = child.new(a: "1", b: "2")
-
-	assert_equal instance.to_h, { a: "1", b: "2" }
-end
-
-test "prop refuses a frozen class without changing it" do
-	klass = Class.new(Literal::Data) { prop :a, Integer }
-	klass.freeze
-
-	error = assert_raises(Literal::ArgumentError) { klass.prop(:b, Integer) }
-
-	assert error.message.include?("frozen")
-	assert_equal klass.literal_properties.map(&:name), [:a]
-	assert_equal klass.new(a: 1).to_h, { a: 1 }
-end
-
-test "frozen defaults are type checked when the property is defined" do
-	error = assert_raises(Literal::ArgumentError) do
-		Class.new(Example) do
-			prop :age, Integer, default: "0"
-		end
-	end
-
-	assert error.message.include?("must match its type")
-end
-
-test "defaults that go through coercion are not checked at definition" do
-	example = Class.new(Example) do
-		prop :age, Integer, reader: :public, default: "0" do |value|
-			Integer(value)
-		end
-	end
-
-	assert_equal example.new.age, 0
-end
-
-test "proc defaults are not checked at definition" do
-	example = Class.new(Example) do
-		prop :age, Integer, reader: :public, default: -> { 18 }
-	end
-
-	assert_equal example.new.age, 18
-end
-
-test "properties can be redefined within the same class" do
-	example = Class.new(Example) do
-		prop :name, String
-		prop :name, Symbol
-	end
-
-	refute_raises { example.new(name: :john) }
-end
-
-test "properties can be redefined when either type is deferred" do
-	parent = Class.new(Example) do
-		prop :value, _Deferred { Integer }
-	end
-
-	refute_raises do
-		Class.new(parent) do
-			prop :value, Integer
-		end
-	end
-end
-
-test "prop? accepts a description" do
-	example = Class.new(Example) do
-		prop? :example, String, description: "An optional example"
-	end
-
-	assert_equal example.literal_properties[:example].description, "An optional example"
-end
-
-test "positional splats are optional" do
-	example = Class.new(Example) do
-		prop :example, _Array(String), :*
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new("Hello") }
-	refute_raises { example.new("Hello", "World") }
-	refute example.literal_properties[:example].required? { "Expected example to not be required" }
-end
-
-test "keyword splats are optional" do
-	example = Class.new(Example) do
-		prop :example, _Hash(Symbol, String), :**
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new(example: "Hello") }
-	refute_raises { example.new(example: "Hello", world: "World") }
-	refute example.literal_properties[:example].required? { "Expected example to not be required" }
-end
-
-test "block params are required by default" do
-	example = Class.new(Example) do
-		prop :example, Proc, :&
-	end
-
-	assert_raises(Literal::TypeError) { example.new }
-	refute_raises { example.new { "Hello" } }
-end
-
-test "nilable block params are optional" do
-	example = Class.new(Example) do
-		prop :example, _Nilable(Proc), :&
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new { "Hello" } }
-end
-
-test "optional keyword params are optional" do
-	example = Class.new(Example) do
-		prop :example, _Optional(String), reader: :public
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new(example: "Hello") }
-	refute_raises { example.new(example: Literal::Undefined) }
-	assert_raises(Literal::TypeError) { example.new(example: 1) }
-	assert_equal example.new.example, Literal::Undefined
-	refute example.literal_properties[:example].required? { "Expected example to not be required" }
-end
-
-test "optional positional params are optional" do
-	example = Class.new(Example) do
-		prop :example, _Optional(String), :positional, reader: :public
-	end
-
-	refute_raises { example.new }
-	refute_raises { example.new("Hello") }
-	assert_equal example.new.example, Literal::Undefined
-	assert_equal example.new("Hello").example, "Hello"
-end
-
-test "_Optional and prop? produce equivalent properties" do
-	bare = Class.new(Example) do
-		prop :example, _Optional(String), reader: :public
-	end
-
-	sugar = Class.new(Example) do
-		prop? :example, String, reader: :public
-	end
-
-	bare_property = bare.literal_properties[:example]
-	sugar_property = sugar.literal_properties[:example]
-
-	assert_equal bare_property.type, sugar_property.type
-	assert_equal bare_property.optional?, sugar_property.optional?
-	assert_equal bare_property.default, sugar_property.default
-	assert_equal bare.new.example, sugar.new.example
-end
-
-test "optional properties nest with nilable in either order" do
-	example = Class.new(Example) do
-		prop :undefined_or_nil, _Optional(_Nilable(String)), reader: :public
-		prop :nil_or_undefined, _Nilable(_Optional(String)), reader: :public
-	end
-
-	# Both spellings canonicalise to the same union, so both are omittable and
-	# both distinguish an omitted value from an explicit nil.
-	assert_equal(
-		example.literal_properties[:undefined_or_nil].type,
-		example.literal_properties[:nil_or_undefined].type,
-	)
-
-	assert_equal example.new.undefined_or_nil, Literal::Undefined
-	assert_equal example.new.nil_or_undefined, Literal::Undefined
-	assert_equal example.new(undefined_or_nil: nil, nil_or_undefined: nil).nil_or_undefined, nil
-end
-
-test "optional block params are still required" do
-	# Ruby resolves an omitted block to nil, so a block param can never receive
-	# Literal::Undefined and _Optional cannot make one omittable.
-	example = Class.new(Example) do
-		prop :example, _Optional(Proc), :&
-	end
-
-	assert_raises(Literal::TypeError) { example.new }
-	assert example.literal_properties[:example].required? { "Expected example to be required" }
-end
-
-test "only a union containing Literal::Undefined is optional" do
-	# Optionality is exact containment, not `===`. The sentinel is a truthy
-	# object, so `_Truthy === Literal::Undefined` is true — but merely matching
-	# the sentinel does not mean "omittable"; declaring it as a union member
-	# does. A bare `_Union` spelling is the same shape `_Optional` builds.
-	example = Class.new(Example) do
-		prop :declared, _Union(String, Literal::Undefined), reader: :public
-		prop :truthy, _Truthy
-		prop :any, _Any
-		prop :not_nil, _Not(nil)
-	end
-
-	# The sentinel matches these types, but matching is not containment.
-	assert example.literal_properties[:truthy].type === Literal::Undefined
-	assert example.literal_properties[:any].type === Literal::Undefined
-	assert example.literal_properties[:not_nil].type === Literal::Undefined
-
-	assert example.literal_properties[:declared].undefinable? { "Expected declared to be undefinable" }
-	refute example.literal_properties[:truthy].optional? { "Expected truthy to be required" }
-	refute example.literal_properties[:any].optional? { "Expected any to be required" }
-	refute example.literal_properties[:not_nil].optional? { "Expected not_nil to be required" }
-
-	assert_raises(ArgumentError) do
-		example.new(truthy: true, any: 1)
-	end
-
-	instance = example.new(truthy: true, any: 1, not_nil: 1)
-
-	assert_equal instance.declared, Literal::Undefined
-end
-
-test "the sentinel is an ordinary object, not a Module" do
-	# Literal::Undefined used to be a module, which made `Module === Undefined`
-	# true and silently turned Module-typed properties optional. As a plain
-	# object it satisfies no type about the object model.
-	refute Module === Literal::Undefined
-	refute Class === Literal::Undefined
-
-	example = Class.new(Example) do
-		prop :a, Module
-	end
-
-	assert_raises(ArgumentError) { example.new }
-	assert example.literal_properties[:a].required? { "Expected a to be required" }
-end
-
-test "a declared Literal::Undefined member takes precedence over nil" do
-	# A type can accept both sentinels. `_Optional` declares Literal::Undefined
-	# as a member, so an omitted value resolves to it and stays distinguishable
-	# from an explicit nil. `_Nilable(_Truthy)` only accepts it incidentally, so
-	# nil wins and the property behaves as it always has.
-	example = Class.new(Example) do
-		prop :declared, _Optional(_Nilable(String)), reader: :public
-		prop :incidental, _Nilable(_Truthy), reader: :public
-	end
-
-	assert example.literal_properties[:declared].undefinable? { "Expected declared to be undefinable" }
-	refute example.literal_properties[:incidental].undefinable? { "Expected incidental not to be undefinable" }
-
-	assert_equal example.new.declared, Literal::Undefined
-	assert_equal example.new.incidental, nil
-	assert_equal example.new(declared: nil).declared, nil
-end
-
-class Person
-	extend Literal::Properties
-
-	prop :name, String, :positional, reader: :public
-	prop :age, Integer, reader: :public
-end
-
-class Random
-	extend Literal::Properties
-	prop :begin, Integer, :positional, reader: :public
-end
-
-class WithDefaultBlock
-	extend Literal::Properties
-	prop :block, Proc, :&, reader: :public, default: -> { proc { "Hello" } }
-end
-
-class WithContextualDefault
-	extend Literal::Properties
-	prop :hello, String, reader: :private, default: "Hello"
-	prop :world, String, reader: :private, default: "World"
-	prop :combined, String, reader: :public, default: -> { "#{hello} #{world}" }
-end
-
-class WithNilableType
-	extend Literal::Properties
-	prop :name, Literal::Types::NilableType.new(String), :positional
-end
-
-class Empty
-	extend Literal::Properties
-end
-
-test "empty initializer" do
-	refute_raises { Empty.new }
-end
-
-test do
-	person = Person.new("John", age: 30)
-
-	assert_equal person.name, "John"
-	assert_equal person.age, 30
-end
-
-test "initializer type check" do
-	error = assert_raises(Literal::TypeError) { Person.new(1, age: "Joel") }
-
-	assert_equal error.message, <<~ERROR
-  Type mismatch
-
-  #{Person}#initialize (from #{error.backtrace[1]})
-    name
-      Expected: String
-      Actual (Integer): 1
-ERROR
-end
-
-test "initializer keyword check" do
-	random = Random.new(1)
-
-	assert_equal random.begin, 1
-end
-
-test "default block" do
-	object = WithDefaultBlock.new
-	assert_equal object.block.call, "Hello"
-
-	object = WithDefaultBlock.new { "World" }
-	assert_equal object.block.call, "World"
-end
-
-test "default value (as a proc) executes in the context of the receiver" do
-	object = WithContextualDefault.new
-	assert_equal object.combined, "Hello World"
-end
-
-test "properties are enumerable" do
-	props = Person.literal_properties
-	assert_equal props.size, 2
-	assert_equal props.map(&:name), [:name, :age]
-
-	props = Empty.literal_properties
-	assert_equal props.size, 0
-end
-
-test "introspection" do
-	prop1, prop2 = *Person.literal_properties
-
-	assert_equal prop1.name, :name
-	assert_equal prop1.type, String
-
-	assert(prop1.positional?) { "Expected name to be kind :positional" }
-	refute(prop1.keyword?) { "Expected name to not be kind :keyword" }
-	refute(prop1.block?) { "Expected name to not be kind :&" }
-	refute(prop1.splat?) { "Expected name to not be bind :*" }
-	refute(prop1.double_splat?) { "Expected name to not be kind :**" }
-	assert(prop1.required?) { "Expected name to be required" }
-	refute(prop1.optional?) { "Expected name to not be optional" }
-
-	assert_equal prop2.name, :age
-	assert_equal prop2.type, Integer
-
-	assert(prop2.keyword?) { "Expected age to be kind :keyword" }
-	assert(prop2.required?) { "Expected age to be required" }
-
-	props = WithDefaultBlock.literal_properties
-	prop_block = props.first
-	assert(prop_block.block?) { "Expected block to be kind :&" }
-	assert(prop_block.optional?) { "Expected block to be optional" }
-
-	props = WithNilableType.literal_properties
-	prop_name = props.first
-	assert(prop_name.optional?) { "Expected name to be optional" }
-end
-
-test "after initialize callback" do
-	callback_called = false
-
-	public_callback = Class.new do
-		extend Literal::Properties
-
-		prop :name, String
-
-		define_method :after_initialize do
-			callback_called = true
-		end
-	end
-
-	public_callback.new(name: "John")
-
-	assert callback_called
-
-	callback_called = false
-
-	protected_callback = Class.new do
-		extend Literal::Properties
-
-		prop :name, String
-
-		define_method :after_initialize do
-			callback_called = true
+	test "a frozen shape has no checks for a name none of them reads" do
+		klass = Class.new(Literal::Data) do
+			prop :a, Integer
+			check(:a, "must be positive", &:positive?)
 		end
 
-		protected :after_initialize
+		klass.freeze
+
+		assert_equal klass.literal_checks_for(:a).size, 1
+		assert_equal klass.literal_checks_for(:b), []
 	end
 
-	protected_callback.new(name: "John")
-
-	assert callback_called
-
-	callback_called = false
-
-	private_callback = Class.new do
-		extend Literal::Properties
-
-		prop :name, String
-
-		define_method :after_initialize do
-			callback_called = true
-		end
-
-		private :after_initialize
-	end
-
-	private_callback.new(name: "John")
-
-	assert callback_called
-
-	callback_called = false
-
-	empty = Class.new do
-		extend Literal::Properties
-
-		define_method :after_initialize do
-			callback_called = true
-		end
-	end
-
-	empty.new
-
-	assert callback_called
-end
-
-class Friend < Person
-	prop :age, _Integer(18..), reader: :public
-end
-
-test "inheritance" do
-	friend = Friend.new("John", age: 30)
-
-	assert_equal friend.name, "John"
-	assert_equal friend.age, 30
-
-	assert_raises(Literal::TypeError) { Friend.new("John", age: 17) }
-end
-
-class WithPredicate
-	extend Literal::Properties
-
-	prop :enabled, _Boolean, predicate: :public
-end
-
-test "predicates" do
-	enabled = WithPredicate.new(enabled: true)
-	disabled = WithPredicate.new(enabled: false)
-
-	assert_equal enabled.enabled?, true
-	assert_equal disabled.enabled?, false
-end
-
-class WithOptionalPredicate
-	extend Literal::Properties
-
-	prop? :name, String, predicate: :public
-end
-
-test "predicates are false when an optional property is unset" do
-	assert_equal WithOptionalPredicate.new.name?, false
-	assert_equal WithOptionalPredicate.new(name: "Joel").name?, true
-end
-
-class WithWriters < Example
-	extend Literal::Properties
-
-	prop :example, _Nilable(String), writer: :public
-	prop :a, _Nilable(_Array(String)), writer: :public
-end
-
-test "writer type error" do
-	instance = WithWriters.new
-
-	error = assert_raises(Literal::TypeError) do
-		instance.example = 0
-	end
-
-	assert_equal error.message, <<~ERROR
-  Type mismatch
-
-  #{WithWriters}#example=(value) (from #{error.backtrace[1]})
-    Expected: _Nilable(String)
-    Actual (Integer): 0
-ERROR
-
-	error = assert_raises(Literal::TypeError) do
-		instance.a = [1]
-	end
-
-	assert_equal error.message, <<~ERROR
-		Type mismatch
-
-		#{WithWriters}#a=(value) (from #{error.backtrace[1]})
-		    [0]
-		      Expected: String
-		      Actual (Integer): 1
-ERROR
-end
-
-class Family
-	extend Literal::Properties
-
-	prop :members, _Array(_Map(person: Person, role: Symbol)), :positional, reader: :public
-	prop :last_reunion_year, _Nilable(Integer)
-end
-
-test "nested properties raise in initializer" do
-	error = assert_raises(Literal::TypeError) do
-		Family.new(
-			[
-				{
-					person: Person.new("Json", age: 1),
-					role: 1,
-				},
-				{
-					person: Person.new("John", age: 30),
-					role: "Father",
-				},
-				{
-					1 => 2,
-				},
-			],
-		)
-	end
-
-	assert_equal error.message, <<~ERROR
-		Type mismatch
-
-		#{Family}#initialize (from #{error.backtrace[1]})
-		  members
-		    [0]
-		      [:role]
-		        Expected: Symbol
-		        Actual (Integer): 1
-		    [1]
-		      [:role]
-		        Expected: Symbol
-		        Actual (String): "Father"
-		    [2]
-		      [:person]
-		        Expected: #{Person.inspect}
-		        Actual (NilClass): nil
-		      [:role]
-		        Expected: Symbol
-		        Actual (NilClass): nil
-		ERROR
-
-	error = assert_raises(Literal::TypeError) { Family.new([1]) }
-
-	assert_equal error.message, <<~ERROR
-		Type mismatch
-
-		#{Family}#initialize (from #{error.backtrace[1]})
-		  members
-		    [0]
-		      Expected: _Map(person: #{Person}, role: Symbol)
-		      Actual (Integer): 1
-ERROR
-
-	error = assert_raises(Literal::TypeError) do
-		Family.new([], last_reunion_year: :two_thousand)
-	end
-
-	assert_equal error.message, <<~ERROR
-		Type mismatch
-
-		#{Family}#initialize (from #{error.backtrace[1]})
-		  last_reunion_year:
-		    Expected: _Nilable(Integer)
-		    Actual (Symbol): :two_thousand
-		ERROR
-end
-
-test "nested properties succeed in initializer" do
-	refute_raises do
-		Family.new(
-			[
-				{
-					person: Person.new("Json", age: 1),
-					role: :son,
-				},
-				{
-					person: Person.new("John", age: 30),
-					role: :brother,
-				},
-			],
-		)
-	end
-
-	refute_raises { Family.new([]) }
-	refute_raises { Family.new([], last_reunion_year: 0) }
-end
-
-test "#to_h" do
-	person = Person.new("John", age: 30)
-	assert_equal person.to_h, { name: "John", age: 30 }
-
-	empty = Empty.new
-	assert_equal empty.to_h, {}
-end
-
-# Each prop re-emits the shared methods — the initializer, to_h, and a Data's
-# hash and == — and a check re-emits the writers it reads. Every one of
-# those redefinitions must be pre-aliased, or `-w` drowns the caller in
-# "method redefined" warnings.
-test "generated methods redefine without warnings" do
-	warnings = []
-	capturing = true
-	interceptor = Module.new do
-		define_method(:warn) do |message, **kwargs|
-			capturing ? warnings << message : super(message, **kwargs)
-		end
-	end
-
-	Warning.singleton_class.prepend(interceptor)
-	verbose, $VERBOSE = $VERBOSE, true
-
-	begin
-		Class.new(Literal::Data) do
-			prop :x, Integer, reader: :public
-			prop :y, Integer, reader: :public
-		end
-
-		Class.new(Literal::Object) do
-			prop :min, Integer, writer: :public, reader: :private, predicate: :public
-			prop :max, Integer, writer: :public
-
-			check(:max, "must be greater than %{min}") { |max:, min:| max > min }
-		end
-	ensure
-		$VERBOSE = verbose
-		capturing = false
-	end
-
-	assert_equal [], warnings.grep(/method redefined/)
-end
-
-test "properties can be redefined with a literal type narrowing an inherited module" do
-	parent = Class.new(Example) do
-		prop :tags, Array
-	end
-
-	example = Class.new(parent) do
-		prop :tags, _Array(String)
-	end
-
-	refute_raises { example.new(tags: ["a"]) }
-	assert_raises(Literal::TypeError) { example.new(tags: [1]) }
-end
-
-test "slice works on a class that extends Literal::Properties directly" do
-	parent = Class.new do
-		def greeting = "hello"
-	end
-
-	shape = Class.new(parent) do
-		extend Literal::Properties
-
-		prop :a, String, reader: :public
-		prop :b, String
-	end
-
-	sliced = shape.slice(:a)
-
-	assert_equal sliced.superclass, parent
-	assert_equal sliced.literal_properties.map(&:name), [:a]
-	assert_equal sliced.new(a: "x").a, "x"
-	assert_equal sliced.new(a: "x").greeting, "hello"
-	assert_equal shape.slice(:a, :b).superclass, shape
-end
-
-test "prop refuses a second splat, double splat or block" do
-	[:*, :**, :&].each do |kind|
+	test "frozen defaults are type checked when the property is defined" do
 		error = assert_raises(Literal::ArgumentError) do
-			Class.new(Literal::Data) do
-				prop :a, _Any, kind
-				prop :b, _Any, kind
+			Class.new(Example) do
+				prop :age, Integer, default: "0"
 			end
 		end
 
-		assert error.message.include?(":b can't be a #{kind.inspect} property")
-	end
-end
-
-test "prop refuses optional positional properties Ruby can't place" do
-	klass = Class.new(Literal::Data) do
-		prop :a, String, :positional, default: "a"
-		prop :b, String, :positional
+		assert error.message.include?("must match its type")
 	end
 
-	assert_raises(Literal::ArgumentError) { klass.prop :c, String, :positional, default: "c" }
-	assert_raises(Literal::ArgumentError) { klass.prop :c, Array, :* }
-	assert_equal klass.literal_properties.map(&:name), [:a, :b]
-	assert_equal klass.new("b").to_h, { a: "a", b: "b" }
-end
+	test "defaults that go through coercion are not checked at definition" do
+		example = Class.new(Example) do
+			prop :age, Integer, reader: :public, default: "0" do |value|
+				Integer(value)
+			end
+		end
 
-test "declaring an optional positional prop doesn't materialize its deferred type" do
-	klass = Class.new(Literal::Data) do
-		prop? :a, _Deferred { PositionalForwardReference }, :positional
-		prop :b, _Optional(_Deferred { PositionalForwardReference }), :positional
+		assert_equal example.new.age, 0
 	end
 
-	assert_equal klass.literal_properties.map(&:optional?), [true, true]
-end
+	test "proc defaults are not checked at definition" do
+		example = Class.new(Example) do
+			prop :age, Integer, reader: :public, default: -> { 18 }
+		end
 
-test "a batch's signature is judged when it commits" do
-	parent = Class.new(Literal::Data) do
-		prop :a, _Nilable(String), :positional
-		prop :b, _Nilable(String), :positional
-		prop :c, _Array(String), :*
+		assert_equal example.new.age, 18
 	end
 
-	child = Class.new(parent) do
-		props do
-			prop :b, String, :positional
-			prop :a, String, :positional
+	test "properties can be redefined within the same class" do
+		example = Class.new(Example) do
+			prop :name, String
+			prop :name, Symbol
+		end
+
+		refute_raises { example.new(name: :john) }
+	end
+
+	test "properties can be redefined when either type is deferred" do
+		parent = Class.new(Example) do
+			prop :value, _Deferred { Integer }
+		end
+
+		refute_raises do
+			Class.new(parent) do
+				prop :value, Integer
+			end
 		end
 	end
 
-	assert_equal child.new("a", "b", "c").to_h, { a: "a", b: "b", c: ["c"] }
+	test "prop? accepts a description" do
+		example = Class.new(Example) do
+			prop? :example, String, description: "An optional example"
+		end
 
-	forward = Class.new(Literal::Data) do
-		props do
+		assert_equal example.literal_properties[:example].description, "An optional example"
+	end
+
+	test "positional splats are optional" do
+		example = Class.new(Example) do
+			prop :example, _Array(String), :*
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new("Hello") }
+		refute_raises { example.new("Hello", "World") }
+		refute example.literal_properties[:example].required? { "Expected example to not be required" }
+	end
+
+	test "keyword splats are optional" do
+		example = Class.new(Example) do
+			prop :example, _Hash(Symbol, String), :**
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new(example: "Hello") }
+		refute_raises { example.new(example: "Hello", world: "World") }
+		refute example.literal_properties[:example].required? { "Expected example to not be required" }
+	end
+
+	test "block params are required by default" do
+		example = Class.new(Example) do
+			prop :example, Proc, :&
+		end
+
+		assert_raises(Literal::TypeError) { example.new }
+		refute_raises { example.new { "Hello" } }
+	end
+
+	test "nilable block params are optional" do
+		example = Class.new(Example) do
+			prop :example, _Nilable(Proc), :&
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new { "Hello" } }
+	end
+
+	test "optional keyword params are optional" do
+		example = Class.new(Example) do
+			prop :example, _Optional(String), reader: :public
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new(example: "Hello") }
+		refute_raises { example.new(example: Literal::Undefined) }
+		assert_raises(Literal::TypeError) { example.new(example: 1) }
+		assert_equal example.new.example, Literal::Undefined
+		refute example.literal_properties[:example].required? { "Expected example to not be required" }
+	end
+
+	test "optional positional params are optional" do
+		example = Class.new(Example) do
+			prop :example, _Optional(String), :positional, reader: :public
+		end
+
+		refute_raises { example.new }
+		refute_raises { example.new("Hello") }
+		assert_equal example.new.example, Literal::Undefined
+		assert_equal example.new("Hello").example, "Hello"
+	end
+
+	test "_Optional and prop? produce equivalent properties" do
+		bare = Class.new(Example) do
+			prop :example, _Optional(String), reader: :public
+		end
+
+		sugar = Class.new(Example) do
+			prop? :example, String, reader: :public
+		end
+
+		bare_property = bare.literal_properties[:example]
+		sugar_property = sugar.literal_properties[:example]
+
+		assert_equal bare_property.type, sugar_property.type
+		assert_equal bare_property.optional?, sugar_property.optional?
+		assert_equal bare_property.default, sugar_property.default
+		assert_equal bare.new.example, sugar.new.example
+	end
+
+	test "optional properties nest with nilable in either order" do
+		example = Class.new(Example) do
+			prop :undefined_or_nil, _Optional(_Nilable(String)), reader: :public
+			prop :nil_or_undefined, _Nilable(_Optional(String)), reader: :public
+		end
+
+		# Both spellings canonicalise to the same union, so both are omittable and
+		# both distinguish an omitted value from an explicit nil.
+		assert_equal(
+			example.literal_properties[:undefined_or_nil].type,
+			example.literal_properties[:nil_or_undefined].type,
+		)
+
+		assert_equal example.new.undefined_or_nil, Literal::Undefined
+		assert_equal example.new.nil_or_undefined, Literal::Undefined
+		assert_equal example.new(undefined_or_nil: nil, nil_or_undefined: nil).nil_or_undefined, nil
+	end
+
+	test "optional block params are still required" do
+		# Ruby resolves an omitted block to nil, so a block param can never receive
+		# Literal::Undefined and _Optional cannot make one omittable.
+		example = Class.new(Example) do
+			prop :example, _Optional(Proc), :&
+		end
+
+		assert_raises(Literal::TypeError) { example.new }
+		assert example.literal_properties[:example].required? { "Expected example to be required" }
+	end
+
+	test "only a union containing Literal::Undefined is optional" do
+		# Optionality is exact containment, not `===`. The sentinel is a truthy
+		# object, so `_Truthy === Literal::Undefined` is true — but merely matching
+		# the sentinel does not mean "omittable"; declaring it as a union member
+		# does. A bare `_Union` spelling is the same shape `_Optional` builds.
+		example = Class.new(Example) do
+			prop :declared, _Union(String, Literal::Undefined), reader: :public
+			prop :truthy, _Truthy
+			prop :any, _Any
+			prop :not_nil, _Not(nil)
+		end
+
+		# The sentinel matches these types, but matching is not containment.
+		assert example.literal_properties[:truthy].type === Literal::Undefined
+		assert example.literal_properties[:any].type === Literal::Undefined
+		assert example.literal_properties[:not_nil].type === Literal::Undefined
+
+		assert example.literal_properties[:declared].undefinable? { "Expected declared to be undefinable" }
+		refute example.literal_properties[:truthy].optional? { "Expected truthy to be required" }
+		refute example.literal_properties[:any].optional? { "Expected any to be required" }
+		refute example.literal_properties[:not_nil].optional? { "Expected not_nil to be required" }
+
+		assert_raises(ArgumentError) do
+			example.new(truthy: true, any: 1)
+		end
+
+		instance = example.new(truthy: true, any: 1, not_nil: 1)
+
+		assert_equal instance.declared, Literal::Undefined
+	end
+
+	test "the sentinel is an ordinary object, not a Module" do
+		# Literal::Undefined used to be a module, which made `Module === Undefined`
+		# true and silently turned Module-typed properties optional. As a plain
+		# object it satisfies no type about the object model.
+		refute Module === Literal::Undefined
+		refute Class === Literal::Undefined
+
+		example = Class.new(Example) do
+			prop :a, Module
+		end
+
+		assert_raises(ArgumentError) { example.new }
+		assert example.literal_properties[:a].required? { "Expected a to be required" }
+	end
+
+	test "a declared Literal::Undefined member takes precedence over nil" do
+		# A type can accept both sentinels. `_Optional` declares Literal::Undefined
+		# as a member, so an omitted value resolves to it and stays distinguishable
+		# from an explicit nil. `_Nilable(_Truthy)` only accepts it incidentally, so
+		# nil wins and the property behaves as it always has.
+		example = Class.new(Example) do
+			prop :declared, _Optional(_Nilable(String)), reader: :public
+			prop :incidental, _Nilable(_Truthy), reader: :public
+		end
+
+		assert example.literal_properties[:declared].undefinable? { "Expected declared to be undefinable" }
+		refute example.literal_properties[:incidental].undefinable? { "Expected incidental not to be undefinable" }
+
+		assert_equal example.new.declared, Literal::Undefined
+		assert_equal example.new.incidental, nil
+		assert_equal example.new(declared: nil).declared, nil
+	end
+
+	class Person
+		extend Literal::Properties
+
+		prop :name, String, :positional, reader: :public
+		prop :age, Integer, reader: :public
+	end
+
+	class Random
+		extend Literal::Properties
+		prop :begin, Integer, :positional, reader: :public
+	end
+
+	class WithDefaultBlock
+		extend Literal::Properties
+		prop :block, Proc, :&, reader: :public, default: -> { proc { "Hello" } }
+	end
+
+	class WithContextualDefault
+		extend Literal::Properties
+		prop :hello, String, reader: :private, default: "Hello"
+		prop :world, String, reader: :private, default: "World"
+		prop :combined, String, reader: :public, default: -> { "#{hello} #{world}" }
+	end
+
+	class WithNilableType
+		extend Literal::Properties
+		prop :name, Literal::Types::NilableType.new(String), :positional
+	end
+
+	class Empty
+		extend Literal::Properties
+	end
+
+	test "empty initializer" do
+		refute_raises { Empty.new }
+	end
+
+	test do
+		person = Person.new("John", age: 30)
+
+		assert_equal person.name, "John"
+		assert_equal person.age, 30
+	end
+
+	test "initializer type check" do
+		error = assert_raises(Literal::TypeError) { Person.new(1, age: "Joel") }
+
+		assert_equal error.message, <<~ERROR
+	  Type mismatch
+
+	  #{Person}#initialize (from #{error.backtrace[1]})
+	    name
+	      Expected: String
+	      Actual (Integer): 1
+	ERROR
+	end
+
+	test "initializer keyword check" do
+		random = Random.new(1)
+
+		assert_equal random.begin, 1
+	end
+
+	test "default block" do
+		object = WithDefaultBlock.new
+		assert_equal object.block.call, "Hello"
+
+		object = WithDefaultBlock.new { "World" }
+		assert_equal object.block.call, "World"
+	end
+
+	test "default value (as a proc) executes in the context of the receiver" do
+		object = WithContextualDefault.new
+		assert_equal object.combined, "Hello World"
+	end
+
+	test "properties are enumerable" do
+		props = Person.literal_properties
+		assert_equal props.size, 2
+		assert_equal props.map(&:name), [:name, :age]
+
+		props = Empty.literal_properties
+		assert_equal props.size, 0
+	end
+
+	test "introspection" do
+		prop1, prop2 = *Person.literal_properties
+
+		assert_equal prop1.name, :name
+		assert_equal prop1.type, String
+
+		assert(prop1.positional?) { "Expected name to be kind :positional" }
+		refute(prop1.keyword?) { "Expected name to not be kind :keyword" }
+		refute(prop1.block?) { "Expected name to not be kind :&" }
+		refute(prop1.splat?) { "Expected name to not be bind :*" }
+		refute(prop1.double_splat?) { "Expected name to not be kind :**" }
+		assert(prop1.required?) { "Expected name to be required" }
+		refute(prop1.optional?) { "Expected name to not be optional" }
+
+		assert_equal prop2.name, :age
+		assert_equal prop2.type, Integer
+
+		assert(prop2.keyword?) { "Expected age to be kind :keyword" }
+		assert(prop2.required?) { "Expected age to be required" }
+
+		props = WithDefaultBlock.literal_properties
+		prop_block = props.first
+		assert(prop_block.block?) { "Expected block to be kind :&" }
+		assert(prop_block.optional?) { "Expected block to be optional" }
+
+		props = WithNilableType.literal_properties
+		prop_name = props.first
+		assert(prop_name.optional?) { "Expected name to be optional" }
+	end
+
+	test "after initialize callback" do
+		callback_called = false
+
+		public_callback = Class.new do
+			extend Literal::Properties
+
+			prop :name, String
+
+			define_method :after_initialize do
+				callback_called = true
+			end
+		end
+
+		public_callback.new(name: "John")
+
+		assert callback_called
+
+		callback_called = false
+
+		protected_callback = Class.new do
+			extend Literal::Properties
+
+			prop :name, String
+
+			define_method :after_initialize do
+				callback_called = true
+			end
+
+			protected :after_initialize
+		end
+
+		protected_callback.new(name: "John")
+
+		assert callback_called
+
+		callback_called = false
+
+		private_callback = Class.new do
+			extend Literal::Properties
+
+			prop :name, String
+
+			define_method :after_initialize do
+				callback_called = true
+			end
+
+			private :after_initialize
+		end
+
+		private_callback.new(name: "John")
+
+		assert callback_called
+
+		callback_called = false
+
+		empty = Class.new do
+			extend Literal::Properties
+
+			define_method :after_initialize do
+				callback_called = true
+			end
+		end
+
+		empty.new
+
+		assert callback_called
+	end
+
+	class Friend < Person
+		prop :age, _Integer(18..), reader: :public
+	end
+
+	test "inheritance" do
+		friend = Friend.new("John", age: 30)
+
+		assert_equal friend.name, "John"
+		assert_equal friend.age, 30
+
+		assert_raises(Literal::TypeError) { Friend.new("John", age: 17) }
+	end
+
+	class WithPredicate
+		extend Literal::Properties
+
+		prop :enabled, _Boolean, predicate: :public
+	end
+
+	test "predicates" do
+		enabled = WithPredicate.new(enabled: true)
+		disabled = WithPredicate.new(enabled: false)
+
+		assert_equal enabled.enabled?, true
+		assert_equal disabled.enabled?, false
+	end
+
+	class WithOptionalPredicate
+		extend Literal::Properties
+
+		prop? :name, String, predicate: :public
+	end
+
+	test "predicates are false when an optional property is unset" do
+		assert_equal WithOptionalPredicate.new.name?, false
+		assert_equal WithOptionalPredicate.new(name: "Joel").name?, true
+	end
+
+	class WithWriters < Example
+		extend Literal::Properties
+
+		prop :example, _Nilable(String), writer: :public
+		prop :a, _Nilable(_Array(String)), writer: :public
+	end
+
+	test "writer type error" do
+		instance = WithWriters.new
+
+		error = assert_raises(Literal::TypeError) do
+			instance.example = 0
+		end
+
+		assert_equal error.message, <<~ERROR
+	  Type mismatch
+
+	  #{WithWriters}#example=(value) (from #{error.backtrace[1]})
+	    Expected: _Nilable(String)
+	    Actual (Integer): 0
+	ERROR
+
+		error = assert_raises(Literal::TypeError) do
+			instance.a = [1]
+		end
+
+		assert_equal error.message, <<~ERROR
+			Type mismatch
+
+			#{WithWriters}#a=(value) (from #{error.backtrace[1]})
+			    [0]
+			      Expected: String
+			      Actual (Integer): 1
+	ERROR
+	end
+
+	class Family
+		extend Literal::Properties
+
+		prop :members, _Array(_Map(person: Person, role: Symbol)), :positional, reader: :public
+		prop :last_reunion_year, _Nilable(Integer)
+	end
+
+	test "nested properties raise in initializer" do
+		error = assert_raises(Literal::TypeError) do
+			Family.new(
+				[
+					{
+						person: Person.new("Json", age: 1),
+						role: 1,
+					},
+					{
+						person: Person.new("John", age: 30),
+						role: "Father",
+					},
+					{
+						1 => 2,
+					},
+				],
+			)
+		end
+
+		assert_equal error.message, <<~ERROR
+			Type mismatch
+
+			#{Family}#initialize (from #{error.backtrace[1]})
+			  members
+			    [0]
+			      [:role]
+			        Expected: Symbol
+			        Actual (Integer): 1
+			    [1]
+			      [:role]
+			        Expected: Symbol
+			        Actual (String): "Father"
+			    [2]
+			      [:person]
+			        Expected: #{Person.inspect}
+			        Actual (NilClass): nil
+			      [:role]
+			        Expected: Symbol
+			        Actual (NilClass): nil
+			ERROR
+
+		error = assert_raises(Literal::TypeError) { Family.new([1]) }
+
+		assert_equal error.message, <<~ERROR
+			Type mismatch
+
+			#{Family}#initialize (from #{error.backtrace[1]})
+			  members
+			    [0]
+			      Expected: _Map(person: #{Person}, role: Symbol)
+			      Actual (Integer): 1
+	ERROR
+
+		error = assert_raises(Literal::TypeError) do
+			Family.new([], last_reunion_year: :two_thousand)
+		end
+
+		assert_equal error.message, <<~ERROR
+			Type mismatch
+
+			#{Family}#initialize (from #{error.backtrace[1]})
+			  last_reunion_year:
+			    Expected: _Nilable(Integer)
+			    Actual (Symbol): :two_thousand
+			ERROR
+	end
+
+	test "nested properties succeed in initializer" do
+		refute_raises do
+			Family.new(
+				[
+					{
+						person: Person.new("Json", age: 1),
+						role: :son,
+					},
+					{
+						person: Person.new("John", age: 30),
+						role: :brother,
+					},
+				],
+			)
+		end
+
+		refute_raises { Family.new([]) }
+		refute_raises { Family.new([], last_reunion_year: 0) }
+	end
+
+	test "#to_h" do
+		person = Person.new("John", age: 30)
+		assert_equal person.to_h, { name: "John", age: 30 }
+
+		empty = Empty.new
+		assert_equal empty.to_h, {}
+	end
+
+	# Each prop re-emits the shared methods — the initializer, to_h, and a Data's
+	# hash and == — and a check re-emits the writers it reads. Every one of
+	# those redefinitions must be pre-aliased, or `-w` drowns the caller in
+	# "method redefined" warnings.
+	test "generated methods redefine without warnings" do
+		warnings = []
+		capturing = true
+		interceptor = Module.new do
+			define_method(:warn) do |message, **kwargs|
+				capturing ? warnings << message : super(message, **kwargs)
+			end
+		end
+
+		Warning.singleton_class.prepend(interceptor)
+		verbose, $VERBOSE = $VERBOSE, true
+
+		begin
+			Class.new(Literal::Data) do
+				prop :x, Integer, reader: :public
+				prop :y, Integer, reader: :public
+			end
+
+			Class.new(Literal::Object) do
+				prop :min, Integer, writer: :public, reader: :private, predicate: :public
+				prop :max, Integer, writer: :public
+
+				check(:max, "must be greater than %{min}") { |max:, min:| max > min }
+			end
+		ensure
+			$VERBOSE = verbose
+			capturing = false
+		end
+
+		assert_equal [], warnings.grep(/method redefined/)
+	end
+
+	test "properties can be redefined with a literal type narrowing an inherited module" do
+		parent = Class.new(Example) do
+			prop :tags, Array
+		end
+
+		example = Class.new(parent) do
+			prop :tags, _Array(String)
+		end
+
+		refute_raises { example.new(tags: ["a"]) }
+		assert_raises(Literal::TypeError) { example.new(tags: [1]) }
+	end
+
+	test "slice works on a class that extends Literal::Properties directly" do
+		parent = Class.new do
+			def greeting = "hello"
+		end
+
+		shape = Class.new(parent) do
+			extend Literal::Properties
+
+			prop :a, String, reader: :public
+			prop :b, String
+		end
+
+		sliced = shape.slice(:a)
+
+		assert_equal sliced.superclass, parent
+		assert_equal sliced.literal_properties.map(&:name), [:a]
+		assert_equal sliced.new(a: "x").a, "x"
+		assert_equal sliced.new(a: "x").greeting, "hello"
+		assert_equal shape.slice(:a, :b).superclass, shape
+	end
+
+	test "prop refuses a second splat, double splat or block" do
+		[:*, :**, :&].each do |kind|
+			error = assert_raises(Literal::ArgumentError) do
+				Class.new(Literal::Data) do
+					prop :a, _Any, kind
+					prop :b, _Any, kind
+				end
+			end
+
+			assert error.message.include?(":b can't be a #{kind.inspect} property")
+		end
+	end
+
+	test "prop refuses optional positional properties Ruby can't place" do
+		klass = Class.new(Literal::Data) do
+			prop :a, String, :positional, default: "a"
+			prop :b, String, :positional
+		end
+
+		assert_raises(Literal::ArgumentError) { klass.prop :c, String, :positional, default: "c" }
+		assert_raises(Literal::ArgumentError) { klass.prop :c, Array, :* }
+		assert_equal klass.literal_properties.map(&:name), [:a, :b]
+		assert_equal klass.new("b").to_h, { a: "a", b: "b" }
+	end
+
+	test "declaring an optional positional prop doesn't materialize its deferred type" do
+		klass = Class.new(Literal::Data) do
+			prop? :a, _Deferred { PositionalForwardReference }, :positional
+			prop :b, _Optional(_Deferred { PositionalForwardReference }), :positional
+		end
+
+		assert_equal klass.literal_properties.map(&:optional?), [true, true]
+	end
+
+	test "each prop's signature is judged as it is declared" do
+		parent = Class.new(Literal::Data) do
+			prop :a, _Nilable(String), :positional
+			prop :b, _Nilable(String), :positional
+			prop :c, _Array(String), :*
+		end
+
+		assert_raises(Literal::ArgumentError) do
+			Class.new(parent) { prop :b, String, :positional }
+		end
+
+		child = Class.new(parent) do
+			prop :a, String, :positional
+			prop :b, String, :positional
+		end
+
+		assert_equal child.new("a", "b", "c").to_h, { a: "a", b: "b", c: ["c"] }
+
+		forward = Class.new(Literal::Data) do
 			prop :a, _Deferred { const_get(:Later) }, :positional
 			const_set(:Later, String)
 		end
+
+		assert_equal forward.new("a").a, "a"
 	end
 
-	assert_equal forward.new("a").a, "a"
+	test "props can be named after Ruby keywords" do
+		[:class, :end, :__FILE__, :__LINE__, :__ENCODING__].each do |name|
+			keyword = Class.new(Literal::Data) { prop name, Integer, reader: false }
+			positional = Class.new(Literal::Data) { prop name, Integer, :positional, reader: false }
 
-	assert_raises(Literal::ArgumentError) do
-		Class.new(Literal::Data) do
-			props do
-				prop :a, String, :positional, default: "a"
-				prop :b, String, :positional
-				prop :c, Array, :*
+			assert_equal keyword.new(name => 5).to_h, { name => 5 }
+			assert_equal positional.new(5).to_h, { name => 5 }
+		end
+	end
+
+	test "prop refuses names that aren't Ruby local variable names" do
+		["name", :defined?, :BEGIN, :END, :Name, :foo?, :"a-b", :_1, :"a = 1; b"].each do |name|
+			error = assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { prop name, String } }
+
+			assert error.message.include?("must be a Symbol that Ruby accepts as a local variable name")
+		end
+
+		assert_raises(Literal::ArgumentError) { Literal::Data.define("a = 1; b": String) }
+	end
+
+	test "prop accepts valid names in other encodings where Ruby can compile them" do
+		name = "café".encode(Encoding::ISO_8859_1).to_sym
+		# TruffleRuby reads code as UTF-8, so its parameter would be :café in UTF-8.
+		compilable = Module.new.module_eval("instance_method(def probe(#{name.name}:) = nil)").parameters.dig(0, 1) == name
+
+		if compilable
+			klass = Class.new(Literal::Data) { prop name, String }
+
+			assert_equal klass.new(name => "x").to_h, { name => "x" }
+		else
+			assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { prop name, String } }
+		end
+	end
+
+	test "prop? refuses a default" do
+		assert_raises(Literal::ArgumentError) do
+			Class.new do
+				extend Literal::Properties
+
+				prop? :example, String, default: "x"
 			end
 		end
 	end
-end
 
-test "props can be named after Ruby keywords" do
-	[:class, :end, :__FILE__, :__LINE__, :__ENCODING__].each do |name|
-		keyword = Class.new(Literal::Data) { prop name, Integer, reader: false }
-		positional = Class.new(Literal::Data) { prop name, Integer, :positional, reader: false }
+	# Names the generated code and Literal's internals once dispatched through or
+	# used as locals.
+	COLLIDING_NAMES = %i[
+		class
+		__class__
+		__property__
+		__properties__
+		binding
+		caller
+		raise
+		error
+		freeze
+		dup
+		__send__
+		instance_exec
+		instance_variable_get
+		instance_variable_set
+		instance_variable_defined
+		remove_instance_variable
+		respond_to
+		frozen
+		block_given
+		value
+	].freeze
 
-		assert_equal keyword.new(name => 5).to_h, { name => 5 }
-		assert_equal positional.new(5).to_h, { name => 5 }
+	test "props can be named after anything Literal's internals use" do
+		data = Class.new(Literal::Data) do
+			COLLIDING_NAMES.each { |name| prop name, String }
+			prop :end, String, default: "end"
+		end
+
+		struct = Class.new(Literal::Struct) do
+			COLLIDING_NAMES.each { |name| prop name, String, predicate: :public }
+			prop :initialized, String, default: -> { "#{instance_variable_get}!" }
+			check(:raise, "must not be empty") { |raise:| !raise.empty? }
+		end
+
+		values = COLLIDING_NAMES.to_h { |name| [name, name.name] }
+
+		value = data.new(**values)
+
+		assert Literal::FROZEN.bind_call(value)
+		assert_equal value.to_h, { **values, end: "end" }
+		assert_equal value.class, "class"
+		assert_equal value[:freeze], "freeze"
+		assert_equal value, data.new(**values)
+		assert_equal value.hash, data.new(**values).hash
+		refute_equal value, data.new(**values, raise: "x")
+		assert_equal data.from_props(value.to_h), value
+		assert_equal data.from_pack(value.as_pack), value
+		assert_equal data.build(**values), value
+		assert_equal Literal::Draft(data).check(values).value!, value
+
+		error = assert_raises(Literal::TypeError) { data.new(**values, binding: 1) }
+		assert error.message.include?("#initialize")
+
+		instance = struct.new(**values)
+
+		assert instance.respond_to?
+		assert instance.frozen?
+
+		assert_equal instance.initialized, "instance_variable_get!"
+		instance[:raise] = "raised"
+		assert_equal instance.raise, "raised"
+		assert_raises(Literal::TypeError) { instance.freeze = 1 }
+		assert_raises(Literal::CheckError) { instance[:raise] = "" }
+		assert_equal Literal::DUP.bind_call(instance), instance
 	end
-end
 
-test "prop refuses names that aren't Ruby local variable names" do
-	["name", :defined?, :BEGIN, :END, :Name, :foo?, :"a-b", :_1, :"a = 1; b"].each do |name|
-		error = assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { prop name, String } }
+	test "positional and keyword props can share an escape" do
+		keyword = Class.new(Literal::Data) do
+			prop :class, String
+			prop :__class__, String
+			prop :___class__, String
+		end
 
-		assert error.message.include?("must be a Symbol that Ruby accepts as a local variable name")
+		positional = Class.new(Literal::Data) do
+			prop :class, String, :positional
+			prop :__class__, String, :positional
+		end
+
+		assert_equal keyword.new(class: "a", __class__: "b", ___class__: "c").to_h, { class: "a", __class__: "b", ___class__: "c" }
+		assert_equal positional.new("a", "b").to_h, { class: "a", __class__: "b" }
 	end
 
-	assert_raises(Literal::ArgumentError) { Literal::Data.define("a = 1; b": String) }
-end
+	test "a reader or predicate that would replace a method Literal relies on is refused" do
+		[
+			[Literal::Struct, :to_h, {}],
+			[Literal::Struct, :hash, {}],
+			[Literal::Struct, :deconstruct, {}],
+			[Literal::Struct, :marshal_dump, {}],
+			[Literal::Struct, :as_pack, {}],
+			[Literal::Struct, :__literal_run_checks__, {}],
+			[Literal::Data, :initialize_copy, {}],
+			[Literal::Data, :initialize, {}],
+			[Literal::Data, :eql, { reader: false, predicate: :public }],
+			[Literal::Object, :to_hash, { reader: :public }],
+		].each do |base, name, options|
+			error = assert_raises(Literal::ArgumentError) { Class.new(base) { prop name, String, **options } }
+			assert error.message.include?("which Literal relies on")
+			assert error.message.include?(options[:predicate] ? "predicate: false" : "reader: false")
+		end
 
-test "prop accepts valid names in other encodings where Ruby can compile them" do
-	name = "café".encode(Encoding::ISO_8859_1).to_sym
-	# TruffleRuby reads code as UTF-8, so its parameter would be :café in UTF-8.
-	compilable = Module.new.module_eval("instance_method(def probe(#{name.name}:) = nil)").parameters.dig(0, 1) == name
+		error = assert_raises(Literal::ArgumentError) { Class.new(Literal::Enum(Integer)) { prop :succ, String } }
+		assert error.message.include?("Literal::Enum#succ")
 
-	if compilable
-		klass = Class.new(Literal::Data) { prop name, String }
-
-		assert_equal klass.new(name => "x").to_h, { name => "x" }
-	else
-		assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { prop name, String } }
+		assert_equal Class.new(Literal::Struct) { prop :hash, String, reader: false }.new(hash: "x")[:hash], "x"
 	end
-end
 
-test "prop? refuses a default" do
-	assert_raises(Literal::ArgumentError) do
-		Class.new do
-			extend Literal::Properties
+	test "readers may replace Ruby's own methods" do
+		klass = Class.new(Literal::Data) do
+			prop :method, String
+			prop :display, String
+			prop :format, String
+			prop :class, String
+		end
 
-			prop? :example, String, default: "x"
+		value = klass.new(method: "a", display: "b", format: "c", class: "d")
+
+		assert_equal [value.method, value.display, value.format, value.class], ["a", "b", "c", "d"]
+	end
+
+	test "props are refused once the shape has an instance" do
+		[Literal::Data, Literal::Struct, Literal::Object].each do |base|
+			klass = Class.new(base) { prop :name, String }
+			klass.new(name: "Joel")
+
+			error = assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
+			assert error.message.include?("because it already has instances")
 		end
 	end
-end
 
-# Names the generated code and Literal's internals once dispatched through or
-# used as locals.
-COLLIDING_NAMES = %i[
-	class
-	__class__
-	__property__
-	__properties__
-	binding
-	caller
-	raise
-	error
-	freeze
-	dup
-	__send__
-	instance_exec
-	instance_variable_get
-	instance_variable_set
-	instance_variable_defined
-	remove_instance_variable
-	respond_to
-	frozen
-	block_given
-	value
-].freeze
+	test "an instance built without new closes the shape too" do
+		from_props = Class.new(Literal::Data) { prop :name, String }
+		from_props.from_props(name: "Joel")
+		assert_raises(Literal::ArgumentError) { from_props.prop :age, Integer }
 
-test "props can be named after anything Literal's internals use" do
-	data = Class.new(Literal::Data) do
-		COLLIDING_NAMES.each { |name| prop name, String }
-		prop :end, String, default: "end"
+		packed = Class.new(Literal::Data) { prop :name, String }
+		payload = Class.new(Literal::Data) { prop :name, String }.new(name: "Joel").as_pack
+		packed.from_pack(payload)
+		assert_raises(Literal::ArgumentError) { packed.prop :age, Integer }
 	end
 
-	struct = Class.new(Literal::Struct) do
-		COLLIDING_NAMES.each { |name| prop name, String, predicate: :public }
-		prop :initialized, String, default: -> { "#{instance_variable_get}!" }
-		check(:raise, "must not be empty") { |raise:| !raise.empty? }
+	test "a subclass's instance closes its ancestors, but a parent's leaves a subclass open" do
+		parent = Class.new(Literal::Data) { prop :name, String }
+		child = Class.new(parent)
+		child.new(name: "Joel")
+
+		assert_raises(Literal::ArgumentError) { parent.prop :age, Integer }
+		assert_raises(Literal::ArgumentError) { child.prop :age, Integer }
+
+		open = Class.new(Literal::Data) { prop :name, String }
+		open.new(name: "Joel")
+		late = Class.new(open) { prop :age, Integer }
+
+		assert_equal late.new(name: "Joel", age: 30).to_h, { name: "Joel", age: 30 }
 	end
 
-	values = COLLIDING_NAMES.to_h { |name| [name, name.name] }
-
-	value = data.new(**values)
-
-	assert Literal::FROZEN.bind_call(value)
-	assert_equal value.to_h, { **values, end: "end" }
-	assert_equal value.class, "class"
-	assert_equal value[:freeze], "freeze"
-	assert_equal value, data.new(**values)
-	assert_equal value.hash, data.new(**values).hash
-	refute_equal value, data.new(**values, raise: "x")
-	assert_equal data.from_props(value.to_h), value
-	assert_equal data.from_pack(value.as_pack), value
-	assert_equal data.build(**values), value
-	assert_equal Literal::Draft(data).check(values).value!, value
-
-	error = assert_raises(Literal::TypeError) { data.new(**values, binding: 1) }
-	assert error.message.include?("#initialize")
-
-	instance = struct.new(**values)
-
-	assert instance.respond_to?
-	assert instance.frozen?
-
-	assert_equal instance.initialized, "instance_variable_get!"
-	instance[:raise] = "raised"
-	assert_equal instance.raise, "raised"
-	assert_raises(Literal::TypeError) { instance.freeze = 1 }
-	assert_raises(Literal::CheckError) { instance[:raise] = "" }
-	assert_equal Literal::DUP.bind_call(instance), instance
-end
-
-test "positional and keyword props can share an escape" do
-	keyword = Class.new(Literal::Data) do
-		prop :class, String
-		prop :__class__, String
-		prop :___class__, String
-	end
-
-	positional = Class.new(Literal::Data) do
-		prop :class, String, :positional
-		prop :__class__, String, :positional
-	end
-
-	assert_equal keyword.new(class: "a", __class__: "b", ___class__: "c").to_h, { class: "a", __class__: "b", ___class__: "c" }
-	assert_equal positional.new("a", "b").to_h, { class: "a", __class__: "b" }
-end
-
-test "a reader or predicate that would replace a method Literal relies on is refused" do
-	[
-		[Literal::Struct, :to_h, {}],
-		[Literal::Struct, :hash, {}],
-		[Literal::Struct, :deconstruct, {}],
-		[Literal::Struct, :marshal_dump, {}],
-		[Literal::Struct, :as_pack, {}],
-		[Literal::Struct, :__literal_run_checks__, {}],
-		[Literal::Data, :initialize_copy, {}],
-		[Literal::Data, :initialize, {}],
-		[Literal::Data, :eql, { reader: false, predicate: :public }],
-		[Literal::Object, :to_hash, { reader: :public }],
-	].each do |base, name, options|
-		error = assert_raises(Literal::ArgumentError) { Class.new(base) { prop name, String, **options } }
-		assert error.message.include?("which Literal relies on")
-		assert error.message.include?(options[:predicate] ? "predicate: false" : "reader: false")
-	end
-
-	error = assert_raises(Literal::ArgumentError) { Class.new(Literal::Enum(Integer)) { prop :succ, String } }
-	assert error.message.include?("Literal::Enum#succ")
-
-	assert_equal Class.new(Literal::Struct) { prop :hash, String, reader: false }.new(hash: "x")[:hash], "x"
-end
-
-test "readers may replace Ruby's own methods" do
-	klass = Class.new(Literal::Data) do
-		prop :method, String
-		prop :display, String
-		prop :format, String
-		prop :class, String
-	end
-
-	value = klass.new(method: "a", display: "b", format: "c", class: "d")
-
-	assert_equal [value.method, value.display, value.format, value.class], ["a", "b", "c", "d"]
-end
-
-test "props are refused once the shape has an instance" do
-	[Literal::Data, Literal::Struct, Literal::Object].each do |base|
-		klass = Class.new(base) { prop :name, String }
+	test "checks are refused once a shape that can't judge its instances has one" do
+		klass = Class.new(Literal::Data) { prop :name, String }
 		klass.new(name: "Joel")
 
-		error = assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
+		error = assert_raises(Literal::ArgumentError) { klass.check(:name, "must not be empty") { |name:| !name.empty? } }
 		assert error.message.include?("because it already has instances")
 	end
-end
 
-test "an instance built without new closes the shape too" do
-	from_props = Class.new(Literal::Data) { prop :name, String }
-	from_props.from_props(name: "Joel")
-	assert_raises(Literal::ArgumentError) { from_props.prop :age, Integer }
+	test "an enum's props are refused after its first member, its checks are not" do
+		enum = Class.new(Literal::Enum(Integer)) do
+			prop :label, String
+			const_set(:A, new(1, label: "a"))
+		end
 
-	packed = Class.new(Literal::Data) { prop :name, String }
-	payload = Class.new(Literal::Data) { prop :name, String }.new(name: "Joel").as_pack
-	packed.from_pack(payload)
-	assert_raises(Literal::ArgumentError) { packed.prop :age, Integer }
-end
-
-test "a subclass's instance closes its ancestors, but a parent's leaves a subclass open" do
-	parent = Class.new(Literal::Data) { prop :name, String }
-	child = Class.new(parent)
-	child.new(name: "Joel")
-
-	assert_raises(Literal::ArgumentError) { parent.prop :age, Integer }
-	assert_raises(Literal::ArgumentError) { child.prop :age, Integer }
-
-	open = Class.new(Literal::Data) { prop :name, String }
-	open.new(name: "Joel")
-	late = Class.new(open) { prop :age, Integer }
-
-	assert_equal late.new(name: "Joel", age: 30).to_h, { name: "Joel", age: 30 }
-end
-
-test "checks are refused once a shape that can't judge its instances has one" do
-	klass = Class.new(Literal::Data) { prop :name, String }
-	klass.new(name: "Joel")
-
-	error = assert_raises(Literal::ArgumentError) { klass.check(:name, "must not be empty") { |name:| !name.empty? } }
-	assert error.message.include?("because it already has instances")
-end
-
-test "an enum's props are refused after its first member, its checks are not" do
-	enum = Class.new(Literal::Enum(Integer)) do
-		prop :label, String
-		const_set(:A, new(1, label: "a"))
+		assert_raises(Literal::ArgumentError) { enum.prop :rank, Integer }
+		enum.check(:label, "must not be empty") { |label:| !label.empty? }
 	end
 
-	assert_raises(Literal::ArgumentError) { enum.prop :rank, Integer }
-	enum.check(:label, "must not be empty") { |label:| !label.empty? }
-end
+	test "watching for the first instance costs new nothing after it" do
+		klass = Class.new(Literal::Data) { prop :name, String }
 
-test "watching for the first instance costs new nothing after it" do
-	klass = Class.new(Literal::Data) { prop :name, String }
-
-	refute_equal klass.method(:new).owner, Class
-	klass.new(name: "Joel")
-	assert_equal klass.method(:new).owner, Class
-end
-
-test "a failed construction leaves the shape open" do
-	klass = Class.new(Literal::Data) { prop :name, String }
-
-	assert_raises(ArgumentError) { klass.new }
-	assert_raises(Literal::TypeError) { klass.from_props(name: 1) }
-
-	klass.prop :age, Integer, default: 0
-	assert_equal klass.new(name: "Joel").to_h, { name: "Joel", age: 0 }
-
-	abandoned = Class.new(Literal::Struct) do
-		prop :name, String
-		define_method(:after_initialize) { throw :abandon if name.empty? }
+		refute_equal klass.method(:new).owner, Class
+		klass.new(name: "Joel")
+		assert_equal klass.method(:new).owner, Class
 	end
 
-	catch(:abandon) { abandoned.new(name: "") }
-	abandoned.prop :age, Integer, default: 0
-	assert_equal abandoned.new(name: "Joel").to_h, { name: "Joel", age: 0 }
-end
+	test "a failed construction leaves the shape open" do
+		klass = Class.new(Literal::Data) { prop :name, String }
 
-test "from_props and from_pack failing after assignment leave the shape open" do
-	klass = Class.new(Literal::Data) do
-		prop :name, String
-		check(:name, "must be filled") { |name:| !name.empty? }
+		assert_raises(ArgumentError) { klass.new }
+		assert_raises(Literal::TypeError) { klass.from_props(name: 1) }
+
+		klass.prop :age, Integer, default: 0
+		assert_equal klass.new(name: "Joel").to_h, { name: "Joel", age: 0 }
+
+		abandoned = Class.new(Literal::Struct) do
+			prop :name, String
+			define_method(:after_initialize) { throw :abandon if name.empty? }
+		end
+
+		catch(:abandon) { abandoned.new(name: "") }
+		abandoned.prop :age, Integer, default: 0
+		assert_equal abandoned.new(name: "Joel").to_h, { name: "Joel", age: 0 }
 	end
 
-	assert_raises(NameError) { klass.from_props(name: "Joel", unknown: 1) }
-	assert_raises(Literal::CheckError) { klass.from_props(name: "") }
-	assert_raises(Literal::CheckError) { klass.from_pack([2, { name: "" }, true, [].freeze]) }
+	test "from_props and from_pack failing after assignment leave the shape open" do
+		klass = Class.new(Literal::Data) do
+			prop :name, String
+			check(:name, "must be filled") { |name:| !name.empty? }
+		end
 
-	klass.prop :age, Integer, default: 0
-	assert_equal klass.from_props(name: "Joel").to_h, { name: "Joel", age: 0 }
-	assert_raises(Literal::ArgumentError) { klass.prop :email, String }
-end
+		assert_raises(NameError) { klass.from_props(name: "Joel", unknown: 1) }
+		assert_raises(Literal::CheckError) { klass.from_props(name: "") }
+		assert_raises(Literal::CheckError) { klass.from_pack([2, { name: "" }, true, [].freeze]) }
 
-test "props are refused while the first instance is under construction" do
-	late_prop = -> (shape) do
-		shape.prop :age, Integer
-		:added
-	rescue Literal::ArgumentError
-		:refused
+		klass.prop :age, Integer, default: 0
+		assert_equal klass.from_props(name: "Joel").to_h, { name: "Joel", age: 0 }
+		assert_raises(Literal::ArgumentError) { klass.prop :email, String }
 	end
 
-	initialized = Class.new(Literal::Struct) do
-		prop :name, String
-		define_method(:after_initialize) { @age_prop = late_prop.(self.class) }
+	test "props are refused while the first instance is under construction" do
+		late_prop = -> (shape) do
+			shape.prop :age, Integer
+			:added
+		rescue Literal::ArgumentError
+			:refused
+		end
+
+		initialized = Class.new(Literal::Struct) do
+			prop :name, String
+			define_method(:after_initialize) { @age_prop = late_prop.(self.class) }
+		end
+
+		assert_equal initialized.new(name: "Joel").instance_variable_get(:@age_prop), :refused
+
+		results = []
+		checked = Class.new(Literal::Data) do
+			prop :name, String
+			check(:name, "must be filled") { |name:| results << late_prop.(self) }
+		end
+
+		checked.from_props(name: "Joel")
+		checked.from_pack(checked.new(name: "Joel").as_pack)
+		assert_equal results, [:refused, :refused, :refused]
+
+		started, finish = Queue.new, Queue.new
+		waiting = Class.new(Literal::Struct) do
+			prop :name, String
+			define_method(:after_initialize) do
+				started << true
+				finish.pop
+			end
+		end
+
+		constructing = Thread.new { waiting.new(name: "Joel") }
+		started.pop
+		assert_equal late_prop.(waiting), :refused
+		finish << true
+		constructing.join
 	end
 
-	assert_equal initialized.new(name: "Joel").instance_variable_get(:@age_prop), :refused
+	test "watching for the first instance keeps new private where the shape made it so" do
+		own = Class.new(Literal::Data) do
+			prop :name, String
+			private_class_method :new
 
-	results = []
-	checked = Class.new(Literal::Data) do
-		prop :name, String
-		check(:name, "must be filled") { |name:| results << late_prop.(self) }
-	end
+			def self.named(name) = new(name:)
+		end
 
-	checked.from_props(name: "Joel")
-	checked.from_pack(checked.new(name: "Joel").as_pack)
-	assert_equal results, [:refused, :refused, :refused]
+		inherited = Class.new(own)
 
-	started, finish = Queue.new, Queue.new
-	waiting = Class.new(Literal::Struct) do
-		prop :name, String
-		define_method(:after_initialize) do
-			started << true
-			finish.pop
+		[own, inherited].each do |klass|
+			assert_raises(NoMethodError) { klass.new(name: "Joel") }
+			assert_equal klass.named("Joel").name, "Joel"
+			assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
 		end
 	end
 
-	constructing = Thread.new { waiting.new(name: "Joel") }
-	started.pop
-	assert_equal late_prop.(waiting), :refused
-	finish << true
-	constructing.join
-end
+	test "a default without frozen? of its own is checked as frozen" do
+		default = Literal::FREEZE.bind_call(BasicObject.new)
+		klass = Class.new(Literal::Struct) { prop :value, BasicObject, default: }
 
-test "watching for the first instance keeps new private where the shape made it so" do
-	own = Class.new(Literal::Data) do
-		prop :name, String
-		private_class_method :new
-
-		def self.named(name) = new(name:)
+		assert Literal::EQUAL.bind_call(klass.new.value, default)
+		assert_raises(Literal::ArgumentError) { Class.new(Literal::Struct) { prop :value, BasicObject, default: BasicObject.new } }
 	end
 
-	inherited = Class.new(own)
+	test "consts are assigned at initialization and are not initializer parameters" do
+		example = Class.new(Example) do
+			const :kind, "example", reader: :public
+			prop :name, String
+		end
 
-	[own, inherited].each do |klass|
-		assert_raises(NoMethodError) { klass.new(name: "Joel") }
-		assert_equal klass.named("Joel").name, "Joel"
-		assert_raises(Literal::ArgumentError) { klass.prop :age, Integer }
+		instance = example.new(name: "Joel")
+
+		assert_equal instance.kind, "example"
+		refute instance.respond_to?(:kind=)
+		assert_raises(ArgumentError) { example.new(name: "Joel", kind: "other") }
 	end
-end
 
-test "a default without frozen? of its own is checked as frozen" do
-	default = Literal::FREEZE.bind_call(BasicObject.new)
-	klass = Class.new(Literal::Struct) { prop :value, BasicObject, default: }
+	test "a const value must be a frozen object, not nil or a Proc" do
+		assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, [:unfrozen] } }
+		assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, nil } }
+		assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, -> { "example" } } }
+	end
 
-	assert Literal::EQUAL.bind_call(klass.new.value, default)
-	assert_raises(Literal::ArgumentError) { Class.new(Literal::Struct) { prop :value, BasicObject, default: BasicObject.new } }
+	test "a const string is interned rather than rejected when unfrozen" do
+		example = Class.new(Example) { const :kind, +"example", reader: :public }
+
+		assert example.new.kind.frozen?
+		assert_equal example.new.kind, "example"
+	end
+
+	test "a const module is matched by identity rather than by its instances" do
+		example = Class.new(Literal::Data) { const :kind, Class }
+
+		assert_equal example.new.kind, Class
+		assert_equal example.from_props(kind: Class).kind, Class
+		assert_raises(Literal::TypeError) { example.from_props(kind: String) }
+	end
+
+	test "a const value its own === rejects is matched by identity" do
+		pattern = /example/
+		example = Class.new(Literal::Data) { const :pattern, pattern }
+
+		assert_equal example.new.pattern, pattern
+		assert_equal example.from_props(pattern:).pattern, pattern
+	end
+
+	test "a const cannot have a writer or a coercion" do
+		assert_raises(Literal::ArgumentError) do
+			Class.new(Example) { prop :kind, "example", :const, writer: :public, default: "example" }
+		end
+
+		assert_raises(Literal::ArgumentError) do
+			Class.new(Example) { prop(:kind, "example", :const, default: "example") { |value| value } }
+		end
+	end
+
+	test "a const cannot be redefined as a parameter" do
+		parent = Class.new(Example) { const :kind, "example" }
+
+		error = assert_raises(Literal::ArgumentError) { Class.new(parent) { prop :kind, String } }
+
+		assert error.message.include?("must match the inherited kind :const")
+	end
+
+	test "a const that isn't a literal is matched by identity, not its own ===" do
+		any = Class.new(Literal::Data) { const :kind, _Any }
+		basic = Literal::FREEZE.bind_call(BasicObject.new)
+		opaque = Class.new(Literal::Data) { const :kind, basic }
+
+		assert_raises(Literal::TypeError) { any.from_props(kind: :other) }
+		assert opaque.from_props(kind: basic).kind.equal?(basic)
+	end
+
+	test "a const declared through prop must be given its value as its type" do
+		assert_raises(Literal::ArgumentError) do
+			Class.new(Example) { prop :version, Integer, :const, default: "one" }
+		end
+	end
+
+	test "a const refuses a block" do
+		assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { const(:kind, "example") { |value| value } } }
+	end
+
+	test "defaults can read consts" do
+		example = Class.new(Literal::Data) do
+			prop :label, String, default: -> { "#{kind}!" }
+			const :kind, "example"
+		end
+
+		assert_equal example.new.label, "example!"
+	end
+
+	test "a const has no parameter" do
+		example = Class.new(Example) { const :kind, "example" }
+
+		assert_nil example.literal_properties[:kind].param
+	end
 end

@@ -1,49 +1,51 @@
 # frozen_string_literal: true
 
-include Literal::Types
+class KindTypeTest < Quickdraw::Test
+	include Literal::Types
 
-test "===" do
-	assert numeric_kind = _Kind(Numeric)
-	assert numeric_kind === Numeric
-	assert numeric_kind === Integer
-	assert numeric_kind === 1
-	assert numeric_kind === _Integer(1..)
-	assert numeric_kind === _Intersection(Integer, 1..5)
-	assert numeric_kind === _Constraint(Integer, odd?: true)
-	assert numeric_kind === Float
-	assert numeric_kind === _Union(Integer, Float)
-	assert numeric_kind === _Never
-	assert numeric_kind === _Intersection(Integer, Numeric)
-	assert numeric_kind === _Deferred { Integer }
+	test "===" do
+		assert numeric_kind = _Kind(Numeric)
+		assert numeric_kind === Numeric
+		assert numeric_kind === Integer
+		assert numeric_kind === 1
+		assert numeric_kind === _Integer(1..)
+		assert numeric_kind === _Intersection(Integer, 1..5)
+		assert numeric_kind === _Constraint(Integer, odd?: true)
+		assert numeric_kind === Float
+		assert numeric_kind === _Union(Integer, Float)
+		assert numeric_kind === _Never
+		assert numeric_kind === _Intersection(Integer, Numeric)
+		assert numeric_kind === _Deferred { Integer }
 
-	refute numeric_kind === String
-	refute numeric_kind === _Union(Integer, String)
-	refute numeric_kind === _Union(Integer, nil)
-	refute numeric_kind === _Nilable(Integer)
-	refute numeric_kind === _Intersection(String, _Any?)
-	refute numeric_kind === _Deferred { String }
+		refute numeric_kind === String
+		refute numeric_kind === _Union(Integer, String)
+		refute numeric_kind === _Union(Integer, nil)
+		refute numeric_kind === _Nilable(Integer)
+		refute numeric_kind === _Intersection(String, _Any?)
+		refute numeric_kind === _Deferred { String }
 
-	assert _Kind(Module) === Class
-	assert _Kind(Module) === Module
-	refute _Kind(String) === Class
+		assert _Kind(Module) === Class
+		assert _Kind(Module) === Module
+		refute _Kind(String) === Class
 
-	assert _Kind(_Array(Integer)) === _Array(_Integer(1))
-	assert _Kind(_Array(numeric_kind.type)) === _Array(1)
+		assert _Kind(_Array(Integer)) === _Array(_Integer(1))
+		assert _Kind(_Array(numeric_kind.type)) === _Array(1)
 
-	union_type = _Union(String, Integer)
-	union_kind = union_type.map { |it| _Kind(it) }
+		union_type = _Union(String, Integer)
+		union_kind = union_type.map { |it| _Kind(it) }
 
-	assert union_kind === Integer
-end
+		assert union_kind === Integer
+	end
 
-test "hierarchy" do
-	assert_subtype _Kind(Integer), _Kind(Integer)
-	assert_subtype _Kind(Integer), _Kind(Numeric)
-	assert_subtype _Kind(_String(length: 10)), _Kind(_String(length: 5..15))
-	assert_subtype _Class(Integer), _Kind(Numeric)
-	assert_subtype _Descendant(Numeric), _Kind(Numeric)
+	test "hierarchy" do
+		assert_subtype _Kind(Integer), _Kind(Integer)
+		assert_subtype _Kind(Integer), _Kind(Numeric)
+		assert_subtype _Kind(_String(length: 10)), _Kind(_String(length: 5..15))
+		assert_subtype _Class(Integer), _Kind(Numeric)
+		assert_subtype _Descendant(Numeric), _Kind(Numeric)
 
-	refute_subtype _Kind(Numeric), _Kind(Integer)
-	refute_subtype _Kind(Integer), _Kind(String)
-	refute_subtype _Kind(_Nilable(Integer)), _Kind(Numeric)
+		refute_subtype _Kind(Numeric), _Kind(Integer)
+		refute_subtype _Kind(Integer), _Kind(String)
+		refute_subtype _Kind(_Nilable(Integer)), _Kind(Numeric)
+	end
 end

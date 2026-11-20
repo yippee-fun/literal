@@ -11,3 +11,4 @@
 .rubocop-*
 *.gem
 Gemfile.lock
+/.quickdraw/

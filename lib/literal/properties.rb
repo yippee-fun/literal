@@ -188,9 +188,10 @@ module Literal::Properties
 	# The checks whose outcome depends on one property — what its writer
 	# enforces on every assignment.
 	def literal_checks_for(name)
-		return __literal_checks_for__(name) if frozen?
-
 		table = (@literal_checks_for ||= {})
+		# Complete once the shape is finished, so it is only ever read.
+		return table.fetch(name, NO_CHECKS) if table.frozen?
+
 		table[name] ||= __literal_checks_for__(name)
 	end
 
@@ -213,6 +214,10 @@ module Literal::Properties
 		prop(name, _Union(type, Literal::Undefined), kind, **options, &coercion)
 	end
 
+	def const(name, value, reader: false, description: nil, &)
+		prop(name, value, :const, reader:, writer: false, default: value, description:, &)
+	end
+
 	def prop(name, type, kind = :keyword, reader: false, writer: false, predicate: false, default: nil, description: nil, &coercion)
 		unless Literal::Property.valid_name?(name)
 			raise Literal::ArgumentError.new("The property name #{name.inspect} must be a Symbol that Ruby accepts as a local variable name.")
@@ -228,7 +233,40 @@ module Literal::Properties
 			seal = pipeline.seal_proc
 		end
 
-		if default && !(Proc === default || Literal::FROZEN.bind_call(default))
+		if :const == kind
+			if nil == default || Proc === default
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be a frozen object, not nil or a Proc.")
+			end
+
+			unless type.equal?(default)
+				raise Literal::ArgumentError.new("A const's type is its value, so #{name.inspect} must be given its value as both.")
+			end
+
+			if writer
+				raise Literal::ArgumentError.new("A const cannot have a writer.")
+			end
+
+			if coercion || seal
+				raise Literal::ArgumentError.new("A const cannot have a coercion or a seal.")
+			end
+
+			# Interned, so a string const needs no `frozen_string_literal` comment.
+			default = -default if String === default
+
+			# A module is shared by identity, so it needs no freezing.
+			unless Literal::FROZEN.bind_call(default) || Module === default
+				raise Literal::ArgumentError.new("The value for #{name.inspect} must be frozen.")
+			end
+
+			# A literal, or a value matched with Kernel#===, is its own type. A value
+			# with its own `===`, such as a module, a Regexp or a type, would match
+			# other values, so it's matched by identity.
+			type = if Literal.literal_bound(default) || (Kernel === default && Kernel == Literal::METHOD.bind_call(default, :===).owner)
+				default
+			else
+				Literal::Types::SameObjectType.new(default)
+			end
+		elsif default && !(Proc === default || Literal::FROZEN.bind_call(default))
 			raise Literal::ArgumentError.new("The default must be a frozen object or a Proc.")
 		end
 
@@ -317,57 +355,93 @@ module Literal::Properties
 		name
 	end
 
-	# Declare several properties as one batch. Each property is recorded, and its
-	# reader, writer and predicate defined, as it is declared; the methods
-	# generated from the whole schema — the initializer and to_h — are generated
-	# once when the block ends rather than once per property.
-	#
-	#   props do
-	#     prop :name, String
-	#     prop :age, Integer
-	#   end
-	def props
-		raise Literal::ArgumentError.new("props requires a block") unless block_given?
-
-		begin_props
-
-		begin
-			yield
-		ensure
-			commit_props
-		end
-
-		nil
-	end
-
-	# The two halves of `props`, for a caller that cannot wrap the declarations
-	# in a block. Batches nest: the schema-wide methods are generated when the
-	# outermost one is committed, or sooner if something needs them.
-	def begin_props
-		@__literal_open_batches__ = __literal_open_batches__ + 1
-		nil
-	end
-
-	def commit_props
-		# Freezing generated whatever was deferred.
-		return if frozen?
-
-		open_batches = __literal_open_batches__
-
-		unless open_batches > 0
-			raise Literal::ArgumentError.new("Cannot commit props on #{self}, because no batch is open.")
-		end
-
-		@__literal_open_batches__ = open_batches - 1
-		__literal_define_schema_methods__ if open_batches == 1
-		nil
-	end
-
 	def freeze
-		# Memoized while it still can be, so a frozen shape keeps one schema.
-		literal_properties
-		__literal_define_schema_methods__
+		return super if frozen?
+
+		__literal_finish__
 		super
+	end
+
+	# Closed as if it had an instance, with everything derived from its schema
+	# and checks computed, so building and reading it never writes to the class
+	# again.
+	private def __literal_finish__
+		__literal_define_schema_methods__
+		__literal_used__
+		__literal_unwatch__
+
+		unless @literal_checks_for&.frozen?
+			@literal_checks_for = literal_properties.to_h { |property| [property.name, __literal_checks_for__(property.name)] }.freeze
+		end
+	end
+
+	# For Literal.make_shareable, once the shape is frozen. Its ancestors are
+	# shared too, because the methods they generated read their own schemas, but
+	# not frozen: having a subclass, they can't change anyway.
+	private def __literal_make_shareable__
+		shape = self
+
+		while Literal::Properties === shape
+			shape.__send__(:__literal_share__)
+			shape = shape.superclass
+		end
+	end
+
+	private def __literal_share__
+		__literal_finish__
+
+		seen = {}.compare_by_identity
+		literal_properties.each { |property| __literal_materialize__(property.type, seen) }
+
+		return unless defined?(Ractor)
+
+		literal_properties.each do |property|
+			__literal_make_proc_shareable__(property.coercion) if property.coercion
+			__literal_make_proc_shareable__(property.seal) if property.seal
+		end
+
+		Ractor.make_shareable(literal_properties)
+		Ractor.make_shareable(literal_checks)
+		Ractor.make_shareable(@literal_checks_for)
+	end
+
+	# Ruby only makes a proc shareable once what it captures is, and won't reach
+	# in to make it so. Literal's own procs capture other procs and objects — a
+	# composition's stages, a collection's coercer — so those go first.
+	private def __literal_make_proc_shareable__(proc)
+		# A shared proc has no binding to read, and a superclass's schema holds
+		# the same procs as its subclass's.
+		return proc if Ractor.shareable?(proc)
+
+		if proc.source_location&.first&.start_with?(LIBRARY)
+			binding = proc.binding
+
+			binding.local_variables.each do |name|
+				case (captured = binding.local_variable_get(name))
+				in ::Proc
+					__literal_make_proc_shareable__(captured)
+				else
+					Ractor.make_shareable(captured)
+				end
+			end
+		end
+
+		Ractor.make_shareable(proc)
+	end
+
+	# Walking a type's children materializes the deferred types among them, so a
+	# frozen one never has to run its block again. Shapes are left to be made
+	# shareable themselves.
+	private def __literal_materialize__(type, seen)
+		case type
+		in Module
+			nil
+		in Literal::Type unless seen.key?(type)
+			seen[type] = true
+			type.literal_child_types { |child| __literal_materialize__(child, seen) }
+		else
+			nil
+		end
 	end
 
 	def slice(*names)
@@ -396,7 +470,7 @@ module Literal::Properties
 				set_temporary_name "#{origin_name}.slice(#{names.map(&:inspect).join(', ')})"
 			end
 
-			props do
+			__literal_copy_properties__ do
 				sliced.each { |property| __literal_add_property__(property) }
 			end
 		end.tap { |projection| projection.__send__(:__literal_slice_checks__, self, names) }
@@ -459,20 +533,36 @@ module Literal::Properties
 		watch = Module.new
 		private_new = singleton_class.private_method_defined?(:new)
 
-		watch.define_method(:new) do |*args, **kwargs, &block|
-			instance = __literal_constructing__ { super(*args, **kwargs, &block) }
-
-			SCHEMA_METHODS_LOCK.synchronize do
-				if watch.method_defined?(:new, false) || watch.private_method_defined?(:new, false)
-					watch.remove_method(:new)
-				end
+		# Compiled from a string, because a method defined with a block can't be
+		# called from another Ractor.
+		watch.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+			def new(*args, **kwargs, &block)
+				instance = __literal_constructing__ { super(*args, **kwargs, &block) }
+				__literal_unwatch__
+				instance
 			end
-
-			instance
-		end
+		RUBY
 
 		watch.__send__(:private, :new) if private_new
 		singleton_class.include(watch)
+		@__literal_watch__ = watch
+	end
+
+	# A shape is closed with its ancestors, so none of them needs to watch.
+	private def __literal_unwatch__
+		SCHEMA_METHODS_LOCK.synchronize do
+			shape = self
+
+			while Literal::Properties === shape
+				watch = shape.instance_variable_get(:@__literal_watch__)
+
+				if watch && (watch.method_defined?(:new, false) || watch.private_method_defined?(:new, false))
+					watch.remove_method(:new)
+				end
+
+				shape = shape.superclass
+			end
+		end
 	end
 
 	# A shape's properties are fixed while an instance is under construction,
@@ -482,10 +572,23 @@ module Literal::Properties
 	private def __literal_constructing__
 		return yield if true == @__literal_used__
 
+		unless Literal.main_ractor?
+			raise Ractor::IsolationError.new("#{self} can't be built outside the main Ractor until it is passed to Literal.make_shareable.")
+		end
+
 		__literal_count_constructions__(1)
 		finished = false
 
 		begin
+			# Once the shape is closed, but before any instance exists, so none can
+			# reach a stand-in from another Ractor, however it was built.
+			shape = self
+
+			while Literal::Properties === shape
+				shape.__send__(:__literal_define_schema_methods__)
+				shape = shape.superclass
+			end
+
 			instance = yield
 			finished = true
 		ensure
@@ -547,10 +650,10 @@ module Literal::Properties
 
 			schema = literal_properties
 
-			# A batch is judged whole when it commits: a declaration part way through
-			# it may pass through an order Ruby can't compile, or name a deferred type
-			# whose constant is still to come.
-			schema.check_signature(schema.sorted_with(property)) unless __literal_open_batches__ > 0
+			# A keyword can't break the signature.
+			unless :keyword == property.kind || @__literal_copying_properties__
+				schema.check_signature(schema.sorted_with(property))
+			end
 
 			schema << property
 			# After the change, so an entry labelled with the new generation was
@@ -561,27 +664,27 @@ module Literal::Properties
 		end
 	end
 
+	# Properties copied from a sound schema may pass through orders that aren't,
+	# so the signature is judged once they are all in.
+	private def __literal_copy_properties__
+		@__literal_copying_properties__ = true
+		yield
+		literal_properties.check_signature
+	ensure
+		@__literal_copying_properties__ = false
+	end
+
 	private def __define_literal_methods__(new_property)
-		batching = __literal_open_batches__ > 0
-
-		if batching
-			code = new_property && __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
-		else
-			@__literal_schema_methods_deferred__ = false if @__literal_schema_methods_deferred__
-			code = __generate_literal_methods__(new_property)
-		end
-
-		if code
-			__literal_silence_redefinitions__(new_property) if new_property
+		if new_property
+			code = __generate_literal_property_methods__(new_property, +"# frozen_string_literal: true\n")
+			__literal_silence_redefinitions__(new_property)
 			# An explicit path, so every engine attributes these frames to Literal.
 			__literal_extension__.module_eval(code, __FILE__, __LINE__)
 		end
 
-		__literal_defer_schema_methods__ if batching
-	end
-
-	private def __literal_open_batches__
-		@__literal_open_batches__ || 0
+		__literal_defer_schema_methods__
+		# A check can reach a shape with instances, whose later ones skip generating.
+		__literal_define_schema_methods__ if @__literal_used__
 	end
 
 	SCHEMA_METHODS = [:initialize, :to_h, :to_hash].freeze
@@ -591,9 +694,9 @@ module Literal::Properties
 		SCHEMA_METHODS
 	end
 
-	# The schema-wide methods are stale while a batch is open. Anything that
-	# calls one before the batch is committed — a Literal::Enum building its
-	# members in the class body — reaches a stand-in that generates the real
+	# Generating the schema-wide methods on every prop would make defining a
+	# shape quadratic in its size, so each change replaces them with stand-ins.
+	# The first call to one — usually the first instance — generates the real
 	# methods and hands over to them.
 	private def __literal_defer_schema_methods__
 		return if @__literal_schema_methods_deferred__
@@ -617,11 +720,12 @@ module Literal::Properties
 
 		# A second thread reaching a stand-in waits here, then finds the real
 		# methods in place. Re-entrant, because generating can materialize a
-		# deferred type whose block defines another shape with a batch of its own.
-		SCHEMA_METHODS_LOCK.synchronize do
+		# deferred type whose block defines another shape. The shape's own lock,
+		# since generating can run user code that waits on another shape's.
+		__literal_lock__.synchronize do
 			next unless @__literal_schema_methods_deferred__
 
-			code = __generate_literal_methods__(nil)
+			code = __generate_literal_methods__
 
 			extension = __literal_extension__
 			__literal_schema_methods__.each { |name| extension.alias_method(name, name) }
@@ -678,12 +782,10 @@ module Literal::Properties
 		end
 	end
 
-	private def __generate_literal_methods__(new_property, buffer = +"")
+	private def __generate_literal_methods__(buffer = +"")
 		buffer << "# frozen_string_literal: true\n"
 		literal_properties.generate_initializer(buffer, checked: literal_checks.any?)
 		literal_properties.generate_to_h(buffer)
-		# Nil when re-emitting for a new check rather than a new property.
-		__generate_literal_property_methods__(new_property, buffer) if new_property
 		buffer
 	end
 

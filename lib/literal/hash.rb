@@ -95,8 +95,10 @@ class Literal::Hash
 			"Literal::Hash(#{@key_type.inspect}, #{@value_type.inspect})"
 		end
 
+		# A lambda rather than a method proc, which can never be made shareable.
 		def to_proc
-			method(:coerce).to_proc
+			coercer = self
+			-> (value) { coercer.coerce(value) }
 		end
 	end
 
@@ -359,11 +361,18 @@ class Literal::Hash
 		__with__(@__value__.slice(*keys))
 	end
 
-	def to_h
-		@__value__.dup
+	def to_h(&block)
+		if block
+			@__value__.to_h(&block)
+		else
+			@__value__.dup
+		end
 	end
 
-	alias_method :to_hash, :to_h
+	# Like `Hash#to_hash`, this ignores a block.
+	def to_hash
+		@__value__.dup
+	end
 
 	def transform_keys(type, &block)
 		raise ArgumentError.new("#transform_keys requires a block.") unless block

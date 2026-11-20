@@ -2,17 +2,17 @@
 
 # _Never has no values, so there is never anything to serialize or
 # deserialize — but it can still appear in type signatures, so it needs a
-# schema: one that matches nothing. This serializer must be registered ahead
-# of the others: _Never is a subtype of every type, so any scalar serializer
-# would otherwise claim it and publish a schema that accepts values the type
-# rejects.
+# schema: one that matches nothing. It handles every type with no values,
+# like t = _Deferred { t }, and must be registered ahead of the others: such a
+# type is a subtype of every type, so any scalar serializer would otherwise
+# claim it and publish a schema that accepts values the type rejects.
 class Literal::NeverSerializer < Literal::Serializer
 	def type
 		Literal::Types::NeverType::Instance
 	end
 
 	def handles_type?(type)
-		Literal::Types::NeverType === type
+		Literal.subtype?(type, Literal::Types::NeverType::Instance)
 	end
 
 	def json_schema(type, generator: nil)

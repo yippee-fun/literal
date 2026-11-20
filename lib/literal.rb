@@ -153,6 +153,24 @@ module Literal
 		ConstantTracker.const_ref(object)
 	end
 
+	# Readies a shape to be built and read in any Ractor. It is frozen, the
+	# deferred types its properties reach are materialized, and its schema and
+	# checks are deeply frozen — defaults, coercions and check blocks too, so
+	# none of them may capture mutable state.
+	def self.make_shareable(shape)
+		unless Literal::Properties === shape
+			raise Literal::ArgumentError.new("Literal.make_shareable requires a class that extends Literal::Properties.")
+		end
+
+		shape.freeze
+		shape.__send__(:__literal_make_shareable__)
+		shape
+	end
+
+	def self.main_ractor?
+		!defined?(Ractor) || Ractor.current.equal?(Ractor.main)
+	end
+
 	def self.Value(*, **, &block)
 		value_class = Class.new(Literal::Value)
 
@@ -323,10 +341,10 @@ module Literal
 		supertype_id = OBJECT_ID.bind_call(supertype)
 
 		# Coinductive cycle handling: if we are already in the middle of proving this
-		# exact pair, assume it holds — provided the recursion has passed through a
-		# structural constructor (see SubtypeContext#assume). This is what makes
-		# subtyping between recursive (looping) types terminate with the right answer.
-		known = context.recall(type_id, supertype_id)
+		# exact pair, assume it holds — provided the cycle justifies it (see
+		# SubtypeContext#assume). This is what makes subtyping between recursive
+		# (looping) types terminate with the right answer.
+		known = context.recall(type_id, supertype_id, type)
 		return known unless known.nil?
 
 		raw_frame = context.acquire(type_id, supertype_id)
@@ -334,13 +352,13 @@ module Literal
 		resolved_supertype = supertype
 
 		if Types::DeferredType === type || Types::DeferredType === supertype
-			subtype = type.materialize if Types::DeferredType === type
+			subtype = context.unfold_left(type) if Types::DeferredType === type
 			resolved_supertype = supertype.materialize if Types::DeferredType === supertype
 			subtype_id = OBJECT_ID.bind_call(subtype)
 			resolved_supertype_id = OBJECT_ID.bind_call(resolved_supertype)
 
 			unless subtype_id == type_id && resolved_supertype_id == supertype_id
-				known = context.recall(subtype_id, resolved_supertype_id)
+				known = context.recall(subtype_id, resolved_supertype_id, subtype)
 
 				unless known.nil?
 					context.store(type_id, supertype_id, raw_frame, known)
@@ -353,8 +371,13 @@ module Literal
 
 		result = !!resolved_subtype?(subtype, resolved_supertype, context)
 
+		# A proof resting on an assumption its type turned out not to support
+		# stores nothing, and is tried again refusing that assumption.
+		while context.store(type_id, supertype_id, raw_frame, result).nil?
+			result = !!resolved_subtype?(subtype, resolved_supertype, context)
+		end
+
 		context.store(subtype_id, resolved_supertype_id, resolved_frame, result) if resolved_frame
-		context.store(type_id, supertype_id, raw_frame, result)
 		result
 	ensure
 		context.release(subtype_id, resolved_supertype_id, resolved_frame) if resolved_frame
@@ -367,7 +390,7 @@ module Literal
 
 		case subtype
 		in Types::DeferredType unless Types::DeferredType === supertype
-			subtype?(subtype.materialize, supertype, context:)
+			context.left_unfolded_subtype?(subtype, supertype)
 		in Types::UnionType
 			subtype.all? { |member| subtype?(member, supertype, context:) }
 		in Types::NilableType

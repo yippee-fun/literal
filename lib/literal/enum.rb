@@ -15,6 +15,10 @@ class Literal::Enum
 			super(name, type, kind, reader:, writer: false, predicate:, default:, description:)
 		end
 
+		def const(name, value, reader: :public, description: nil, &)
+			prop(name, value, :const, reader:, default: value, description:, &)
+		end
+
 		# Members are idiomatically defined above the checks in the class body,
 		# so `check` judges them before it installs.
 		private def __literal_existing_instances__
@@ -167,14 +171,7 @@ class Literal::Enum
 				index = @members.group_by(&block).freeze
 
 				index.each do |key, values|
-					unless type === key
-						raise Literal::TypeError.new(
-							context: Literal::TypeError::Context.new(
-								expected: type,
-								actual: key,
-							)
-						)
-					end
+					Literal.check(key, type)
 
 					if unique && values.size > 1
 						raise ArgumentError.new("The index #{name} is not unique.")

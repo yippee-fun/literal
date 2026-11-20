@@ -5,9 +5,9 @@ module Literal::Checks::Checker
 	extend self
 
 	# Its own object: any real value, Literal::Undefined included, is something
-	# a coercion may legitimately return.
-	COERCION_FAILED = Object.new.freeze
-	private_constant :COERCION_FAILED
+	# a coercion or a decode may legitimately return.
+	REJECTED = Object.new.freeze
+	private_constant :REJECTED
 
 	# SystemStackError is not a StandardError, so an unbounded walk over cyclic
 	# input would escape the boundary meant to catch bad input.
@@ -17,9 +17,14 @@ module Literal::Checks::Checker
 	NO_DUPLICATES = {}.freeze
 	private_constant :NO_DUPLICATES
 
+	JSON_DATA = Literal::Types._JSONData
+	private_constant :JSON_DATA
+
 	# Answers a Literal::Result carrying the built value or every error found.
-	# `input` is a draft of the shape or a Hash of props from outside.
-	def check(shape, input)
+	# `input` is a draft of the shape or a Hash of props from outside. With a
+	# serialization context, `input` is serialized and comes from outside, so
+	# anything but an object is reported, not raised.
+	def check(shape, input, serialization_context: nil)
 		shape = subject_shape(shape, input)
 
 		unless shape.respond_to?(:from_props)
@@ -29,8 +34,14 @@ module Literal::Checks::Checker
 		end
 
 		errors = Literal::Checks::Collector.new
-		draft, sound = run(shape, input, errors, 0)
 		result_type = Literal::Result(shape, Literal::Checks::Errors)
+
+		if serialization_context && !(Hash === input)
+			errors.add(Literal::Checks::Message.for(shape, input))
+			return result_type.failure(errors.to_errors)
+		end
+
+		draft, sound = run(shape, input, errors, 0, serialization_context)
 
 		return result_type.failure(errors.to_errors) if !sound || errors.any?
 
@@ -78,12 +89,12 @@ module Literal::Checks::Checker
 		end
 	end
 
-	private def run(shape, input, errors, depth)
+	private def run(shape, input, errors, depth, serialization_context)
 		draft, sound = case input
 		when Literal::Draft
 			check_draft(shape, input, errors, depth)
 		when Hash
-			check_types(shape, input, errors, depth)
+			check_types(shape, input, errors, depth, serialization_context)
 		else
 			raise Literal::ArgumentError.new(
 				"#{shape.name || shape.inspect} cannot check a #{input.class}; expected a Hash of properties or a draft of it"
@@ -116,7 +127,7 @@ module Literal::Checks::Checker
 			if Literal::Undefined == value
 				assign_missing(shape, draft, property, errors)
 			elsif (nested = nested_type(property, value))
-				assign_nested(draft, property, nested, value, errors, depth)
+				assign_nested(draft, property, nested, value, errors, depth, nil)
 			else
 				store(draft, property, value, errors)
 			end
@@ -146,7 +157,7 @@ module Literal::Checks::Checker
 		[draft, sound]
 	end
 
-	private def check_types(shape, props, errors, depth)
+	private def check_types(shape, props, errors, depth, serialization_context)
 		symbolized = symbolize(props)
 		draft = Literal::Draft(shape).new
 
@@ -159,7 +170,16 @@ module Literal::Checks::Checker
 			if duplicates.include?(property.name)
 				false
 			elsif props.key?(property.name)
-				assign_value(draft, property, props[property.name], errors, depth)
+				if serialization_context
+					assign_serialized(draft, property, props[property.name], errors, depth, serialization_context)
+				else
+					assign_value(draft, property, props[property.name], errors, depth)
+				end
+			elsif serialization_context && property.const?
+				# Serializing always writes a const, so a payload without one is not
+				# one this context wrote.
+				errors.add(property.name, Literal::Checks::Message::MISSING)
+				false
 			else
 				assign_missing(shape, draft, property, errors)
 			end
@@ -183,15 +203,108 @@ module Literal::Checks::Checker
 	private def assign_value(draft, property, value, errors, depth)
 		if property.coercion
 			value = coerce(draft, property, value, errors)
-			return false if COERCION_FAILED.equal?(value)
+			return false if REJECTED.equal?(value)
 		end
 
 		nested = nested_type(property, value)
 
 		if nested
-			assign_nested(draft, property, nested, value, errors, depth)
+			assign_nested(draft, property, nested, value, errors, depth, nil)
 		else
 			store(draft, property, value, errors)
+		end
+	end
+
+	# A serialized value already has its prop's final representation, so it is
+	# decoded, not coerced, as in deserialize. An object standing for a nested
+	# shape is checked rather than decoded whole, so its errors keep their paths.
+	private def assign_serialized(draft, property, value, errors, depth, serialization_context)
+		if Hash === value && (shape = serialized_shape(property.type, serialization_context))
+			assign_nested(draft, property, shape, value, errors, depth, serialization_context)
+		elsif nests_deeper?(value, MAX_DEPTH - depth)
+			# Decoding a value whole recurses in the serializers, where the walk's
+			# own depth bound cannot reach.
+			errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
+			false
+		elsif !(JSON_DATA === value)
+			errors.add(property.name, Literal::Checks::Message.for(property.type, value))
+			false
+		else
+			value = decode(property, value, errors, serialization_context)
+			!REJECTED.equal?(value) && store_serialized(draft, property, value, errors)
+		end
+	end
+
+	# A seal assumes its prop's domain, so a wrong value from outside can make
+	# it raise; that is the input's fault, reported like a wrong type.
+	private def store_serialized(draft, property, value, errors)
+		store(draft, property, value, errors)
+	rescue NoMethodError, TypeError, ArgumentError
+		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
+		false
+	end
+
+	# Iterative, so the check cannot itself exhaust the stack.
+	private def nests_deeper?(value, limit)
+		pending = [[value, 0]]
+
+		until pending.empty?
+			current, level = pending.pop
+			return true if level > limit
+
+			case current
+			when Hash then current.each_value { |child| pending << [child, level + 1] }
+			when Array then current.each { |child| pending << [child, level + 1] }
+			end
+		end
+
+		false
+	end
+
+	# Only a shape the context decodes with the plain structure serializer, and
+	# only through wrappers that leave an object's decoding alone. Anything
+	# else — a union an object could mean another member of, a custom codec, a
+	# freeze — is decoded whole, as deserialize would.
+	private def serialized_shape(type, serialization_context, seen = {}.compare_by_identity)
+		# A deferred type can name itself without ever reaching a shape.
+		return nil if seen.key?(type)
+
+		seen[type] = true
+
+		case type
+		in Literal::Types::DeferredType
+			serialized_shape(type.resolve, serialization_context, seen)
+		in Literal::Types::NilableType if serialization_context.serializer_for_type(type).instance_of?(Literal::NilableSerializer)
+			serialized_shape(type.type, serialization_context, seen)
+		in Literal::Types::UnionType if type.optional?
+			serialized_shape(without_undefined(type), serialization_context, seen)
+		in Class if type < Literal::DataStructure && !(type <= Literal::Draft)
+			type if serialization_context.serializer_for_type(type).instance_of?(Literal::StructureSerializer)
+		else
+			nil
+		end
+	end
+
+	# Not strict: the prop's seal runs before its type is checked, in store.
+	# The serialization context has already vouched for the shape, so a raise
+	# here is the input's fault: a value that cannot be decoded is reported
+	# like one of the wrong type.
+	private def decode(property, value, errors, serialization_context)
+		serialization_context.deserialize(value, type: without_undefined(property.type), strict: false)
+	rescue Literal::CheckError => error
+		errors.merge(error.errors.errors, under: property.name)
+		REJECTED
+	rescue TypeError, ArgumentError
+		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
+		REJECTED
+	end
+
+	# Literal::Undefined is never serialized, only omitted.
+	private def without_undefined(type)
+		if Literal::Types::UnionType === type && type.optional?
+			type.reject { |member| Literal::Undefined.equal?(member) }
+		else
+			type
 		end
 	end
 
@@ -205,10 +318,10 @@ module Literal::Checks::Checker
 		# The coercion built a nested value that broke its own checks; those
 		# surface under this prop with their paths.
 		errors.merge(error.errors.errors, under: property.name)
-		COERCION_FAILED
+		REJECTED
 	rescue TypeError, ArgumentError
 		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
-		COERCION_FAILED
+		REJECTED
 	end
 
 	# The seal runs before the type check because it fixes a value's final
@@ -221,6 +334,8 @@ module Literal::Checks::Checker
 			errors.add(property.name, Literal::Checks::Message.for(property.type, value))
 			return false
 		end
+
+		value = property.default if property.const?
 
 		Literal::Draft::API::STORE.bind_call(draft, property.name, value)
 		true
@@ -244,7 +359,7 @@ module Literal::Checks::Checker
 
 		if property.coercion
 			value = coerce(draft, property, value, errors)
-			return false if COERCION_FAILED.equal?(value)
+			return false if REJECTED.equal?(value)
 		end
 
 		store(draft, property, value, errors)
@@ -256,14 +371,14 @@ module Literal::Checks::Checker
 	# that exists satisfies its shape's checks — so the slot stays empty and
 	# taints, and an outer check reading it is held back like one reading a type
 	# failure.
-	private def assign_nested(draft, property, nested, value, errors, depth)
+	private def assign_nested(draft, property, nested, value, errors, depth, serialization_context)
 		if depth >= MAX_DEPTH
 			errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
 			return false
 		end
 
 		nested_errors = Literal::Checks::Collector.new
-		nested_draft, sound = run(nested, value, nested_errors, depth + 1)
+		nested_draft, sound = run(nested, value, nested_errors, depth + 1, serialization_context)
 
 		errors.merge(nested_errors.errors, under: property.name)
 

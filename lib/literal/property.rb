@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 class Literal::Property
-	ORDER = { :positional => 0, :* => 1, :keyword => 2, :** => 3, :& => 4 }.freeze
+	# Consts come first, so defaults and coercions can read them.
+	ORDER = { :const => 0, :positional => 1, :* => 2, :keyword => 3, :** => 4, :& => 5 }.freeze
 	# What Ruby accepts as a local variable, which every generated parameter is.
 	# `_1` to `_9` are reserved for numbered block parameters.
 	NAME_PATTERN = /\A(?!_[1-9]\z)[a-z_\p{^ASCII}&&[^\p{Lu}\p{Lt}]][a-zA-Z0-9_\p{^ASCII}]*\z/
@@ -9,7 +10,7 @@ class Literal::Property
 
 	VISIBILITY_OPTIONS = Set[false, :private, :protected, :public].freeze
 	VISIBILITY_ORDER = { false => 0, :private => 1, :protected => 2, :public => 3 }.freeze
-	KIND_OPTIONS = Set[:positional, :*, :keyword, :**, :&].freeze
+	KIND_OPTIONS = Set[:positional, :*, :keyword, :**, :&, :const].freeze
 
 	include Comparable
 
@@ -38,6 +39,7 @@ class Literal::Property
 		@description = description
 		@coercion = coercion
 		@seal = seal
+		@__ivar__ = :"@#{name.name}"
 	end
 
 	attr_reader :name, :type, :kind, :reader, :writer, :predicate, :default, :description, :coercion, :seal
@@ -88,11 +90,13 @@ class Literal::Property
 		@kind == :&
 	end
 
+	def const?
+		@kind == :const
+	end
+
 	# The instance variable this property is stored in. Generated code writes
 	# `@name` literally; this is for the runtime paths that cannot.
-	def __ivar__
-		@__ivar__ ||= :"@#{@name.name}"
-	end
+	attr_reader :__ivar__
 
 	def default?
 		return true if splat? || double_splat?
@@ -115,6 +119,8 @@ class Literal::Property
 			escaped_name
 		when :keyword
 			"#{@name.name}:"
+		when :const
+			nil
 		else
 			raise "You should never see this error."
 		end
@@ -246,8 +252,14 @@ class Literal::Property
 	# `property_local` the one holding this property — names the schema
 	# chose so that no property's name collides with them.
 	def generate_initializer_handle_property(buffer, local:, property_local:)
-		buffer << "  # " << @name.name << "\n" <<
-			"  " << property_local << " = PROPERTIES[:" << @name.name << "]\n"
+		buffer << "  # " << @name.name << "\n"
+
+		if const?
+			buffer << "  @" << @name.name << " = PROPERTIES[:" << @name.name << "].default\n"
+			return buffer
+		end
+
+		buffer << "  " << property_local << " = PROPERTIES[:" << @name.name << "]\n"
 
 		if @kind == :keyword && ruby_keyword?
 			buffer << "  " << local << " = ::Kernel.binding.local_variable_get(:" << @name.name << ")\n"

@@ -10,7 +10,7 @@ module Literal::Serializer::UnionClassification
 	# programmatically built unions, but no value or raw JSON ever belongs to
 	# one, so classification, schema generation and dispatch all ignore them.
 	private def inhabited_members(type)
-		type.to_a.reject { |member| Literal::Types::NeverType === member }
+		type.to_a.reject { |member| Literal.subtype?(member, Literal::Types::NeverType::Instance) }
 	end
 
 	# A two-member union of Integer and a finite Float, which serializes as a
