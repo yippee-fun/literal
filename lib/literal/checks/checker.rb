@@ -218,10 +218,32 @@ module Literal::Checks::Checker
 	private def assign_serialized(draft, property, value, errors, depth, serialization_context)
 		if Hash === value && (shape = serialized_shape(property.type, serialization_context))
 			assign_nested(draft, property, shape, value, errors, depth, serialization_context)
+		elsif nests_deeper?(value, MAX_DEPTH - depth)
+			# Decoding a value whole recurses in the serializers, where the walk's
+			# own depth bound cannot reach.
+			errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
+			false
 		else
 			value = decode(property, value, errors, serialization_context)
 			!REJECTED.equal?(value) && store(draft, property, value, errors)
 		end
+	end
+
+	# Iterative, so the check cannot itself exhaust the stack.
+	private def nests_deeper?(value, limit)
+		pending = [[value, 0]]
+
+		until pending.empty?
+			current, level = pending.pop
+			return true if level > limit
+
+			case current
+			when Hash then current.each_value { |child| pending << [child, level + 1] }
+			when Array then current.each { |child| pending << [child, level + 1] }
+			end
+		end
+
+		false
 	end
 
 	# Only a shape the context decodes with the plain structure serializer, and
@@ -259,10 +281,6 @@ module Literal::Checks::Checker
 		REJECTED
 	rescue TypeError, ArgumentError
 		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
-		REJECTED
-	rescue SystemStackError
-		# A value decoded whole recurses in the serializers, beyond MAX_DEPTH.
-		errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
 		REJECTED
 	end
 
