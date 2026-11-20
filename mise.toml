@@ -2,7 +2,7 @@
 ruby = "latest"
 
 [tasks.test]
-run = "bundle exec qt"
+run = "bundle exec qd"
 
 [tasks.lint]
 run = "bundle exec rubocop"

@@ -1,112 +1,114 @@
 # frozen_string_literal: true
 
-include Literal::Types
+class BrandTest < Quickdraw::Test
+	include Literal::Types
 
-test "brands checked non-string objects by identity" do
-	brand = Literal::Brand(Array)
-	value = []
+	test "brands checked non-string objects by identity" do
+		brand = Literal::Brand(Array)
+		value = []
 
-	assert_equal brand.new(value), value
-	assert brand === value
-	refute brand === []
-end
-
-test ".[] is equivalent to .new" do
-	brand = Literal::Brand(Array)
-	value = []
-
-	assert_equal brand[value], value
-	assert brand === value
-end
-
-test "raises when the object does not match the type" do
-	brand = Literal::Brand(String)
-
-	assert_raises(Literal::TypeError) { brand.new(:user_123) }
-end
-
-test "does not create brands for immediate value types" do
-	[
-		Integer,
-		Float,
-		Symbol,
-		NilClass,
-		TrueClass,
-		FalseClass,
-		nil,
-		true,
-		false,
-		_Boolean,
-		_Falsy,
-		_Nilable(Integer),
-		_Union(Integer, Symbol),
-		_Constraint(Integer, 18..),
-	].each do |type|
-		assert_raises(Literal::ArgumentError) { Literal::Brand(type) }
+		assert_equal brand.new(value), value
+		assert brand === value
+		refute brand === []
 	end
-end
 
-test "creates brands for mixed immediate and object types" do
-	brand = Literal::Brand(_Union(String, Integer))
-	value = +"user-123"
-	branded_value = brand.new(value)
+	test ".[] is equivalent to .new" do
+		brand = Literal::Brand(Array)
+		value = []
 
-	assert_equal branded_value, value
-	assert brand === branded_value
-	refute brand === value
-end
+		assert_equal brand[value], value
+		assert brand === value
+	end
 
-test "does not brand immediate values" do
-	brand = Literal::Brand(_Any?)
+	test "raises when the object does not match the type" do
+		brand = Literal::Brand(String)
 
-	[1, 1.0, :user_123, nil, true, false].each do |value|
-		assert_raises(Literal::ArgumentError) { brand.new(value) }
+		assert_raises(Literal::TypeError) { brand.new(:user_123) }
+	end
+
+	test "does not create brands for immediate value types" do
+		[
+			Integer,
+			Float,
+			Symbol,
+			NilClass,
+			TrueClass,
+			FalseClass,
+			nil,
+			true,
+			false,
+			_Boolean,
+			_Falsy,
+			_Nilable(Integer),
+			_Union(Integer, Symbol),
+			_Constraint(Integer, 18..),
+		].each do |type|
+			assert_raises(Literal::ArgumentError) { Literal::Brand(type) }
+		end
+	end
+
+	test "creates brands for mixed immediate and object types" do
+		brand = Literal::Brand(_Union(String, Integer))
+		value = +"user-123"
+		branded_value = brand.new(value)
+
+		assert_equal branded_value, value
+		assert brand === branded_value
 		refute brand === value
 	end
-end
 
-test "duplicates strings before branding" do
-	brand = Literal::Brand(String)
-	value = +"user-123"
+	test "does not brand immediate values" do
+		brand = Literal::Brand(_Any?)
 
-	branded_value = brand.new(value)
+		[1, 1.0, :user_123, nil, true, false].each do |value|
+			assert_raises(Literal::ArgumentError) { brand.new(value) }
+			refute brand === value
+		end
+	end
 
-	assert_equal branded_value, value
-	refute branded_value.equal?(value)
-	assert brand === branded_value
-	refute brand === value
-	refute brand === "user-123"
-end
+	test "duplicates strings before branding" do
+		brand = Literal::Brand(String)
+		value = +"user-123"
 
-test "duplicated frozen strings stay frozen" do
-	brand = Literal::Brand(String)
-	value = "user-123"
+		branded_value = brand.new(value)
 
-	assert brand.new(value).frozen?
-end
+		assert_equal branded_value, value
+		refute branded_value.equal?(value)
+		assert brand === branded_value
+		refute brand === value
+		refute brand === "user-123"
+	end
 
-test "checks the duplicated frozen string" do
-	value = "user-123"
-	brand = Literal::Brand(_SameObject(value))
+	test "duplicated frozen strings stay frozen" do
+		brand = Literal::Brand(String)
+		value = "user-123"
 
-	assert_raises(Literal::TypeError) { brand.new(value) }
-end
+		assert brand.new(value).frozen?
+	end
 
-test "does not duplicate non-string objects" do
-	brand = Literal::Brand(Array)
-	value = []
+	test "checks the duplicated frozen string" do
+		value = "user-123"
+		brand = Literal::Brand(_SameObject(value))
 
-	branded_value = brand.new(value)
+		assert_raises(Literal::TypeError) { brand.new(value) }
+	end
 
-	assert branded_value.equal?(value)
-end
+	test "does not duplicate non-string objects" do
+		brand = Literal::Brand(Array)
+		value = []
 
-test "does not brand equal but distinct objects" do
-	brand = Literal::Brand(Array)
-	value = []
+		branded_value = brand.new(value)
 
-	brand.new(value)
+		assert branded_value.equal?(value)
+	end
 
-	assert brand === value
-	refute brand === []
+	test "does not brand equal but distinct objects" do
+		brand = Literal::Brand(Array)
+		value = []
+
+		brand.new(value)
+
+		assert brand === value
+		refute brand === []
+	end
 end

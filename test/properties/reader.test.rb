@@ -1,70 +1,72 @@
 # frozen_string_literal: true
 
-Example = Literal::Object
+class PropertiesReaderTest < Quickdraw::Test
+	Example = Literal::Object
 
-test "no reader by default" do
-	example = Class.new(Example) do
-		prop :example, String
+	test "no reader by default" do
+		example = Class.new(Example) do
+			prop :example, String
+		end
+
+		object = example.new(
+			example: "hello",
+		)
+
+		refute object.public_methods.include?(:example)
+		refute object.protected_methods.include?(:example)
+		refute object.private_methods.include?(:example)
 	end
 
-	object = example.new(
-		example: "hello",
-	)
+	test "false reader" do
+		example = Class.new(Example) do
+			prop :example, String, reader: false
+		end
 
-	refute object.public_methods.include?(:example)
-	refute object.protected_methods.include?(:example)
-	refute object.private_methods.include?(:example)
-end
+		object = example.new(
+			example: "hello",
+		)
 
-test "false reader" do
-	example = Class.new(Example) do
-		prop :example, String, reader: false
+		refute object.public_methods.include?(:example)
+		refute object.protected_methods.include?(:example)
+		refute object.private_methods.include?(:example)
 	end
 
-	object = example.new(
-		example: "hello",
-	)
+	test "private reader" do
+		example = Class.new(Example) do
+			prop :example, String, reader: :private
+		end
 
-	refute object.public_methods.include?(:example)
-	refute object.protected_methods.include?(:example)
-	refute object.private_methods.include?(:example)
-end
+		object = example.new(
+			example: "hello",
+		)
 
-test "private reader" do
-	example = Class.new(Example) do
-		prop :example, String, reader: :private
+		assert object.private_methods.include?(:example)
+		assert_equal(object.__send__(:example), "hello")
 	end
 
-	object = example.new(
-		example: "hello",
-	)
+	test "protected reader" do
+		example = Class.new(Example) do
+			prop :example, String, reader: :protected
+		end
 
-	assert object.private_methods.include?(:example)
-	assert_equal(object.__send__(:example), "hello")
-end
+		object = example.new(
+			example: "hello",
+		)
 
-test "protected reader" do
-	example = Class.new(Example) do
-		prop :example, String, reader: :protected
+		assert object.protected_methods.include?(:example)
+		assert_equal(object.__send__(:example), "hello")
 	end
 
-	object = example.new(
-		example: "hello",
-	)
+	test "public reader" do
+		example = Class.new(Example) do
+			prop :example, String, reader: :public
+		end
 
-	assert object.protected_methods.include?(:example)
-	assert_equal(object.__send__(:example), "hello")
-end
+		object = example.new(
+			example: "hello",
+		)
 
-test "public reader" do
-	example = Class.new(Example) do
-		prop :example, String, reader: :public
+		assert object.public_methods.include?(:example)
+		assert_equal(object.example, "hello")
 	end
-
-	object = example.new(
-		example: "hello",
-	)
-
-	assert object.public_methods.include?(:example)
-	assert_equal(object.example, "hello")
 end
