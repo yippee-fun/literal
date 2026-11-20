@@ -36,6 +36,32 @@ class SerializationCheckTest < Quickdraw::Test
 		prop :entry, _Union(Counted, _Map(count: Integer))
 	end
 
+	class Labelled < Literal::Data
+		const :kind, "label"
+		prop :text, String
+	end
+
+	class Tree < Literal::Data
+		prop :children, _Array(_Deferred { Tree })
+	end
+
+	Nothing = Literal::Types._Deferred { Nothing }
+
+	class Hollow < Literal::Data
+		prop :void, _Nilable(Nothing)
+	end
+
+	class Slug < Literal::Data
+		prop :text, String
+	end
+
+	class SlugCodec < Literal::Serializer::Codec
+		def type = Slug
+		def encoded_type = String
+		def encode(value) = value.text
+		def decode(value) = Slug.new(text: value)
+	end
+
 	class Unserializable < Literal::Data
 		prop :callback, Proc
 	end
@@ -122,6 +148,28 @@ class SerializationCheckTest < Quickdraw::Test
 		result = Context.check([], type: Booking)
 
 		assert_equal [[[], "must be an object"]], errors_for(result)
+	end
+
+	test "requires a const, which serializing always writes" do
+		assert_equal [[[:kind], "is missing"]], errors_for(Context.check({ "text" => "Hi" }, type: Labelled))
+		assert Context.check({ "kind" => "label", "text" => "Hi" }, type: Labelled).success?
+	end
+
+	test "reports a value decoded whole that nests too deeply" do
+		deep = { "children" => [] }
+		10_000.times { deep = { "children" => [deep] } }
+
+		assert_equal [[[:children], "is nested too deeply"]], errors_for(Context.check(deep, type: Tree))
+	end
+
+	test "stops at a deferred type that names only itself" do
+		refute Context.check({ "void" => {} }, type: Hollow).success?
+	end
+
+	test "raises for a type that is not serialized as its props" do
+		context = Literal::SerializationContext.new(SlugCodec)
+
+		assert_raises(Literal::ArgumentError) { context.check("hello", type: Slug) }
 	end
 
 	test "raises for a type the context cannot serialize" do

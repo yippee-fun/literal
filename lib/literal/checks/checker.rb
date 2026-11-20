@@ -172,6 +172,11 @@ module Literal::Checks::Checker
 				else
 					assign_value(draft, property, props[property.name], errors, depth)
 				end
+			elsif serialization_context && property.const?
+				# Serializing always writes a const, so a payload without one is not
+				# one this context wrote.
+				errors.add(property.name, Literal::Checks::Message::MISSING)
+				false
 			else
 				assign_missing(shape, draft, property, errors)
 			end
@@ -223,14 +228,19 @@ module Literal::Checks::Checker
 	# only through wrappers that leave an object's decoding alone. Anything
 	# else — a union an object could mean another member of, a custom codec, a
 	# freeze — is decoded whole, as deserialize would.
-	private def serialized_shape(type, serialization_context)
+	private def serialized_shape(type, serialization_context, seen = {}.compare_by_identity)
+		# A deferred type can name itself without ever reaching a shape.
+		return nil if seen.key?(type)
+
+		seen[type] = true
+
 		case type
 		in Literal::Types::DeferredType
-			serialized_shape(type.resolve, serialization_context)
+			serialized_shape(type.resolve, serialization_context, seen)
 		in Literal::Types::NilableType
-			serialized_shape(type.type, serialization_context)
+			serialized_shape(type.type, serialization_context, seen)
 		in Literal::Types::UnionType if type.optional?
-			serialized_shape(without_undefined(type), serialization_context)
+			serialized_shape(without_undefined(type), serialization_context, seen)
 		in Class if type < Literal::DataStructure && !(type <= Literal::Draft)
 			type if serialization_context.serializer_for_type(type).instance_of?(Literal::StructureSerializer)
 		else
@@ -249,6 +259,10 @@ module Literal::Checks::Checker
 		REJECTED
 	rescue TypeError, ArgumentError
 		errors.add(property.name, Literal::Checks::Message.for(property.type, value))
+		REJECTED
+	rescue SystemStackError
+		# A value decoded whole recurses in the serializers, beyond MAX_DEPTH.
+		errors.add(property.name, Literal::Checks::Message::TOO_DEEP)
 		REJECTED
 	end
 

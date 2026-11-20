@@ -155,6 +155,12 @@ class Literal::SerializationContext
 
 		raise unserializable_type_error(type) unless serializable_type?(type)
 
+		# Checking walks the payload as props, which is only what a plain
+		# structure serializer writes.
+		unless serializer_for_type(type).instance_of?(Literal::StructureSerializer)
+			raise Literal::ArgumentError, "#{type.inspect} cannot be checked, because it is not serialized as its props"
+		end
+
 		Literal::Checks::Checker.check(type, value, serialization_context: self)
 	end
 
