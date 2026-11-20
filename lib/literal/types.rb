@@ -21,21 +21,22 @@ module Literal::Types
 		NilableAnyType
 	end
 
-	# Matches if the value is an `Array` and all the elements of the array match the given type.
+	# Matches if the value is an `Array`, all the elements of the array match the given type, and it matches the given constraints.
 	# ```ruby
 	# _Array(String)
+	# _Array(String, length: 1..)
 	# ```
-	def _Array(type)
-		ArrayType.new(type)
+	def _Array(type, *, **)
+		_Constraint(ArrayType.new(type), *, **)
 	end
 
 	# Nilable version of `_Array`.
 	# ```ruby
 	# _Array?(String)
 	# ```
-	def _Array?(type)
+	def _Array?(...)
 		_Nilable(
-			_Array(type)
+			_Array(...)
 		)
 	end
 
@@ -255,9 +256,12 @@ module Literal::Types
 		)
 	end
 
-	# Matches if the value is a `Hash` and all the keys and values match the given types.
-	def _Hash(...)
-		HashType.new(...)
+	# Matches if the value is a `Hash`, all the keys and values match the given types, and it matches the given constraints.
+	# ```ruby
+	# _Hash(Symbol, Integer, size: 1..)
+	# ```
+	def _Hash(key_type, value_type, *, **)
+		_Constraint(HashType.new(key_type, value_type), *, **)
 	end
 
 	# Nilable version of `_Hash`
@@ -435,9 +439,12 @@ module Literal::Types
 		)
 	end
 
-	# Matches if the value is a `Set` and all the elements match the given type.
-	def _Set(...)
-		SetType.new(...)
+	# Matches if the value is a `Set`, all the elements match the given type, and it matches the given constraints.
+	# ```ruby
+	# _Set(String, size: 1..)
+	# ```
+	def _Set(type, *, **)
+		_Constraint(SetType.new(type), *, **)
 	end
 
 	# Nilable version of `_Set`

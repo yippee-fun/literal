@@ -49,4 +49,14 @@ class HashTypeTest < Quickdraw::Test
 			  Actual (NilClass): nil
 		MSG
 	end
+
+	test "inline constraints" do
+		type = _Hash(Symbol, Integer, size: 1..)
+
+		assert type === { a: 1 }
+		refute type === {}
+		refute type === { a: "1" }
+
+		assert_equal type, _Constraint(_Hash(Symbol, Integer), size: 1..)
+	end
 end
