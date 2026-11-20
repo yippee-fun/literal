@@ -70,7 +70,7 @@ class Literal::Properties::DataSchema < Literal::Properties::Schema
 
 			buffer << "  end\n"
 			buffer << "  __property__.check_with(self, " << var << ")\n"
-			buffer << "  @" << property.name.name << " = " << var << "\n"
+			buffer << "  @" << property.name.name << " = " << (property.const? ? "__property__.default" : var) << "\n"
 			i += 1
 		end
 

@@ -4612,4 +4612,65 @@ class SerializationTest < Quickdraw::Test
 		error = Example.unserializable_type_error(_Frozen(Object))
 		assert_equal(error.message, "Type _Frozen(Object) cannot be serialized because there is no serializer for Object.")
 	end
+
+	class SerializationConstShape < Literal::Data
+		const :kind, "shape"
+		prop :sides, Integer
+	end
+
+	test "consts serialize, deserialize and emit a const schema" do
+		shape = SerializationConstShape.new(sides: 3)
+		serialized = Example.serialize(shape, type: SerializationConstShape)
+
+		assert_equal serialized, { "sides" => 3, "kind" => "shape" }
+		assert_equal Example.deserialize(serialized, type: SerializationConstShape), shape
+		assert_equal Example.deserialize({ "sides" => 3 }, type: SerializationConstShape), shape
+		assert_raises(Literal::TypeError) { Example.deserialize({ "sides" => 3, "kind" => "circle" }, type: SerializationConstShape) }
+
+		assert_equal(
+			Example.json_schema(SerializationConstShape),
+			{
+				"type" => "object",
+				"properties" => {
+					"kind" => { "type" => "string", "const" => "shape" },
+					"sides" => { "type" => "integer" },
+				},
+				"required" => ["kind", "sides"],
+				"additionalProperties" => false,
+			},
+		)
+	end
+
+	class SerializationConstSquare < Literal::Data
+		const :kind, :square
+		prop :size, Integer
+	end
+
+	class SerializationConstCircle < Literal::Data
+		const :kind, :circle
+		prop :size, Integer
+	end
+
+	test "consts tell apart the members of an untagged union" do
+		type = _Union(SerializationConstSquare, SerializationConstCircle)
+		circle = SerializationConstCircle.new(size: 1)
+		serialized = Example.serialize(circle, type:)
+
+		assert_equal serialized, { "size" => 1, "kind" => "circle" }
+		assert_equal Example.deserialize(serialized, type:), circle
+		assert_equal Example.deserialize({ "size" => 1, "kind" => "square" }, type:), SerializationConstSquare.new(size: 1)
+		assert_raises(Literal::ArgumentError) { Example.deserialize({ "size" => 1 }, type:) }
+	end
+
+	class SerializationConstPriority < Literal::Data
+		const :priority, SerializationPriority::High
+	end
+
+	test "an enum member const serializes as the member" do
+		value = SerializationConstPriority.new
+		serialized = Example.serialize(value, type: SerializationConstPriority)
+
+		assert_equal serialized, { "priority" => 3 }
+		assert_equal Example.deserialize(serialized, type: SerializationConstPriority), value
+	end
 end

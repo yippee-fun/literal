@@ -1256,4 +1256,98 @@ class PropertiesTest < Quickdraw::Test
 		assert Literal::EQUAL.bind_call(klass.new.value, default)
 		assert_raises(Literal::ArgumentError) { Class.new(Literal::Struct) { prop :value, BasicObject, default: BasicObject.new } }
 	end
+
+	test "consts are assigned at initialization and are not initializer parameters" do
+		example = Class.new(Example) do
+			const :kind, "example", reader: :public
+			prop :name, String
+		end
+
+		instance = example.new(name: "Joel")
+
+		assert_equal instance.kind, "example"
+		refute instance.respond_to?(:kind=)
+		assert_raises(ArgumentError) { example.new(name: "Joel", kind: "other") }
+	end
+
+	test "a const value must be a frozen object, not nil or a Proc" do
+		assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, [:unfrozen] } }
+		assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, nil } }
+		assert_raises(Literal::ArgumentError) { Class.new(Example) { const :kind, -> { "example" } } }
+	end
+
+	test "a const string is interned rather than rejected when unfrozen" do
+		example = Class.new(Example) { const :kind, +"example", reader: :public }
+
+		assert example.new.kind.frozen?
+		assert_equal example.new.kind, "example"
+	end
+
+	test "a const module is matched by identity rather than by its instances" do
+		example = Class.new(Literal::Data) { const :kind, Class }
+
+		assert_equal example.new.kind, Class
+		assert_equal example.from_props(kind: Class).kind, Class
+		assert_raises(Literal::TypeError) { example.from_props(kind: String) }
+	end
+
+	test "a const value its own === rejects is matched by identity" do
+		pattern = /example/
+		example = Class.new(Literal::Data) { const :pattern, pattern }
+
+		assert_equal example.new.pattern, pattern
+		assert_equal example.from_props(pattern:).pattern, pattern
+	end
+
+	test "a const cannot have a writer or a coercion" do
+		assert_raises(Literal::ArgumentError) do
+			Class.new(Example) { prop :kind, "example", :const, writer: :public, default: "example" }
+		end
+
+		assert_raises(Literal::ArgumentError) do
+			Class.new(Example) { prop(:kind, "example", :const, default: "example") { |value| value } }
+		end
+	end
+
+	test "a const cannot be redefined as a parameter" do
+		parent = Class.new(Example) { const :kind, "example" }
+
+		error = assert_raises(Literal::ArgumentError) { Class.new(parent) { prop :kind, String } }
+
+		assert error.message.include?("must match the inherited kind :const")
+	end
+
+	test "a const that isn't a literal is matched by identity, not its own ===" do
+		any = Class.new(Literal::Data) { const :kind, _Any }
+		basic = Literal::FREEZE.bind_call(BasicObject.new)
+		opaque = Class.new(Literal::Data) { const :kind, basic }
+
+		assert_raises(Literal::TypeError) { any.from_props(kind: :other) }
+		assert opaque.from_props(kind: basic).kind.equal?(basic)
+	end
+
+	test "a const declared through prop must be given its value as its type" do
+		assert_raises(Literal::ArgumentError) do
+			Class.new(Example) { prop :version, Integer, :const, default: "one" }
+		end
+	end
+
+	test "a const refuses a block" do
+		assert_raises(Literal::ArgumentError) { Class.new(Literal::Data) { const(:kind, "example") { |value| value } } }
+	end
+
+	test "defaults can read consts" do
+		example = Class.new(Literal::Data) do
+			prop :label, String, default: -> { "#{kind}!" }
+			const :kind, "example"
+		end
+
+		assert_equal example.new.label, "example!"
+	end
+
+	test "a const has no parameter" do
+		example = Class.new(Example) { const :kind, "example" }
+
+		assert_nil example.literal_properties[:kind].param
+	end
 end

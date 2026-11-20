@@ -177,6 +177,8 @@ class Literal::DataStructure
 				context.fill_receiver(receiver: self, method: method_name, label: name.name)
 			end
 
+			value = property.default if property.const?
+
 			Literal::INSTANCE_VARIABLE_SET.bind_call(self, property.__ivar__, value)
 		end
 
@@ -185,7 +187,10 @@ class Literal::DataStructure
 
 	# required method for Marshal compatibility
 	def marshal_dump
-		attributes = to_h
+		properties = Literal::CLASS.bind_call(self).literal_properties
+
+		# A const comes from the schema, which may hold what Marshal can't dump.
+		attributes = to_h.reject { |name, _| properties[name].const? }
 
 		# Record which values are frozen so marshal_load can restore that
 		# state. Immediates are skipped — they always load frozen anyway.

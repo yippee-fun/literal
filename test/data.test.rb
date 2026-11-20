@@ -998,4 +998,49 @@ class DataTest < Quickdraw::Test
 			"Expected with to be generated without Object#with to alias."
 		end
 	end
+
+	class ConstCircle < Literal::Data
+		const :kind, "circle"
+		prop :radius, Integer
+	end
+
+	# Marshal doesn't work with anonymous classes
+	class ::RootConstPattern < Literal::Data
+		const :pattern, /circle/
+		const :tag, Module.new
+	end
+
+	test "a const matched by identity survives Marshal" do
+		assert_equal Marshal.load(Marshal.dump(RootConstPattern.new)), RootConstPattern.new
+	end
+
+	test "consts appear in to_h and ==" do
+		circle = ConstCircle.new(radius: 1)
+
+		assert_equal circle.to_h, { radius: 1, kind: "circle" }
+		assert_equal circle, ConstCircle.new(radius: 1)
+	end
+
+	test "from_props fills an omitted const and checks a given one" do
+		assert_equal ConstCircle.from_props(radius: 1).kind, "circle"
+		assert_equal ConstCircle.from_props(radius: 1, kind: "circle").kind, "circle"
+		assert_raises(Literal::TypeError) { ConstCircle.from_props(radius: 1, kind: "square") }
+	end
+
+	test "with checks a given const and keeps it" do
+		circle = ConstCircle.new(radius: 1)
+
+		assert_equal circle.with(kind: "circle"), circle
+		assert_raises(Literal::TypeError) { circle.with(kind: "square") }
+	end
+
+	test "a given const stores the declared value, not the given one" do
+		kind = +"circle"
+		circle = ConstCircle.new(radius: 1)
+
+		assert ConstCircle.from_props(radius: 1, kind:).kind.equal?(circle.kind)
+		assert circle.with(kind:).kind.equal?(circle.kind)
+		assert Literal::Draft(ConstCircle).check({ radius: 1, kind: }).value!.kind.equal?(circle.kind)
+		assert Integer === Class.new(Literal::Data) { const :sides, 1 }.from_props(sides: 1.0).sides
+	end
 end

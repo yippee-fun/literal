@@ -222,6 +222,8 @@ module Literal::Checks::Checker
 			return false
 		end
 
+		value = property.default if property.const?
+
 		Literal::Draft::API::STORE.bind_call(draft, property.name, value)
 		true
 	end
