@@ -167,14 +167,7 @@ class Literal::Enum
 				index = @members.group_by(&block).freeze
 
 				index.each do |key, values|
-					unless type === key
-						raise Literal::TypeError.new(
-							context: Literal::TypeError::Context.new(
-								expected: type,
-								actual: key,
-							)
-						)
-					end
+					Literal.check(key, type)
 
 					if unique && values.size > 1
 						raise ArgumentError.new("The index #{name} is not unique.")
