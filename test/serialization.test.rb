@@ -2475,12 +2475,21 @@ test "recursive tagged union members merge the discriminator into a fresh schema
 	)
 end
 
-test "self-referential tagged unions are not serializable" do
+test "a scalar union that only refers back to itself is not serializable" do
+	type = _Deferred { _Union(String, type) }
+
+	[type, _Deferred { _Deferred { type } }].each do |type|
+		refute Example.serializable_type?(type)
+		assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	end
+end
+
+test "a tagged union member that only refers back to the union holds no values" do
 	type = nil
 	type = _TaggedUnion(a: _Deferred { type }, b: String)
 
-	refute Example.kind === type
-	assert_raises(Literal::ArgumentError) { Example.json_schema(type) }
+	assert Example.kind === type
+	assert_equal(Example.json_schema(type), Example.json_schema(_TaggedUnion(a: String, b: _Never)))
 end
 
 test "mutually recursive container types" do
@@ -2843,6 +2852,18 @@ end
 test "never serializes to a schema that matches nothing" do
 	assert Example.kind === _Never
 	assert_equal(Example.json_schema(_Never), { "not" => {} })
+end
+
+test "types with no values serialize as never" do
+	itself = _Deferred { itself }
+
+	[_Deferred { _Never }, itself].each do |nothing|
+		assert Example.kind === nothing
+		assert_equal(Example.json_schema(nothing), { "not" => {} })
+		assert_equal(Example.json_schema(_Union(String, nothing)), Example.json_schema(Literal::Types::UnionType.new([String, _Never])))
+		assert_equal(Example.json_schema(_Array(nothing)), Example.json_schema(_Array(_Never)))
+		assert_raises(Literal::ArgumentError) { Example.serialize("Joel", type: nothing) }
+	end
 end
 
 test "never cannot serialize or deserialize values" do
@@ -4515,14 +4536,37 @@ test "types requiring frozen shapes freeze them whatever their props are named" 
 	assert_equal loaded[:freeze], "x"
 end
 
-test "types requiring frozen values see through deferred types and refuse frozen cycles" do
+test "deferred chains serialize as the type they end in" do
+	type = _Deferred { _Deferred { _String(size: 3) } }
+
+	assert_equal(Example.json_schema(type), Example.json_schema(_String(size: 3)))
+	assert_equal(Example.json_schema(_Frozen(type)), Example.json_schema(_String(size: 3)))
+	assert_equal(Example.deserialize("abc", type:), "abc")
+end
+
+test "types requiring frozen values see through deferred types" do
 	type = _Frozen(_Deferred { SerializationValueObject })
 
 	assert Example.serializable_type?(type)
 	assert_equal(Example.deserialize({ "value" => "a" }, type:), SerializationValueObject.new(value: "a"))
+end
 
+test "frozen types that only thaw back into themselves serialize as never" do
 	cycle = _Deferred { _Frozen(cycle) }
-	refute Example.serializable_type?(cycle)
+	other = nil
+	pair = _Deferred { _Frozen(other) }
+	other = _Deferred { _Frozen(pair) }
+	alias_b = nil
+	alias_a = _Deferred { alias_b }
+	through_aliases = _Frozen(alias_a)
+	alias_b = _Deferred { through_aliases }
+	nothing = _Deferred { nothing }
+
+	[cycle, pair, through_aliases, _Frozen(nothing)].each do |type|
+		assert Example.serializable_type?(type)
+		assert_equal(Example.json_schema(type), { "not" => {} })
+		assert_raises(Literal::ArgumentError) { Example.deserialize("x", type:) }
+	end
 end
 
 test "deep freezing copies keep a hash's default and key comparison" do

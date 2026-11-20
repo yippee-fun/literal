@@ -50,7 +50,7 @@ class Literal::JSONSchema::Generator
 	# through a tracked schema call for one of its containers, which resolves
 	# to a reference.
 	def schema(type, reference: true)
-		type = type.materialize if type in Literal::Types::DeferredType
+		type = type.resolve if type in Literal::Types::DeferredType
 
 		if !reference
 			@context.build_json_schema(type, generator: self)

@@ -310,10 +310,10 @@ module Literal
 		supertype_id = OBJECT_ID.bind_call(supertype)
 
 		# Coinductive cycle handling: if we are already in the middle of proving this
-		# exact pair, assume it holds — provided the recursion has passed through a
-		# structural constructor (see SubtypeContext#assume). This is what makes
-		# subtyping between recursive (looping) types terminate with the right answer.
-		known = context.recall(type_id, supertype_id)
+		# exact pair, assume it holds — provided the cycle justifies it (see
+		# SubtypeContext#assume). This is what makes subtyping between recursive
+		# (looping) types terminate with the right answer.
+		known = context.recall(type_id, supertype_id, type)
 		return known unless known.nil?
 
 		raw_frame = context.acquire(type_id, supertype_id)
@@ -321,13 +321,13 @@ module Literal
 		resolved_supertype = supertype
 
 		if Types::DeferredType === type || Types::DeferredType === supertype
-			subtype = type.materialize if Types::DeferredType === type
+			subtype = context.unfold_left(type) if Types::DeferredType === type
 			resolved_supertype = supertype.materialize if Types::DeferredType === supertype
 			subtype_id = OBJECT_ID.bind_call(subtype)
 			resolved_supertype_id = OBJECT_ID.bind_call(resolved_supertype)
 
 			unless subtype_id == type_id && resolved_supertype_id == supertype_id
-				known = context.recall(subtype_id, resolved_supertype_id)
+				known = context.recall(subtype_id, resolved_supertype_id, subtype)
 
 				unless known.nil?
 					context.store(type_id, supertype_id, raw_frame, known)
@@ -340,8 +340,13 @@ module Literal
 
 		result = !!resolved_subtype?(subtype, resolved_supertype, context)
 
+		# A proof resting on an assumption its type turned out not to support
+		# stores nothing, and is tried again refusing that assumption.
+		while context.store(type_id, supertype_id, raw_frame, result).nil?
+			result = !!resolved_subtype?(subtype, resolved_supertype, context)
+		end
+
 		context.store(subtype_id, resolved_supertype_id, resolved_frame, result) if resolved_frame
-		context.store(type_id, supertype_id, raw_frame, result)
 		result
 	ensure
 		context.release(subtype_id, resolved_supertype_id, resolved_frame) if resolved_frame
@@ -354,7 +359,7 @@ module Literal
 
 		case subtype
 		in Types::DeferredType unless Types::DeferredType === supertype
-			subtype?(subtype.materialize, supertype, context:)
+			context.left_unfolded_subtype?(subtype, supertype)
 		in Types::UnionType
 			subtype.all? { |member| subtype?(member, supertype, context:) }
 		in Types::NilableType

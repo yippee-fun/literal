@@ -3,6 +3,8 @@
 require "bigdecimal"
 
 class Literal::BigDecimalSerializer < Literal::Serializer
+	include Literal::Serializer::UnionMembers
+
 	Type = _BigDecimal(finite?: _Truthy)
 
 	def type

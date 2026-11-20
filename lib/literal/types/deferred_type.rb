@@ -16,15 +16,36 @@ class Literal::Types::DeferredType
 
 	attr_reader :block
 
+	def materialized?
+		!UNMATERIALIZED.equal?(@materialized)
+	end
+
 	def literal_child_types
 		return enum_for(__method__) unless block_given?
 
 		type = materialize
-		yield type unless type.equal?(self)
+		yield type unless Literal::EQUAL.bind_call(type, self)
 	end
 
 	def inspect
 		"_Deferred"
+	end
+
+	# The type a chain of deferred types ends in. A chain that cycles never
+	# ends, so it resolves to a deferred type on the cycle.
+	def resolve
+		type = materialize
+		seen = nil
+
+		while Literal::Types::DeferredType === type
+			seen ||= { self => true }.compare_by_identity
+			return type if seen.key?(type)
+
+			seen[type] = true
+			type = type.materialize
+		end
+
+		type
 	end
 
 	# A thread re-entering its own materialization — a deferred type that refers
@@ -64,8 +85,12 @@ class Literal::Types::DeferredType
 		Literal.with_match_guard(self, other) { !!(materialize === other) }
 	end
 
+	# Unfolds this side first, so an alias of a chain matches it without
+	# forcing their shared tail. Two alias cycles have no values, so failing
+	# that, unfolding the other side lets the cycle there prove it.
 	def literal_supertype_of?(other, context:)
-		Literal.subtype?(other, materialize, context:)
+		Literal.subtype?(other, materialize, context:) ||
+			(Literal::Types::DeferredType === other && context.left_unfolded_subtype?(other, self))
 	end
 
 	freeze
