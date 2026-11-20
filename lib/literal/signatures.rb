@@ -20,7 +20,7 @@
 #
 # A signature binds to the next method defined, instance or singleton. One that
 # does not match that method's parameters fails when the class loads, as does
-# a `sig` with no `>>`, two in a row, or one the class body ends on.
+# a `sig` with no `>>`, or two in a row.
 #
 # The checking method is compiled to the method's own parameter list, so Ruby
 # refuses a wrong number of arguments or an unknown keyword before anything is
@@ -69,13 +69,11 @@ module Literal::Signatures
 	def sig(*positional, **keywords)
 		if (pending = @__literal_signature__)
 			@__literal_signature__ = nil
-			__literal_stop_watching__
 			raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{pending.site} has no method after it"
 		end
 
 		@__literal_signature__ = Signature.new(positional.freeze, keywords.freeze, caller_locations(1, 1).first)
 		__literal_hook_methods__
-		__literal_await_method__
 		@__literal_signature__
 	end
 
@@ -138,7 +136,6 @@ module Literal::Signatures
 	private def __literal_bind_signature__(owner, name)
 		signature = @__literal_signature__ or return
 		@__literal_signature__ = nil
-		__literal_stop_watching__
 		__literal_sign__(owner, name, signature)
 	end
 
@@ -342,57 +339,5 @@ module Literal::Signatures
 		elsif Literal::PROTECTED_METHOD_DEFINED.bind_call(owner, name, false) then Literal::PROTECTED
 		else Literal::PUBLIC
 		end
-	end
-
-	# MRI also ends a class body that an exception is unwinding, so there the
-	# watch tracks the exceptions raised since the sig and not rescued, and
-	# leaves one in flight to propagate.
-	WATCHED = ((RUBY_ENGINE == "ruby") ? [:class, :end, :raise, :rescue] : [:class, :end]).freeze
-
-	# Watches the end of the class or module body the sig is written in, past
-	# any body reopening the class inside it, and only until the next method is
-	# defined. A block, such as one passed to `Class.new`, has no `end` event,
-	# and TruffleRuby has no TracePoint, so there a sig with nothing after it is
-	# caught by the next sig.
-	private def __literal_await_method__
-		return if RUBY_ENGINE == "truffleruby"
-
-		signature = @__literal_signature__
-		return unless signature.site.label in /\A<(?:class|module):/ | "singleton class"
-
-		owner = self
-		thread = Thread.current
-		unwinding = []
-		reopened = 0
-		@__literal_signature_watch__ = TracePoint.new(*WATCHED) do |tp|
-			next unless thread.equal?(Thread.current)
-
-			case tp.event
-			in :raise
-				unwinding << tp.raised_exception
-			in :rescue
-				unwinding.reject! { |error| Literal::EQUAL.bind_call(error, tp.raised_exception) }
-			in :class
-				reopened += 1 if Literal::EQUAL.bind_call(tp.self, owner)
-			in :end
-				next unless Literal::EQUAL.bind_call(tp.self, owner)
-
-				if reopened > 0
-					reopened -= 1
-				else
-					tp.disable
-					Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature__, nil)
-					Literal::INSTANCE_VARIABLE_SET.bind_call(owner, :@__literal_signature_watch__, nil)
-					raise Literal::ArgumentError, "#{__literal_label__}: the sig at #{signature.site} has no method after it" if unwinding.empty?
-				end
-			end
-		end
-		@__literal_signature_watch__.enable
-	end
-
-	# The watch holds the thread the class was defined on.
-	private def __literal_stop_watching__
-		@__literal_signature_watch__&.disable
-		@__literal_signature_watch__ = nil
 	end
 end

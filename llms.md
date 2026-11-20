@@ -241,7 +241,7 @@ end
 
 Positional types line up with the positional parameters, keyword types match keywords by name, and `>>` gives the return type (`_Void` to check nothing). A signature binds to the **next method defined**, instance or singleton, and keeps its visibility (`private def` works). Each argument the caller **passes** is checked before the method runs and the return value after, raising `Literal::TypeError` labelled with the method and argument; a default is the author's and is not checked, and arity is left to Ruby.
 
-Refused **when the class loads**, as `Literal::ArgumentError`: types that don't match the parameters by count or keyword name, a `sig` with no `>>`, two `sig`s in a row, a class body that ends on a `sig` (no `end` event in a `Class.new` block or on TruffleRuby, so there the next `sig` catches it), and parameters a sig cannot type yet — `*rest`, `**rest`, destructuring, a required argument after an optional one.
+Refused **when the class loads**, as `Literal::ArgumentError`: types that don't match the parameters by count or keyword name, a `sig` with no `>>`, two `sig`s in a row, and parameters a sig cannot type yet — `*rest`, `**rest`, destructuring, a required argument after an optional one.
 
 The checking method is compiled to the method's own parameter list and calls the original through a private alias, so stack traces still read `Greeter#greet` and one taking only required parameters allocates nothing; optional parameters may cost the Array or Hash that carries them, depending on the Ruby.
 

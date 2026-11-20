@@ -622,17 +622,6 @@ test "refuses to load a sig on a method that takes a splat" do
 	assert error.message.include?("takes names as a splat")
 end
 
-test "does not watch for an end a block will never reach" do
-	klass = Class.new do
-		extend Literal::Signatures
-
-		sig(String) >> String
-	end
-
-	assert_equal klass.instance_variable_get(:@__literal_signature_watch__), nil
-	assert_raises(Literal::ArgumentError) { klass.sig(String) }
-end
-
 test "refuses a sig with no method after it before the next" do
 	error = assert_raises(Literal::ArgumentError) do
 		Class.new do
@@ -646,188 +635,17 @@ test "refuses a sig with no method after it before the next" do
 	assert error.message.include?("has no method after it")
 end
 
-# TruffleRuby has no TracePoint, so there the next sig catches a dangling one.
-unless RUBY_ENGINE == "truffleruby"
-	test "forgets a dangling sig once it is refused" do
-		namespace = Module.new
-
-		assert_raises(Literal::ArgumentError) do
-			namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				class Reopened
-					extend Literal::Signatures
-
-					sig(String) >> String
-				end
-			RUBY
-		end
-
-		namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-			class Reopened
-				def pair(a, b) = [a, b]
-			end
-		RUBY
-
-		assert_equal namespace::Reopened.new.pair(1, 2), [1, 2]
-	end
-
-	test "lets an error raised after a sig end the class body" do
-		assert_raises(NameError) do
-			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				class Typo
-					extend Literal::Signatures
-
-					sig(String) >> Strng
-					def greet(name) = name
-				end
-			RUBY
-		end
-	end
-
-	test "refuses a dangling sig after an error rescued in the class body" do
-		error = assert_raises(Literal::ArgumentError) do
-			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				class Rescued
-					extend Literal::Signatures
-
-					sig(String) >> String
-					begin
-						raise "rescued"
-					rescue RuntimeError
-					end
-				end
-			RUBY
-		end
-
-		assert error.message.include?("has no method after it")
-	end
-
-	test "refuses to load a class body that ends on a sig" do
-		error = assert_raises(Literal::ArgumentError) do
-			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				class Dangling
-					extend Literal::Signatures
-
-					sig(String) >> String
-				end
-			RUBY
-		end
-
-		assert error.message.include?("Dangling: the sig at")
-		assert error.message.include?("has no method after it")
-	end
-
-	test "waits past a body reopening the class inside the one the sig is in" do
-		namespace = Module.new
-		namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-			Namespace = self
-
-			class Reopened
+test "lets an error raised after a sig end the class body" do
+	assert_raises(NameError) do
+		Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+			class Typo
 				extend Literal::Signatures
 
-				sig(String) >> String
-				class Namespace::Reopened; end
-				def echo(text) = text
-			end
-		RUBY
-
-		assert_raises(Literal::TypeError) { namespace::Reopened.new.echo(1) }
-	end
-
-	test "refuses a dangling sig once a body reopening the class inside it ends" do
-		error = assert_raises(Literal::ArgumentError) do
-			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				Namespace = self
-
-				class Reopened
-					extend Literal::Signatures
-
-					sig(String) >> String
-					class Namespace::Reopened; end
-				end
-			RUBY
-		end
-
-		assert error.message.include?("has no method after it")
-	end
-
-	test "labels a class body that ends on a sig past its own to_s" do
-		error = assert_raises(Literal::ArgumentError) do
-			Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				class Dangling
-					def self.to_s = raise("called to_s")
-
-					extend Literal::Signatures
-
-					sig(String) >> String
-				end
-			RUBY
-		end
-
-		assert error.message.include?("Dangling: the sig at")
-	end
-
-	test "lets go of the watch once it is done" do
-		namespace = Module.new
-		namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-			class Bound
-				extend Literal::Signatures
-
-				sig(String) >> String
+				sig(String) >> Strng
 				def greet(name) = name
 			end
-
-			class Refused
-				extend Literal::Signatures
-
-				begin
-					sig(String) >> String
-					sig(String) >> String
-				rescue Literal::ArgumentError
-				end
-			end
 		RUBY
-
-		assert_raises(Literal::ArgumentError) do
-			namespace.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-				class Dangling
-					extend Literal::Signatures
-
-					sig(String) >> String
-				end
-			RUBY
-		end
-
-		[namespace::Bound, namespace::Refused, namespace::Dangling].each do |klass|
-			assert_equal klass.instance_variable_get(:@__literal_signature_watch__), nil
-		end
 	end
-end
-
-test "stops watching for an end once it refuses a second sig" do
-	Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-		class Twice
-			extend Literal::Signatures
-
-			begin
-				sig(String) >> String
-				sig(String) >> String
-			rescue Literal::ArgumentError
-			end
-		end
-	RUBY
-end
-
-test "does not watch for an end once the method is defined" do
-	Module.new.module_eval(<<~RUBY, __FILE__, __LINE__ + 1)
-		class Settled
-			extend Literal::Signatures
-
-			sig(String) >> String
-			def greet(name) = name
-
-			class Nested; end
-		end
-	RUBY
 end
 
 class SignedShapes
