@@ -68,7 +68,8 @@ class Literal::TimeSerializer < Literal::Serializer
 	end
 
 	def deserialize(raw, type:)
-		fields = rfc3339_fields(raw)
+		bound = bound_of(type)
+		fields = rfc3339_fields(raw, calendar_of(bound))
 
 		unless fields
 			raise Literal::ArgumentError, "Value #{raw.inspect} is not an RFC 3339 date-time and cannot be deserialized as #{type.inspect}"
@@ -84,13 +85,12 @@ class Literal::TimeSerializer < Literal::Serializer
 
 		# Built from the fields rather than parsed again, since engines' ISO 8601
 		# parsers differ in how much of a long fraction they keep.
-		if DateTime == bound_of(type)
+		if DateTime == bound
 			# The fraction is added, since JRuby's DateTime.new silently loses a
-			# long one. Like a loaded Date, it switches back to Ruby's default
-			# calendar.
+			# long one.
 			whole = second.floor
-			date_time = DateTime.new(year, month, day, hour, minute, whole, Rational(offset || 0, 86_400), Date::GREGORIAN)
-			(date_time + Rational(second - whole + leap_second, 86_400)).italy
+			date_time = DateTime.new(year, month, day, hour, minute, whole, Rational(offset || 0, 86_400))
+			date_time + Rational(second - whole + leap_second, 86_400)
 		else
 			Time.new(year, month, day, hour, minute, second, offset || "UTC") + leap_second
 		end
@@ -107,21 +107,28 @@ class Literal::TimeSerializer < Literal::Serializer
 		end
 	end
 
+	# The calendar a value's date fields are in. Time is proleptic Gregorian.
+	# DateTime is written and read in Ruby's default calendar, so its fields
+	# are the ones DateTime.new takes and DateTime#iso8601 writes.
+	private def calendar_of(bound)
+		(DateTime >= bound) ? Date::ITALY : Date::GREGORIAN
+	end
+
 	# Ruby's ISO 8601 parsers accept dates without times, times without
 	# offsets (read in the machine's timezone) and out-of-range fields they
 	# silently roll over, so the format and ranges are checked first.
 	# Returns the fields, with the second exact and the offset in seconds, or
-	# nil for UTC: Z, or -00:00, which RFC 3339 gives no local offset. Dates
-	# are proleptic Gregorian. Second 60 is a leap second, which RFC 3339
-	# allows at any time, deferring to the table of those announced.
-	private def rfc3339_fields(raw)
+	# nil for UTC: Z, or -00:00, which RFC 3339 gives no local offset. Second
+	# 60 is a leap second, which RFC 3339 allows at any time, deferring to the
+	# table of those announced.
+	private def rfc3339_fields(raw, calendar)
 		return unless String === raw && (match = Format.match(raw))
 
 		*date_and_time, fraction, sign, offset_hour, offset_minute = match.captures
 		year, month, day, hour, minute, second = date_and_time.map(&:to_i)
 		offset_hour, offset_minute = offset_hour.to_i, offset_minute.to_i
 
-		return unless Date.valid_date?(year, month, day, Date::GREGORIAN) && hour < 24 && minute < 60 && second <= 60 && offset_hour < 24 && offset_minute < 60
+		return unless Date.valid_date?(year, month, day, calendar) && hour < 24 && minute < 60 && second <= 60 && offset_hour < 24 && offset_minute < 60
 
 		second += Rational(fraction.to_i, 10 ** fraction.length) if fraction
 		offset = (offset_hour * 3600) + (offset_minute * 60)
@@ -147,13 +154,9 @@ class Literal::TimeSerializer < Literal::Serializer
 		end
 	end
 
-	# Fractions are rounded half to even at the written precision, never
-	# finer than a nanosecond. Times built from Floats sit a binary hair
-	# either side of the decimal they were written as, and rounding recovers
-	# it where truncating would turn 30.7 into 30.699999999.
 	private def serialize_time(value)
 		digits = @precision || 9
-		time = rounded(value, digits)
+		time = truncated(value, digits)
 		digits = 0 if @precision.nil? && fraction_of(time).zero?
 
 		serialized = case time
@@ -161,15 +164,15 @@ class Literal::TimeSerializer < Literal::Serializer
 			@utc ? time.getutc.iso8601(digits) : time.iso8601(digits)
 		when DateTime
 			if @utc
-				"#{time.new_offset(0).gregorian.iso8601(digits).delete_suffix('+00:00')}Z"
+				"#{time.new_offset(0).italy.iso8601(digits).delete_suffix('+00:00')}Z"
 			else
-				time.gregorian.iso8601(digits)
+				time.italy.iso8601(digits)
 			end
 		end
 
 		# RFC 3339 date-times have four-digit years and offsets in whole minutes
 		# under a day. iso8601 drops an offset's seconds rather than refuse them.
-		unless rfc3339_fields(serialized) && written_offset_exact?(time)
+		unless rfc3339_fields(serialized, calendar_of(time.class)) && written_offset_exact?(time)
 			raise Literal::ArgumentError, "Value #{value.inspect} cannot be written as an RFC 3339 date-time, which needs a year in 0000-9999 and an offset in whole minutes under a day"
 		end
 
@@ -189,12 +192,17 @@ class Literal::TimeSerializer < Literal::Serializer
 		(seconds % 60).zero?
 	end
 
-	private def rounded(value, digits)
-		# The whole second counts, so a tie at zero digits rounds to an even second.
+	# Fractions are truncated to the written precision, as Time#iso8601
+	# truncates them. They are rounded half to even at the nanosecond first:
+	# times built from Floats sit a binary hair either side of the decimal
+	# they were written as, and rounding recovers it where truncating alone
+	# would turn 30.7 into 30.699999999.
+	private def truncated(value, digits)
 		# A Rational even when whole, since JRuby's Integer#round takes no half:.
 		seconds = Rational(value.sec) + fraction_of(value)
-		scale = 10 ** digits
-		adjustment = Rational((seconds * scale).round(half: :even), scale) - seconds
+		nanoseconds = (seconds * 1_000_000_000).round(half: :even)
+		dropped = nanoseconds % (10 ** (9 - digits))
+		adjustment = Rational(nanoseconds - dropped, 1_000_000_000) - seconds
 
 		case value
 		when Time

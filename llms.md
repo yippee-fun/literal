@@ -221,7 +221,7 @@ Reading: unknown object keys are ignored everywhere, so data from a compatible s
 
 Numbers: a union of `Integer` and finite `Float` is natural; a constrained Integer with a Float is rejected as ambiguous. Schema range bounds appear only when exactly representable as a JSON number; infinite bounds are omitted.
 
-Dates/times: Date/Time load strict RFC 3339 (a leap second, `:60`, loads as the next second, like `Time.iso8601`); a `Date` type refuses `DateTime` values; values RFC 3339 can't hold (years outside 0000–9999) raise; Time fractions round half-to-even at the written precision (≤ 9 digits).
+Dates/times: Date/Time load strict RFC 3339 (a leap second, `:60`, loads as the next second, like `Time.iso8601`); a `Date` type refuses `DateTime` values; values RFC 3339 can't hold (years outside 0000–9999) raise; Time fractions round half-to-even at the nanosecond, then truncate to the written precision (≤ 9 digits), as `Time#iso8601(n)` truncates. `Date` and `DateTime` are written and read in Ruby's default calendar, as `Date#iso8601` and `Date.iso8601` do, so a date before 1582-10-15 keeps its year, month and day; `Time` is proleptic Gregorian.
 
 Frozen: `_Frozen(T)` and `frozen?: true` constraints serialize as T (same schema); loaded plain data (strings, arrays, hashes, sets) is deep-frozen as copies, never mutating the input; any other object gets its own shallow `freeze`. Other serializers never claim a type requiring frozen values unless their values always are.
 
