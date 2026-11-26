@@ -1470,12 +1470,14 @@ class SerializationTest < Quickdraw::Test
 		assert_equal(Example.deserialize(serialized, type:), original)
 	end
 
-	test "dates and date-times are written and read in the proleptic Gregorian calendar" do
+	test "dates and date-times are written and read in Ruby's default calendar" do
 		[
-			[Date.new(1582, 10, 10, Date::GREGORIAN), Date, "1582-10-10"],
-			[Date.new(1500, 1, 1), Date, "1500-01-10"],
-			[DateTime.new(1582, 10, 10, 12, 0, 0, "+00:00", Date::GREGORIAN), DateTime, "1582-10-10T12:00:00+00:00"],
-			[DateTime.new(1500, 1, 1, 12, 0, 0, "+00:00"), DateTime, "1500-01-10T12:00:00+00:00"],
+			[Date.new(1, 1, 1), Date, "0001-01-01"],
+			[Date.new(1500, 1, 1), Date, "1500-01-01"],
+			[Date.new(1500, 2, 29), Date, "1500-02-29"],
+			[Date.new(1582, 10, 10, Date::GREGORIAN), Date, "1582-09-30"],
+			[DateTime.new(1500, 1, 1, 12, 0, 0, "+00:00"), DateTime, "1500-01-01T12:00:00+00:00"],
+			[DateTime.new(1582, 10, 10, 12, 0, 0, "+00:00", Date::GREGORIAN), DateTime, "1582-09-30T12:00:00+00:00"],
 			[Time.utc(1500, 1, 10, 12), Time, "1500-01-10T12:00:00Z"],
 		].each do |original, type, serialized|
 			assert_equal(Example.serialize(original, type:), serialized)
@@ -1485,9 +1487,17 @@ class SerializationTest < Quickdraw::Test
 			assert_equal(loaded.start, Date::ITALY) unless Time === loaded
 		end
 
-		assert_equal(Example.deserialize("1500-01-10", type: Date), Time.utc(1500, 1, 10).to_date)
-		assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29", type: Date) }
-		assert_raises(Literal::ArgumentError) { Example.deserialize("1500-02-29T00:00:00Z", type: DateTime) }
+		assert_equal(Example.serialize(Date.new(1500, 6, 15), type: Date), Date.new(1500, 6, 15).iso8601)
+		assert_equal(Example.deserialize("1500-06-15", type: Date), Date.iso8601("1500-06-15"))
+
+		utc = Literal::SerializationContext.new(Literal::TimeSerializer.with(utc: true))
+		assert_equal(utc.serialize(DateTime.new(1500, 1, 1, 12, 0, 0, "+02:00"), type: DateTime), "1500-01-01T10:00:00Z")
+
+		assert_equal(Example.serialize(Class.new(DateTime).new(1500, 2, 29), type: DateTime), "1500-02-29T00:00:00+00:00")
+
+		# The days the default calendar skipped in 1582.
+		assert_raises(Literal::ArgumentError) { Example.deserialize("1582-10-10", type: Date) }
+		assert_raises(Literal::ArgumentError) { Example.deserialize("1582-10-10T00:00:00Z", type: DateTime) }
 	end
 
 	test "date deserialization accepts only RFC 3339 dates" do
@@ -1510,11 +1520,12 @@ class SerializationTest < Quickdraw::Test
 		end
 		assert_raises(Literal::ArgumentError) { Example.serialize(day_ahead, type: DateTime) } if day_ahead
 
-		# Rounding up into the year 10000. Time at milliseconds, since JRuby's Time
-		# holds no finer than a nanosecond.
-		milliseconds = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3))
-		assert_raises(Literal::ArgumentError) { milliseconds.serialize(Time.utc(9999, 12, 31, 23, 59, 59 + (9_999r / 10_000)), type: Time) }
+		# Rounding up into the year 10000. DateTime, since JRuby's Time holds no
+		# finer than a nanosecond.
 		assert_raises(Literal::ArgumentError) { Example.serialize(DateTime.new(9999, 12, 31, 23, 59, 59 + (9_999_999_999r / 10_000_000_000)), type: DateTime) }
+
+		milliseconds = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3))
+		assert_equal milliseconds.serialize(Time.utc(9999, 12, 31, 23, 59, 59 + (9_999r / 10_000)), type: Time), "9999-12-31T23:59:59.999Z"
 	end
 
 	test "times with offsets RFC 3339 cannot hold raise" do
@@ -1528,7 +1539,7 @@ class SerializationTest < Quickdraw::Test
 		assert_equal utc.deserialize(utc.serialize(date_time, type: DateTime), type: DateTime), date_time
 	end
 
-	test "time fractions round half to even at nanosecond precision" do
+	test "time fractions round half to even at the nanosecond, then truncate to the written precision" do
 		time = Time.new(2024, 1, 1, 12, 0, 30.7, "+00:00")
 		serialized = Example.serialize(time, type: Time)
 		loaded = Example.deserialize(serialized, type: Time)
@@ -1545,12 +1556,18 @@ class SerializationTest < Quickdraw::Test
 
 		one = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 1))
 		assert_equal one.serialize(time, type: Time), "2024-01-01T12:00:30.7+00:00"
-		assert_equal one.serialize(Time.utc(2024, 1, 1, 0, 0, 25r / 100), type: Time), "2024-01-01T00:00:00.2Z"
+		assert_equal one.serialize(Time.utc(2024, 1, 1, 0, 0, 29r / 100), type: Time), "2024-01-01T00:00:00.2Z"
+
+		three = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 3, utc: true))
+		microseconds = Time.utc(2024, 1, 1, 23, 59, 59 + (999_700r / 1_000_000))
+		assert_equal three.serialize(microseconds, type: Time), "2024-01-01T23:59:59.999Z"
+		assert_equal three.serialize(microseconds, type: Time), microseconds.iso8601(3)
+		assert_equal three.serialize(DateTime.new(2024, 1, 1, 0, 0, 1_237r / 10_000), type: DateTime), "2024-01-01T00:00:00.123Z"
 
 		zero = Literal::SerializationContext.new(Literal::TimeSerializer.with(precision: 0))
-		assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 3r / 2), type: Time), "2024-01-01T00:00:02Z"
+		assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 3r / 2), type: Time), "2024-01-01T00:00:01Z"
 		assert_equal zero.serialize(Time.utc(2024, 1, 1, 0, 0, 5r / 2), type: Time), "2024-01-01T00:00:02Z"
-		assert_equal zero.serialize(DateTime.new(2024, 1, 1, 0, 0, 3r / 2), type: DateTime), "2024-01-01T00:00:02+00:00"
+		assert_equal zero.serialize(DateTime.new(2024, 1, 1, 0, 0, 3r / 2), type: DateTime), "2024-01-01T00:00:01+00:00"
 	end
 
 	test "a union of time and datetime is not serializable" do
